@@ -1,0 +1,341 @@
+version: '3.2'
+
+services:
+  redis-node1:
+    container_name: redis-node1
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7001:6379
+    volumes:
+      - redis-cluster_data1:/bitnami/redis/data
+    depends_on:
+      - redis-node2
+      - redis-node3
+      - redis-node4
+      - redis-node5
+      - redis-node6
+      - redis-node7
+      - redis-node8
+      - redis-node9
+      - redis-node10
+      - redis-node11
+      - redis-node12
+      - redis-node13
+      - redis-node14
+      - redis-node15
+      - redis-node16
+      - redis-node17
+      - redis-node18
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDISCLI_AUTH=pass
+      - REDIS_CLUSTER_REPLICAS=2
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+      - REDIS_CLUSTER_CREATOR=yes
+      - REDIS_CLUSTER_SLEEP_BEFORE_DNS_LOOKUP=30
+    
+    networks:
+      network:
+        ipv4_address: 172.20.0.11
+
+  redis-node2:
+    container_name: redis-node2
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7002:6379
+    volumes:
+      - redis-cluster_data2:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+    
+    networks:
+      network:
+        ipv4_address: 172.20.0.12
+
+  redis-node3:
+    container_name: redis-node3
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7003:6379
+    volumes:
+      - redis-cluster_data3:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+    
+    networks:
+      network:
+        ipv4_address: 172.20.0.13
+
+  redis-node4:
+    container_name: redis-node4
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7004:6379
+    volumes:
+      - redis-cluster_data4:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.14
+
+  redis-node5:
+    container_name: redis-node5
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7005:6379
+    volumes:
+      - redis-cluster_data5:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.15
+     
+  redis-node6:
+    container_name: redis-node6
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7006:6379
+    volumes:
+      - redis-cluster_data6:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.16
+
+  redis-node7:
+    container_name: redis-node7
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7007:6379
+    volumes:
+      - redis-cluster_data7:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.17
+
+  redis-node8:
+    container_name: redis-node8
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7008:6379
+    volumes:
+      - redis-cluster_data8:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.18
+
+  redis-node9:
+    container_name: redis-node9
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7009:6379
+    volumes:
+      - redis-cluster_data9:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.19
+
+  redis-node10:
+    container_name: redis-node10
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7010:6379
+    volumes:
+      - redis-cluster_data10:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.20
+
+  redis-node11:
+    container_name: redis-node11
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7011:6379
+    volumes:
+      - redis-cluster_data11:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.21
+
+  redis-node12:
+    container_name: redis-node12
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7012:6379
+    volumes:
+      - redis-cluster_data12:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.22
+
+  redis-node13:
+    container_name: redis-node13
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7013:6379
+    volumes:
+      - redis-cluster_data13:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.23
+
+  redis-node14:
+    container_name: redis-node14
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7014:6379
+    volumes:
+      - redis-cluster_data14:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.24
+
+  redis-node15:
+    container_name: redis-node15
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7015:6379
+    volumes:
+      - redis-cluster_data15:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.25
+
+  redis-node16:
+    container_name: redis-node16
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7016:6379
+    volumes:
+      - redis-cluster_data16:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.26
+
+  redis-node17:
+    container_name: redis-node17
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7017:6379
+    volumes:
+      - redis-cluster_data17:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.27
+
+  redis-node18:
+    container_name: redis-node18
+    image: docker.io/bitnami/redis-cluster:latest
+    ports:
+      - 7018:6379
+    volumes:
+      - redis-cluster_data18:/bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+      - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
+
+    networks:
+      network:
+        ipv4_address: 172.20.0.28
+
+volumes:
+  redis-cluster_data1:
+    driver: local
+  redis-cluster_data2:
+    driver: local
+  redis-cluster_data3:
+    driver: local
+  redis-cluster_data4:
+    driver: local
+  redis-cluster_data5:
+    driver: local
+  redis-cluster_data6:
+    driver: local
+  redis-cluster_data7:
+    driver: local
+  redis-cluster_data8:
+    driver: local
+  redis-cluster_data9:
+    driver: local
+  redis-cluster_data10:
+    driver: local
+  redis-cluster_data11:
+    driver: local
+  redis-cluster_data12:
+    driver: local
+  redis-cluster_data13:
+    driver: local
+  redis-cluster_data14:
+    driver: local
+  redis-cluster_data15:
+    driver: local
+  redis-cluster_data16:
+    driver: local
+  redis-cluster_data17:
+    driver: local
+  redis-cluster_data18:
+    driver: local
+
+networks:
+  network:
+    name: redis-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+          gateway: 172.20.0.1

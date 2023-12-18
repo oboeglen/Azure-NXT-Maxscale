@@ -1,0 +1,128 @@
+version: "3.2"
+
+services:
+  code-node1:
+    container_name: code-node1
+    image: docker.io/collabora/code
+    restart: always
+    ports:
+      - 9001:9980
+
+    environment:
+      - dictionaries=fr_FR
+      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
+
+    cap_add:
+      - MKNOD
+  
+  code-node2:
+    container_name: code-node2
+    image: docker.io/collabora/code
+    restart: always
+    ports:
+      - 9002:9980
+
+    environment:
+      - dictionaries=fr_FR
+      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
+
+    cap_add:
+      - MKNOD
+  
+  code-node3:
+    container_name: code-node3
+    image: docker.io/collabora/code
+    restart: always
+    ports:
+      - 9003:9980
+
+    environment:
+      - dictionaries=fr_FR
+      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
+
+    cap_add:
+      - MKNOD
+  
+  code-node4:
+    container_name: code-node4
+    image: docker.io/collabora/code
+    restart: always
+    ports:
+      - 9004:9980
+
+    environment:
+      - dictionaries=fr_FR
+      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
+
+    cap_add:
+      - MKNOD
+  
+  code-node5:
+    container_name: code-node5
+    image: docker.io/collabora/code
+    restart: always
+    ports:
+      - 9005:9980
+
+    environment:
+      - dictionaries=fr_FR
+      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
+
+    cap_add:
+      - MKNOD
+
+  code-node6:
+    container_name: code-node6
+    image: docker.io/collabora/code
+    restart: always
+    ports:
+      - 9006:9980
+
+    environment:
+      - dictionaries=fr_FR
+      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
+
+    cap_add:
+      - MKNOD
+  
+  code-node7:
+    container_name: code-node7
+    image: docker.io/collabora/code
+    restart: always
+    ports:
+      - 9007:9980
+
+    environment:
+      - dictionaries=fr_FR
+      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
+
+    cap_add:
+      - MKNOD
+
+  code-node8:
+    container_name: code-node8
+    image: docker.io/collabora/code
+    restart: always
+    ports:
+      - 9008:9980
+
+    environment:
+      - dictionaries=fr_FR
+      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
+
+    cap_add:
+      - MKNOD
+
+  code-node9:
+    container_name: code-node9
+    image: docker.io/collabora/code
+    restart: always
+    ports:
+      - 9009:9980
+
+    environment:
+      - dictionaries=fr_FR
+      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
+
+    cap_add:
+      - MKNOD

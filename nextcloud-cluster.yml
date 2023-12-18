@@ -1,0 +1,201 @@
+version: "3.2"
+
+services:
+  app-next-01:
+    container_name: app-next-01
+    image: docker.io/nextcloud
+    restart: always
+    ports:
+      - 8081:80
+    volumes:
+      - nextcloud:/var/www/html
+      - apps:/var/www/html/custom_apps
+      - config:/var/www/html/config
+      - data:/var/www/html/data
+
+    environment:
+      - PHP_UPLOAD_LIMIT=2G
+      - PHP_MEMORY_LIMIT=1G
+
+    networks:
+      network:
+        ipv4_address: 172.10.0.11
+
+  app-next-02:
+    container_name: app-next-02
+    image: docker.io/nextcloud
+    restart: always
+    ports:
+      - 8082:80
+    volumes:
+      - nextcloud:/var/www/html
+      - apps:/var/www/html/custom_apps
+      - config:/var/www/html/config
+      - data:/var/www/html/data
+
+    environment:
+      - PHP_UPLOAD_LIMIT=2G
+      - PHP_MEMORY_LIMIT=1G
+
+    networks:
+      network:
+        ipv4_address: 172.10.0.12
+
+  app-next-03:
+    container_name: app-next-03
+    image: docker.io/nextcloud
+    restart: always
+    ports:
+      - 8083:80
+    volumes:
+      - nextcloud:/var/www/html
+      - apps:/var/www/html/custom_apps
+      - config:/var/www/html/config
+      - data:/var/www/html/data
+
+    environment:
+      - PHP_UPLOAD_LIMIT=2G
+      - PHP_MEMORY_LIMIT=1G
+
+    networks:
+      network:
+        ipv4_address: 172.10.0.13
+
+  app-next-04:
+    container_name: app-next-04
+    image: docker.io/nextcloud
+    restart: always
+    ports:
+      - 8084:80
+    volumes:
+      - nextcloud:/var/www/html
+      - apps:/var/www/html/custom_apps
+      - config:/var/www/html/config
+      - data:/var/www/html/data
+
+    environment:
+      - PHP_UPLOAD_LIMIT=2G
+      - PHP_MEMORY_LIMIT=1G
+
+    networks:
+      network:
+        ipv4_address: 172.10.0.14
+
+  app-next-05:
+    container_name: app-next-05
+    image: docker.io/nextcloud
+    restart: always
+    ports:
+      - 8085:80
+    volumes:
+      - nextcloud:/var/www/html
+      - apps:/var/www/html/custom_apps
+      - config:/var/www/html/config
+      - data:/var/www/html/data
+
+    environment:
+      - PHP_UPLOAD_LIMIT=2G
+      - PHP_MEMORY_LIMIT=1G
+
+    networks:
+      network:
+        ipv4_address: 172.10.0.15
+
+  app-next-06:
+    container_name: app-next-06
+    image: docker.io/nextcloud
+    restart: always
+    ports:
+      - 8086:80
+    volumes:
+      - nextcloud:/var/www/html
+      - apps:/var/www/html/custom_apps
+      - config:/var/www/html/config
+      - data:/var/www/html/data
+
+    environment:
+      - PHP_UPLOAD_LIMIT=2G
+      - PHP_MEMORY_LIMIT=1G
+
+    networks:
+      network:
+        ipv4_address: 172.10.0.16
+
+  app-next-07:
+    container_name: app-next-07
+    image: docker.io/nextcloud
+    restart: always
+    ports:
+      - 8087:80
+    volumes:
+      - nextcloud:/var/www/html
+      - apps:/var/www/html/custom_apps
+      - config:/var/www/html/config
+      - data:/var/www/html/data
+
+    environment:
+      - PHP_UPLOAD_LIMIT=2G
+      - PHP_MEMORY_LIMIT=1G
+
+    networks:
+      network:
+        ipv4_address: 172.10.0.17
+
+  app-next-08:
+    container_name: app-next-08
+    image: docker.io/nextcloud
+    restart: always
+    ports:
+      - 8088:80
+    volumes:
+      - nextcloud:/var/www/html
+      - apps:/var/www/html/custom_apps
+      - config:/var/www/html/config
+      - data:/var/www/html/data
+
+    environment:
+      - PHP_UPLOAD_LIMIT=2G
+      - PHP_MEMORY_LIMIT=1G
+
+    networks:
+      network:
+        ipv4_address: 172.10.0.18
+  
+  app-next-09:
+    container_name: app-next-09
+    image: docker.io/nextcloud
+    restart: always
+    ports:
+      - 8089:80
+    volumes:
+      - nextcloud:/var/www/html
+      - apps:/var/www/html/custom_apps
+      - config:/var/www/html/config
+      - data:/var/www/html/data
+
+    environment:
+      - PHP_UPLOAD_LIMIT=2G
+      - PHP_MEMORY_LIMIT=1G
+
+    networks:
+      network:
+        ipv4_address: 172.10.0.19
+
+volumes:
+  nextcloud:
+    driver: local
+  apps:
+    driver: local
+  config:
+    driver: local
+  data:
+    driver: local
+
+networks:
+  network:
+    name: next-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.10.0.0/24
+          gateway: 172.10.0.1

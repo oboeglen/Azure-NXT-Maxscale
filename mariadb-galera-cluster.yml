@@ -1,0 +1,220 @@
+version: "3.2"
+
+services:
+  mariadb-node1:
+    container_name: mariadb-node1
+    image: docker.io/bitnami/mariadb-galera:latest
+    ports:
+      - 8001:3306
+    volumes:
+      - mariadb_node1_data:/bitnami/mariadb
+    environment:
+      - MARIADB_GALERA_CLUSTER_NAME=db-cluster
+      - MARIADB_GALERA_MARIABACKUP_PASSWORD=backup
+      - MARIADB_ROOT_PASSWORD=pass
+      - MARIADB_USER=galera
+      - MARIADB_PASSWORD=galera
+      - MARIADB_REPLICATION_USER=replicant
+      - MARIADB_REPLICATION_PASSWORD=replica
+      - MARIADB_GALERA_CLUSTER_BOOTSTRAP=yes
+      - MARIADB_GALERA_FORCE_SAFETOBOOTSTRAP=yes
+    networks:
+      network:
+        ipv4_address: 172.30.0.11
+
+  mariadb-node2:
+    container_name: mariadb-node2
+    image: docker.io/bitnami/mariadb-galera:latest
+    ports:
+      - 8002:3306
+    volumes:
+      - mariadb_node2_data:/bitnami/mariadb
+    environment:
+      - MARIADB_GALERA_CLUSTER_NAME=db-cluster
+      - MARIADB_GALERA_MARIABACKUP_PASSWORD=backup
+      - MARIADB_ROOT_PASSWORD=pass
+      - MARIADB_USER=galera
+      - MARIADB_PASSWORD=galera
+      - MARIADB_REPLICATION_USER=replicant
+      - MARIADB_REPLICATION_PASSWORD=replica
+      - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
+      - MARIADB_GALERA_NODE_ADDRESS=172.30.0.12
+    networks:
+      network:
+        ipv4_address: 172.30.0.12
+
+  mariadb-node3:
+    container_name: mariadb-node3
+    image: docker.io/bitnami/mariadb-galera:latest
+    ports:
+      - 8003:3306
+    volumes:
+      - mariadb_node3_data:/bitnami/mariadb
+    environment:
+      - MARIADB_GALERA_CLUSTER_NAME=db-cluster
+      - MARIADB_GALERA_MARIABACKUP_PASSWORD=backup
+      - MARIADB_ROOT_PASSWORD=pass
+      - MARIADB_USER=galera
+      - MARIADB_PASSWORD=galera
+      - MARIADB_REPLICATION_USER=replicant
+      - MARIADB_REPLICATION_PASSWORD=replica
+      - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
+      - MARIADB_GALERA_NODE_ADDRESS=172.30.0.13
+    networks:
+      network:
+        ipv4_address: 172.30.0.13
+
+  mariadb-node4:
+    container_name: mariadb-node4
+    image: docker.io/bitnami/mariadb-galera:latest
+    ports:
+      - 8004:3306
+    volumes:
+      - mariadb_node4_data:/bitnami/mariadb
+    environment:
+      - MARIADB_GALERA_CLUSTER_NAME=db-cluster
+      - MARIADB_GALERA_MARIABACKUP_PASSWORD=backup
+      - MARIADB_ROOT_PASSWORD=pass
+      - MARIADB_USER=galera
+      - MARIADB_PASSWORD=galera
+      - MARIADB_REPLICATION_USER=replicant
+      - MARIADB_REPLICATION_PASSWORD=replica
+      - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
+      - MARIADB_GALERA_NODE_ADDRESS=172.30.0.14
+    networks:
+      network:
+        ipv4_address: 172.30.0.14
+
+  mariadb-node5:
+    container_name: mariadb-node5
+    image: docker.io/bitnami/mariadb-galera:latest
+    ports:
+      - 8005:3306
+    volumes:
+      - mariadb_node5_data:/bitnami/mariadb
+    environment:
+      - MARIADB_GALERA_CLUSTER_NAME=db-cluster
+      - MARIADB_GALERA_MARIABACKUP_PASSWORD=backup
+      - MARIADB_ROOT_PASSWORD=pass
+      - MARIADB_USER=galera
+      - MARIADB_PASSWORD=galera
+      - MARIADB_REPLICATION_USER=replicant
+      - MARIADB_REPLICATION_PASSWORD=replica
+      - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
+      - MARIADB_GALERA_NODE_ADDRESS=172.30.0.15
+    networks:
+      network:
+        ipv4_address: 172.30.0.15
+
+  mariadb-node6:
+    container_name: mariadb-node6
+    image: docker.io/bitnami/mariadb-galera:latest
+    ports:
+      - 8006:3306
+    volumes:
+      - mariadb_node6_data:/bitnami/mariadb
+    environment:
+      - MARIADB_GALERA_CLUSTER_NAME=db-cluster
+      - MARIADB_GALERA_MARIABACKUP_PASSWORD=backup
+      - MARIADB_ROOT_PASSWORD=pass
+      - MARIADB_USER=galera
+      - MARIADB_PASSWORD=galera
+      - MARIADB_REPLICATION_USER=replicant
+      - MARIADB_REPLICATION_PASSWORD=replica
+      - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
+      - MARIADB_GALERA_NODE_ADDRESS=172.30.0.16
+    networks:
+      network:
+        ipv4_address: 172.30.0.16
+   
+  mariadb-node7:
+    container_name: mariadb-node7
+    image: docker.io/bitnami/mariadb-galera:latest
+    ports:
+      - 8007:3306
+    volumes:
+      - mariadb_node7_data:/bitnami/mariadb
+    environment:
+      - MARIADB_GALERA_CLUSTER_NAME=db-cluster
+      - MARIADB_GALERA_MARIABACKUP_PASSWORD=backup
+      - MARIADB_ROOT_PASSWORD=pass
+      - MARIADB_USER=galera
+      - MARIADB_PASSWORD=galera
+      - MARIADB_REPLICATION_USER=replicant
+      - MARIADB_REPLICATION_PASSWORD=replica
+      - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
+      - MARIADB_GALERA_NODE_ADDRESS=172.30.0.17
+    networks:
+      network:
+        ipv4_address: 172.30.0.17
+
+  mariadb-node8:
+    container_name: mariadb-node8
+    image: docker.io/bitnami/mariadb-galera:latest
+    ports:
+      - 8008:3306
+    volumes:
+      - mariadb_node8_data:/bitnami/mariadb
+    environment:
+      - MARIADB_GALERA_CLUSTER_NAME=db-cluster
+      - MARIADB_GALERA_MARIABACKUP_PASSWORD=backup
+      - MARIADB_ROOT_PASSWORD=pass
+      - MARIADB_USER=galera
+      - MARIADB_PASSWORD=galera
+      - MARIADB_REPLICATION_USER=replicant
+      - MARIADB_REPLICATION_PASSWORD=replica
+      - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
+      - MARIADB_GALERA_NODE_ADDRESS=172.30.0.18
+    networks:
+      network:
+        ipv4_address: 172.30.0.18
+
+  mariadb-node9:
+    container_name: mariadb-node9
+    image: docker.io/bitnami/mariadb-galera:latest
+    ports:
+      - 8009:3306
+    volumes:
+      - mariadb_node9_data:/bitnami/mariadb
+    environment:
+      - MARIADB_GALERA_CLUSTER_NAME=db-cluster
+      - MARIADB_GALERA_MARIABACKUP_PASSWORD=backup
+      - MARIADB_ROOT_PASSWORD=pass
+      - MARIADB_USER=galera
+      - MARIADB_PASSWORD=galera
+      - MARIADB_REPLICATION_USER=replicant
+      - MARIADB_REPLICATION_PASSWORD=replica
+      - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
+      - MARIADB_GALERA_NODE_ADDRESS=172.30.0.19
+    networks:
+      network:
+        ipv4_address: 172.30.0.19   
+
+volumes:
+  mariadb_node1_data:
+    driver: local
+  mariadb_node2_data:
+    driver: local
+  mariadb_node3_data:
+    driver: local
+  mariadb_node4_data:
+    driver: local
+  mariadb_node5_data:
+    driver: local
+  mariadb_node6_data:
+    driver: local
+  mariadb_node7_data:
+    driver: local
+  mariadb_node8_data:
+    driver: local
+  mariadb_node9_data:
+    driver: local
+
+networks:
+  network:
+    name: galera-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1
