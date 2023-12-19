@@ -1,0 +1,107 @@
+version: '3'
+
+services:
+  minio1:
+    container_name: minio1
+    image: 'bitnami/minio:latest'
+    user: root
+    ports:
+      - 9001:9001
+    volumes:
+      - type: bind
+        source: /data1
+        target: /bitnami/minio/data
+      - type: volume
+        source: certs1
+        target: /certs
+    environment:
+      - MINIO_ROOT_USER=oboeglen
+      - MINIO_ROOT_PASSWORD=S3cretd@tad!r
+      - MINIO_DISTRIBUTED_MODE_ENABLED=yes
+      - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
+      - MINIO_SKIP_CLIENT=yes
+    networks:
+      network:
+        ipv4_address: 172.101.0.11
+  
+  minio2:
+    container_name: minio2
+    image: 'bitnami/minio:latest'
+    user: root
+    volumes:
+      - type: bind
+        source: /data2
+        target: /bitnami/minio/data
+      - type: volume
+        source: certs2
+        target: /certs
+    environment:
+      - MINIO_ROOT_USER=oboeglen
+      - MINIO_ROOT_PASSWORD=S3cretd@tad!r
+      - MINIO_DISTRIBUTED_MODE_ENABLED=yes
+      - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
+      - MINIO_SKIP_CLIENT=yes
+    networks:
+      network:
+        ipv4_address: 172.101.0.12
+  
+  minio3:
+    container_name: minio3
+    image: 'bitnami/minio:latest'
+    user: root
+    volumes:
+      - type: bind
+        source: /data3
+        target: /bitnami/minio/data
+      - type: volume
+        source: certs3
+        target: /certs
+    environment:
+      - MINIO_ROOT_USER=oboeglen
+      - MINIO_ROOT_PASSWORD=S3cretd@tad!r
+      - MINIO_DISTRIBUTED_MODE_ENABLED=yes
+      - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
+      - MINIO_SKIP_CLIENT=yes
+    networks:
+      network:
+        ipv4_address: 172.101.0.13
+  
+  minio4:
+    container_name: minio4
+    image: 'bitnami/minio:latest'
+    user: root
+    volumes:
+      - type: bind
+        source: /data4
+        target: /bitnami/minio/data
+      - type: volume
+        source: certs4
+        target: /certs
+    environment:
+      - MINIO_ROOT_USER=oboeglen
+      - MINIO_ROOT_PASSWORD=S3cretd@tad!r
+      - MINIO_DISTRIBUTED_MODE_ENABLED=yes
+      - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
+      - MINIO_SKIP_CLIENT=yes
+    networks:
+      network:
+        ipv4_address: 172.101.0.14
+
+networks:
+  network:
+    name: minio-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.101.0.0/24
+          gateway: 172.101.0.1
+
+volumes:
+  certs1:
+    driver: local
+  certs2:
+    driver: local
+  certs3:
+    driver: local
+  certs4:
+    driver: local
