@@ -20,6 +20,7 @@ services:
       - MINIO_DISTRIBUTED_MODE_ENABLED=yes
       - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
       - MINIO_SKIP_CLIENT=yes
+      - MINIO_STORAGE_CLASS_STANDARD=EC:2
     networks:
       network:
         ipv4_address: 172.101.0.11
@@ -41,6 +42,7 @@ services:
       - MINIO_DISTRIBUTED_MODE_ENABLED=yes
       - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
       - MINIO_SKIP_CLIENT=yes
+      - MINIO_STORAGE_CLASS_STANDARD=EC:2
     networks:
       network:
         ipv4_address: 172.101.0.12
@@ -62,6 +64,7 @@ services:
       - MINIO_DISTRIBUTED_MODE_ENABLED=yes
       - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
       - MINIO_SKIP_CLIENT=yes
+      - MINIO_STORAGE_CLASS_STANDARD=EC:2
     networks:
       network:
         ipv4_address: 172.101.0.13
@@ -83,6 +86,7 @@ services:
       - MINIO_DISTRIBUTED_MODE_ENABLED=yes
       - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
       - MINIO_SKIP_CLIENT=yes
+      - MINIO_STORAGE_CLASS_STANDARD=EC:2
     networks:
       network:
         ipv4_address: 172.101.0.14
