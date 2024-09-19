@@ -49,7 +49,7 @@ echo -e "${YELLOW}Redémarrage des nodes MariaDB arrêtés...${NC}"
 for NODE in $NODES; do
     echo -e "${YELLOW}Redémarrage du node $NODE...${NC}"
     docker start "$NODE" > /dev/null 2>&1
-    sleep 60  # Attendre 60 secondes avant de redémarrer le prochain node
+    sleep 60  # Attendre 1 minute avant de redémarrer le prochain node
 done
 
 # Exécuter la commande SQL pour vérifier la taille du cluster Galera
@@ -66,5 +66,5 @@ else
 fi
 
 # Attente de 30 secondes avant de finir le script
-echo -e "${YELLOW}La restauration est terminée. Le script se terminera dans 30 secondes.${NC}"
-sleep 30
+echo -e "${YELLOW}La restauration est terminée. Le script se terminera dans 15 secondes.${NC}"
+sleep 15
