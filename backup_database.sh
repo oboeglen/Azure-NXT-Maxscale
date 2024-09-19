@@ -12,8 +12,10 @@ RETENTION_COUNT=3  # Nombre de fichiers de sauvegarde à conserver
 YELLOW='\033[1;33m'
 NC='\033[0m' # Pas de couleur
 
-# Liste des nodes MariaDB sauf le primaire
+# Liste des nodes MariaDB sauf le primaire et compter leur nombre
 NODES=$(docker ps --format '{{.Names}}' | grep 'mariadb-node' | grep -v "$PRIMARY_NODE")
+NODE_COUNT=$(echo "$NODES" | wc -l)
+EXPECTED_CLUSTER_SIZE=$((NODE_COUNT + 1))  # Ajouter 1 pour inclure le nœud primaire
 
 # Arrêter tous les nodes sauf le primaire
 echo -e "${YELLOW}Arrêt des nodes MariaDB sauf $PRIMARY_NODE...${NC}"
@@ -56,13 +58,13 @@ done
 echo -e "${YELLOW}Exécution de la commande SHOW GLOBAL STATUS LIKE 'wsrep_cluster_size'; sur mariadb-node1...${NC}"
 
 # Récupérer uniquement la valeur de wsrep_cluster_size sans en-tête
-CLUSTER_SIZE=$(docker exec -u root mariadb-node1 mariadb -u "user" --password='pass' -e "SHOW GLOBAL STATUS LIKE 'wsrep_cluster_size';" --batch --skip-column-names | awk '/wsrep_cluster_size/ {print $2}')
+CLUSTER_SIZE=$(docker exec -u root mariadb-node1 mariadb -u "user" --password='pass' -e "SHOW GLOBAL STATUS LIKE 'wsrep_cluster_size';" --batch --skip-column-names | awk '{print $2}')
 
 # Vérifier si le nombre de nodes démarrés correspond à la taille du cluster
-if [ "$CLUSTER_SIZE" == "$NODES" ]; then
+if [ "$CLUSTER_SIZE" -eq "$EXPECTED_CLUSTER_SIZE" ]; then
     echo -e "${YELLOW}Le cluster Galera est complet avec $CLUSTER_SIZE nodes actifs.${NC}"
 else
-    echo -e "${YELLOW}Erreur : la taille du cluster Galera est $CLUSTER_SIZE, mais $NODES nodes sont démarrés.${NC}"
+    echo -e "${YELLOW}Erreur : la taille du cluster Galera est $CLUSTER_SIZE, mais $EXPECTED_CLUSTER_SIZE nodes sont attendus.${NC}"
 fi
 
 # Nettoyer les anciens fichiers de sauvegarde
@@ -71,5 +73,5 @@ cd "$BACKUP_DIR"
 ls -t mariadb_dump_*.sql | awk "NR>$RETENTION_COUNT" | xargs -r rm -f
 
 # Attente de 30 secondes avant de finir le script
-echo -e "${YELLOW}La sauvegarde est terminée. Le script se terminera dans 30 secondes.${NC}"
-sleep 30
+echo -e "${YELLOW}La sauvegarde est terminée. Le script se terminera dans 15 secondes.${NC}"
+sleep 15
