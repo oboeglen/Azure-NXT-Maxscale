@@ -7,7 +7,6 @@ MYSQL_USER="user"  # Nom d'utilisateur MySQL
 MYSQL_PASSWORD="pass"  # Mot de passe MySQL
 DOCKER_VOLUME_PATH="/var/lib/docker/volumes"  # Chemin des volumes Docker sur l'hôte
 DOCKER_LOG_PATH="/var/lib/docker/containers"  # Chemin des logs Docker sur l'hôte
-ALL_NODES=$(docker ps --format '{{.Names}}' | grep 'mariadb-node')
 
 # Couleurs pour les messages
 YELLOW='\033[1;33m'
@@ -15,6 +14,8 @@ NC='\033[0m' # Pas de couleur
 
 # Liste des nodes MariaDB sauf le primaire
 NODES=$(docker ps -a --format '{{.Names}}' | grep 'mariadb-node' | grep -v "$PRIMARY_NODE")
+NODE_COUNT=$(echo "$NODES" | wc -l)
+EXPECTED_CLUSTER_SIZE=$((NODE_COUNT + 1))  # Ajouter 1 pour inclure le nœud primaire
 
 # Trouver le fichier SQL le plus récent
 LATEST_DUMP=$(ls -t ${BACKUP_DIR}/mariadb_dump_*.sql | head -n 1)
@@ -103,10 +104,10 @@ echo -e "${YELLOW}Exécution de la commande SHOW GLOBAL STATUS LIKE 'wsrep_clust
 CLUSTER_SIZE=$(docker exec -u root mariadb-node1 mariadb -u "user" --password='pass' -e "SHOW GLOBAL STATUS LIKE 'wsrep_cluster_size';" --batch --skip-column-names | awk '/wsrep_cluster_size/ {print $2}')
 
 # Vérifier si le nombre de nodes démarrés correspond à la taille du cluster
-if [ "$CLUSTER_SIZE" == "$ALL_NODES" ]; then
+if [ "$CLUSTER_SIZE" == "$EXPECTED_CLUSTER_SIZE" ]; then
     echo -e "${YELLOW}Le cluster Galera est complet avec $CLUSTER_SIZE nodes actifs.${NC}"
 else
-    echo -e "${YELLOW}Erreur : la taille du cluster Galera est $CLUSTER_SIZE, mais $ALL_NODES nodes sont démarrés.${NC}"
+    echo -e "${YELLOW}Erreur : la taille du cluster Galera est $CLUSTER_SIZE, mais $EXPECTED_CLUSTER_SIZE nodes sont attendus.${NC}"
 fi
 
 # Attente de 15 secondes avant de finir le script
