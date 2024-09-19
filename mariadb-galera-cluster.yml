@@ -8,9 +8,6 @@ services:
       - 8001:3306
     volumes:
       - mariadb_node1_data:/bitnami/mariadb
-      - type: bind
-        source: /backup/mariadb
-        target: /bitnami/mariadb/backup
     environment:
       - MARIADB_GALERA_CLUSTER_NAME=db-cluster
       - MARIADB_GALERA_MARIABACKUP_PASSWORD=backup
