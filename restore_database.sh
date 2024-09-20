@@ -56,7 +56,7 @@ echo -e "${YELLOW}Attente de 30 secondes avant de commencer la restauration...${
 sleep 30
 
 # Restaurer la base de données
-echo -e "${YELLOW}Démarrage de la restauration de la base de données dans le conteneur Docker...${NC}"
+echo -e "${YELLOW}La restauration de la base de données est en cours...${NC}"
 docker exec -i $PRIMARY_NODE sh -c "mariadb -u $MYSQL_USER --password='$MYSQL_PASSWORD'" < "$LATEST_DUMP"
 
 # Vérifier si la restauration a réussi
