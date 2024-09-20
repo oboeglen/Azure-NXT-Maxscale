@@ -52,7 +52,7 @@ for NODE in $NODES; do
 done
 
 # Attendre 30 secondes avant de lancer la restauration
-echo -e "${YELLOW}Attente de 30 secondes avant de commencer la restauration...${NC}"
+echo -e "${YELLOW}La restauration va commencer dans 30 secondes...${NC}"
 sleep 30
 
 # Restaurer la base de données

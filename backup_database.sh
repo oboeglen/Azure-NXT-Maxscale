@@ -25,21 +25,21 @@ for NODE in $NODES; do
 done
 
 # Attendre 30 secondes avant de lancer le dump
-echo -e "${YELLOW}Attente de 30 secondes avant de commencer le dump...${NC}"
+echo -e "${YELLOW}La sauvegarde de la base de données va commencer dans 30 secondes...${NC}"
 sleep 30
 
 # Créer le répertoire de sauvegarde s'il n'existe pas
 mkdir -p "$BACKUP_DIR"
 
 # Exécuter le dump SQL
-echo -e "${YELLOW}Démarrage du dump SQL dans le conteneur Docker...${NC}"
+echo -e "${YELLOW}Sauvegarde en cours...${NC}"
 docker exec $PRIMARY_NODE sh -c "mariadb-dump --single-transaction --flush-logs --routines --triggers --all-databases -u $MYSQL_USER --password='$MYSQL_PASSWORD'" > "$DUMP_FILE"
 
 # Vérifier si le dump a réussi
 if [ $? -eq 0 ]; then
-    echo -e "${YELLOW}Dump SQL réussi. Le fichier est enregistré dans : $DUMP_FILE${NC}"
+    echo -e "${YELLOW}Sauvegarde réussie. Le fichier est enregistré dans : $DUMP_FILE${NC}"
 else
-    echo -e "${YELLOW}Erreur lors du dump SQL.${NC}"
+    echo -e "${YELLOW}Erreur lors de la sauvegarde.${NC}"
     exit 1
 fi
 
