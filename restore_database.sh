@@ -89,10 +89,10 @@ for NODE in $NODES; do
     # Attendre que le node soit prêt avant de passer au suivant
     echo -e "${YELLOW}Attente que le node $NODE soit prêt...${NC}"
     while ! docker logs "$NODE" 2>&1 | grep -q "WSREP: Synchronized with group, ready for connections"; do
-        echo -e "${YELLOW}Attente de 10 secondes pour le node $NODE...${NC}"
+        echo -e "${YELLOW}Attente de la synchronisation du node $NODE...${NC}"
         sleep 10
     done
-    echo -e "${YELLOW}Le node $NODE est prêt.${NC}"
+    echo -e "${YELLOW}Le node $NODE est synchronisé.${NC}"
 
     sleep 60  # Attendre 1 minute avant de redémarrer le prochain node
 done
@@ -101,7 +101,7 @@ done
 echo -e "${YELLOW}Exécution de la commande SHOW GLOBAL STATUS LIKE 'wsrep_cluster_size'; sur mariadb-node1...${NC}"
 
 # Récupérer uniquement la valeur de wsrep_cluster_size sans en-tête
-CLUSTER_SIZE=$(docker exec -u root mariadb-node1 mariadb -u "user" --password='pass' -e "SHOW GLOBAL STATUS LIKE 'wsrep_cluster_size';" --batch --skip-column-names | awk '/wsrep_cluster_size/ {print $2}')
+CLUSTER_SIZE=$(docker exec -u root mariadb-node1 mariadb -u "$MYSQL_USER" --password="$MYSQL_PASSWORD" -e "SHOW GLOBAL STATUS LIKE 'wsrep_cluster_size';" --batch --skip-column-names | awk '/wsrep_cluster_size/ {print $2}')
 
 # Vérifier si le nombre de nodes démarrés correspond à la taille du cluster
 if [ "$CLUSTER_SIZE" == "$EXPECTED_CLUSTER_SIZE" ]; then
