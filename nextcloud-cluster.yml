@@ -8,10 +8,21 @@ services:
     ports:
       - 8081:80
     volumes:
-      - nextcloud:/var/www/html
-      - apps:/var/www/html/custom_apps
-      - config:/var/www/html/config
-      - data:/var/www/html/data
+      - type: bind
+        source: /opcache-recommended.ini
+        target: /usr/local/etc/php/conf.d/opcache-recommended.ini
+      - type: volume
+        source: nextcloud
+        target: /var/www/html
+      - type: volume
+        source: apps
+        target: /var/www/html/custom_apps
+      - type: volume
+        source: config
+        target: /var/www/html/config
+      - type: volume
+        source: data
+        target: /var/www/html/data
 
     environment:
       - PHP_UPLOAD_LIMIT=2G
@@ -28,10 +39,21 @@ services:
     ports:
       - 8082:80
     volumes:
-      - nextcloud:/var/www/html
-      - apps:/var/www/html/custom_apps
-      - config:/var/www/html/config
-      - data:/var/www/html/data
+      - type: bind
+        source: /opcache-recommended.ini
+        target: /usr/local/etc/php/conf.d/opcache-recommended.ini
+      - type: volume
+        source: nextcloud
+        target: /var/www/html
+      - type: volume
+        source: apps
+        target: /var/www/html/custom_apps
+      - type: volume
+        source: config
+        target: /var/www/html/config
+      - type: volume
+        source: data
+        target: /var/www/html/data
 
     environment:
       - PHP_UPLOAD_LIMIT=2G
@@ -48,10 +70,21 @@ services:
     ports:
       - 8083:80
     volumes:
-      - nextcloud:/var/www/html
-      - apps:/var/www/html/custom_apps
-      - config:/var/www/html/config
-      - data:/var/www/html/data
+      - type: bind
+        source: /opcache-recommended.ini
+        target: /usr/local/etc/php/conf.d/opcache-recommended.ini
+      - type: volume
+        source: nextcloud
+        target: /var/www/html
+      - type: volume
+        source: apps
+        target: /var/www/html/custom_apps
+      - type: volume
+        source: config
+        target: /var/www/html/config
+      - type: volume
+        source: data
+        target: /var/www/html/data
 
     environment:
       - PHP_UPLOAD_LIMIT=2G
@@ -68,10 +101,21 @@ services:
     ports:
       - 8084:80
     volumes:
-      - nextcloud:/var/www/html
-      - apps:/var/www/html/custom_apps
-      - config:/var/www/html/config
-      - data:/var/www/html/data
+      - type: bind
+        source: /opcache-recommended.ini
+        target: /usr/local/etc/php/conf.d/opcache-recommended.ini
+      - type: volume
+        source: nextcloud
+        target: /var/www/html
+      - type: volume
+        source: apps
+        target: /var/www/html/custom_apps
+      - type: volume
+        source: config
+        target: /var/www/html/config
+      - type: volume
+        source: data
+        target: /var/www/html/data
 
     environment:
       - PHP_UPLOAD_LIMIT=2G
@@ -88,10 +132,21 @@ services:
     ports:
       - 8085:80
     volumes:
-      - nextcloud:/var/www/html
-      - apps:/var/www/html/custom_apps
-      - config:/var/www/html/config
-      - data:/var/www/html/data
+      - type: bind
+        source: /opcache-recommended.ini
+        target: /usr/local/etc/php/conf.d/opcache-recommended.ini
+      - type: volume
+        source: nextcloud
+        target: /var/www/html
+      - type: volume
+        source: apps
+        target: /var/www/html/custom_apps
+      - type: volume
+        source: config
+        target: /var/www/html/config
+      - type: volume
+        source: data
+        target: /var/www/html/data
 
     environment:
       - PHP_UPLOAD_LIMIT=2G
@@ -108,10 +163,21 @@ services:
     ports:
       - 8086:80
     volumes:
-      - nextcloud:/var/www/html
-      - apps:/var/www/html/custom_apps
-      - config:/var/www/html/config
-      - data:/var/www/html/data
+      - type: bind
+        source: /opcache-recommended.ini
+        target: /usr/local/etc/php/conf.d/opcache-recommended.ini
+      - type: volume
+        source: nextcloud
+        target: /var/www/html
+      - type: volume
+        source: apps
+        target: /var/www/html/custom_apps
+      - type: volume
+        source: config
+        target: /var/www/html/config
+      - type: volume
+        source: data
+        target: /var/www/html/data
 
     environment:
       - PHP_UPLOAD_LIMIT=2G
@@ -128,10 +194,21 @@ services:
     ports:
       - 8087:80
     volumes:
-      - nextcloud:/var/www/html
-      - apps:/var/www/html/custom_apps
-      - config:/var/www/html/config
-      - data:/var/www/html/data
+      - type: bind
+        source: /opcache-recommended.ini
+        target: /usr/local/etc/php/conf.d/opcache-recommended.ini
+      - type: volume
+        source: nextcloud
+        target: /var/www/html
+      - type: volume
+        source: apps
+        target: /var/www/html/custom_apps
+      - type: volume
+        source: config
+        target: /var/www/html/config
+      - type: volume
+        source: data
+        target: /var/www/html/data
 
     environment:
       - PHP_UPLOAD_LIMIT=2G
@@ -148,10 +225,21 @@ services:
     ports:
       - 8088:80
     volumes:
-      - nextcloud:/var/www/html
-      - apps:/var/www/html/custom_apps
-      - config:/var/www/html/config
-      - data:/var/www/html/data
+      - type: bind
+        source: /opcache-recommended.ini
+        target: /usr/local/etc/php/conf.d/opcache-recommended.ini
+      - type: volume
+        source: nextcloud
+        target: /var/www/html
+      - type: volume
+        source: apps
+        target: /var/www/html/custom_apps
+      - type: volume
+        source: config
+        target: /var/www/html/config
+      - type: volume
+        source: data
+        target: /var/www/html/data
 
     environment:
       - PHP_UPLOAD_LIMIT=2G
@@ -168,10 +256,21 @@ services:
     ports:
       - 8089:80
     volumes:
-      - nextcloud:/var/www/html
-      - apps:/var/www/html/custom_apps
-      - config:/var/www/html/config
-      - data:/var/www/html/data
+      - type: bind
+        source: /opcache-recommended.ini
+        target: /usr/local/etc/php/conf.d/opcache-recommended.ini
+      - type: volume
+        source: nextcloud
+        target: /var/www/html
+      - type: volume
+        source: apps
+        target: /var/www/html/custom_apps
+      - type: volume
+        source: config
+        target: /var/www/html/config
+      - type: volume
+        source: data
+        target: /var/www/html/data
 
     environment:
       - PHP_UPLOAD_LIMIT=2G
