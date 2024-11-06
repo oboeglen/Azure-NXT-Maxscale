@@ -15,8 +15,8 @@ services:
         source: certs1
         target: /certs
     environment:
-      - MINIO_ROOT_USER=oboeglen
-      - MINIO_ROOT_PASSWORD=S3cretd@tad!r
+      - MINIO_ROOT_USER=
+      - MINIO_ROOT_PASSWORD=pass
       - MINIO_DISTRIBUTED_MODE_ENABLED=yes
       - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
       - MINIO_SKIP_CLIENT=yes
@@ -37,8 +37,8 @@ services:
         source: certs2
         target: /certs
     environment:
-      - MINIO_ROOT_USER=oboeglen
-      - MINIO_ROOT_PASSWORD=S3cretd@tad!r
+      - MINIO_ROOT_USER=
+      - MINIO_ROOT_PASSWORD=pass
       - MINIO_DISTRIBUTED_MODE_ENABLED=yes
       - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
       - MINIO_SKIP_CLIENT=yes
@@ -59,8 +59,8 @@ services:
         source: certs3
         target: /certs
     environment:
-      - MINIO_ROOT_USER=oboeglen
-      - MINIO_ROOT_PASSWORD=S3cretd@tad!r
+      - MINIO_ROOT_USER=
+      - MINIO_ROOT_PASSWORD=pass
       - MINIO_DISTRIBUTED_MODE_ENABLED=yes
       - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
       - MINIO_SKIP_CLIENT=yes
@@ -81,8 +81,8 @@ services:
         source: certs4
         target: /certs
     environment:
-      - MINIO_ROOT_USER=oboeglen
-      - MINIO_ROOT_PASSWORD=S3cretd@tad!r
+      - MINIO_ROOT_USER=
+      - MINIO_ROOT_PASSWORD=pass
       - MINIO_DISTRIBUTED_MODE_ENABLED=yes
       - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
       - MINIO_SKIP_CLIENT=yes

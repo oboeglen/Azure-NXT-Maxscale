@@ -1,0 +1,76 @@
+version: '3'
+
+services:
+  whiteboard-node1:
+    container_name: whiteboard-node1
+    image: 'ghcr.io/nextcloud-releases/whiteboard:release'
+    ports:
+      - 5000:3002
+    depends_on:
+      - redis-whiteboard
+    environment:
+      - NEXTCLOUD_URL=
+      - JWT_SECRET_KEY=
+      - STORAGE_STRATEGY=redis
+      - REDIS_URL=redis://default:pass@172.100.0.100:6379/0
+    networks:
+      network:
+        ipv4_address: 172.100.0.10
+  
+  whiteboard-node2:
+    container_name: whiteboard-node2
+    image: 'ghcr.io/nextcloud-releases/whiteboard:release'
+    ports:
+      - 5001:3002
+    depends_on:
+      - redis-whiteboard
+    environment:
+      - NEXTCLOUD_URL=
+      - JWT_SECRET_KEY=
+      - STORAGE_STRATEGY=redis
+      - REDIS_URL=redis://default:pass@172.100.0.100:6379/0
+    networks:
+      network:
+        ipv4_address: 172.100.0.11
+  
+  whiteboard-node3:
+    container_name: whiteboard-node3
+    image: 'ghcr.io/nextcloud-releases/whiteboard:release'
+    ports:
+      - 5002:3002
+    depends_on:
+      - redis-whiteboard
+    environment:
+      - NEXTCLOUD_URL=
+      - JWT_SECRET_KEY=
+      - STORAGE_STRATEGY=redis
+      - REDIS_URL=redis://default:pass@172.100.0.100:6379/0
+    networks:
+      network:
+        ipv4_address: 172.100.0.12
+  
+  redis-whiteboard:
+    container_name: redis-whiteboard
+    image: 'bitnami/redis:latest'
+    volumes:
+      - type: volume
+        source: redis_whiteboard_data
+        target: /bitnami/redis/data
+    environment:
+      - REDIS_PASSWORD=pass
+    networks:
+      network:
+        ipv4_address: 172.100.0.100
+
+networks:
+  network:
+    name: whiteboard-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.100.0.0/24
+          gateway: 172.100.0.1
+
+volumes:
+  redis_whiteboard_data:
+    driver: local
