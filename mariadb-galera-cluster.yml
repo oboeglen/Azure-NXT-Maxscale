@@ -14,6 +14,7 @@ services:
       - MARIADB_ROOT_PASSWORD=pass
       - MARIADB_USER=galera
       - MARIADB_PASSWORD=galera
+      - MARIADB_DATABASE=maxscale_db
       - MARIADB_REPLICATION_USER=replicant
       - MARIADB_REPLICATION_PASSWORD=replica
       - MARIADB_GALERA_CLUSTER_BOOTSTRAP=yes
@@ -35,6 +36,7 @@ services:
       - MARIADB_ROOT_PASSWORD=pass
       - MARIADB_USER=galera
       - MARIADB_PASSWORD=galera
+      - MARIADB_DATABASE=maxscale_db
       - MARIADB_REPLICATION_USER=replicant
       - MARIADB_REPLICATION_PASSWORD=replica
       - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
@@ -56,6 +58,7 @@ services:
       - MARIADB_ROOT_PASSWORD=pass
       - MARIADB_USER=galera
       - MARIADB_PASSWORD=galera
+      - MARIADB_DATABASE=maxscale_db
       - MARIADB_REPLICATION_USER=replicant
       - MARIADB_REPLICATION_PASSWORD=replica
       - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
@@ -77,6 +80,7 @@ services:
       - MARIADB_ROOT_PASSWORD=pass
       - MARIADB_USER=galera
       - MARIADB_PASSWORD=galera
+      - MARIADB_DATABASE=maxscale_db
       - MARIADB_REPLICATION_USER=replicant
       - MARIADB_REPLICATION_PASSWORD=replica
       - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
@@ -98,6 +102,7 @@ services:
       - MARIADB_ROOT_PASSWORD=pass
       - MARIADB_USER=galera
       - MARIADB_PASSWORD=galera
+      - MARIADB_DATABASE=maxscale_db
       - MARIADB_REPLICATION_USER=replicant
       - MARIADB_REPLICATION_PASSWORD=replica
       - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
@@ -119,6 +124,7 @@ services:
       - MARIADB_ROOT_PASSWORD=pass
       - MARIADB_USER=galera
       - MARIADB_PASSWORD=galera
+      - MARIADB_DATABASE=maxscale_db
       - MARIADB_REPLICATION_USER=replicant
       - MARIADB_REPLICATION_PASSWORD=replica
       - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
@@ -140,6 +146,7 @@ services:
       - MARIADB_ROOT_PASSWORD=pass
       - MARIADB_USER=galera
       - MARIADB_PASSWORD=galera
+      - MARIADB_DATABASE=maxscale_db
       - MARIADB_REPLICATION_USER=replicant
       - MARIADB_REPLICATION_PASSWORD=replica
       - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
@@ -161,6 +168,7 @@ services:
       - MARIADB_ROOT_PASSWORD=pass
       - MARIADB_USER=galera
       - MARIADB_PASSWORD=galera
+      - MARIADB_DATABASE=maxscale_db
       - MARIADB_REPLICATION_USER=replicant
       - MARIADB_REPLICATION_PASSWORD=replica
       - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
@@ -182,6 +190,7 @@ services:
       - MARIADB_ROOT_PASSWORD=pass
       - MARIADB_USER=galera
       - MARIADB_PASSWORD=galera
+      - MARIADB_DATABASE=maxscale_db
       - MARIADB_REPLICATION_USER=replicant
       - MARIADB_REPLICATION_PASSWORD=replica
       - MARIADB_GALERA_CLUSTER_ADDRESS=gcomm://172.30.0.11
