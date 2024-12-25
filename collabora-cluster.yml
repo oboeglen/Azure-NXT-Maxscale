@@ -7,13 +7,12 @@ services:
     restart: always
     ports:
       - 9001:9980
-
     environment:
       - dictionaries=fr_FR
-      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
-
     cap_add:
       - MKNOD
+    volumes:
+      - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
   
   code-node2:
     container_name: code-node2
@@ -21,13 +20,12 @@ services:
     restart: always
     ports:
       - 9002:9980
-
     environment:
       - dictionaries=fr_FR
-      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
-
     cap_add:
       - MKNOD
+    volumes:
+      - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
   
   code-node3:
     container_name: code-node3
@@ -35,13 +33,12 @@ services:
     restart: always
     ports:
       - 9003:9980
-
     environment:
       - dictionaries=fr_FR
-      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
-
     cap_add:
       - MKNOD
+    volumes:
+      - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
   
   code-node4:
     container_name: code-node4
@@ -49,13 +46,12 @@ services:
     restart: always
     ports:
       - 9004:9980
-
     environment:
       - dictionaries=fr_FR
-      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
-
     cap_add:
       - MKNOD
+    volumes:
+      - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
   
   code-node5:
     container_name: code-node5
@@ -63,13 +59,12 @@ services:
     restart: always
     ports:
       - 9005:9980
-
     environment:
       - dictionaries=fr_FR
-      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
-
     cap_add:
       - MKNOD
+    volumes:
+      - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
 
   code-node6:
     container_name: code-node6
@@ -77,13 +72,12 @@ services:
     restart: always
     ports:
       - 9006:9980
-
     environment:
       - dictionaries=fr_FR
-      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
-
     cap_add:
       - MKNOD
+    volumes:
+      - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
   
   code-node7:
     container_name: code-node7
@@ -91,13 +85,12 @@ services:
     restart: always
     ports:
       - 9007:9980
-
     environment:
       - dictionaries=fr_FR
-      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
-
     cap_add:
       - MKNOD
+    volumes:
+      - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
 
   code-node8:
     container_name: code-node8
@@ -105,13 +98,12 @@ services:
     restart: always
     ports:
       - 9008:9980
-
     environment:
       - dictionaries=fr_FR
-      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
-
     cap_add:
       - MKNOD
+    volumes:
+      - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
 
   code-node9:
     container_name: code-node9
@@ -119,10 +111,9 @@ services:
     restart: always
     ports:
       - 9009:9980
-
     environment:
       - dictionaries=fr_FR
-      - extra_params=--o:welcome.enable=false --o:admin_console.username=user --o:admin_console.password=pass --o:ssl.enable=false --o:ssl.termination=true
-
     cap_add:
       - MKNOD
+    volumes:
+      - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
