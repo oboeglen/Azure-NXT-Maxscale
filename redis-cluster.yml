@@ -33,10 +33,12 @@ services:
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
       - REDIS_CLUSTER_CREATOR=yes
       - REDIS_CLUSTER_SLEEP_BEFORE_DNS_LOOKUP=30
-    
     networks:
       network:
         ipv4_address: 172.20.0.11
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=1"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node2:
     container_name: redis-node2
@@ -48,10 +50,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-    
     networks:
       network:
         ipv4_address: 172.20.0.12
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=2"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node3:
     container_name: redis-node3
@@ -63,10 +67,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-    
     networks:
       network:
         ipv4_address: 172.20.0.13
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=3"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node4:
     container_name: redis-node4
@@ -78,10 +84,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.14
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=4"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node5:
     container_name: redis-node5
@@ -93,11 +101,13 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.15
-     
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=5"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   redis-node6:
     container_name: redis-node6
     image: docker.io/bitnami/redis-cluster:latest
@@ -108,10 +118,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.16
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=6"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node7:
     container_name: redis-node7
@@ -123,10 +135,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.17
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=7"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node8:
     container_name: redis-node8
@@ -138,10 +152,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.18
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=8"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node9:
     container_name: redis-node9
@@ -153,10 +169,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.19
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=9"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node10:
     container_name: redis-node10
@@ -168,10 +186,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.20
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=10"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node11:
     container_name: redis-node11
@@ -183,10 +203,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.21
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=11"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node12:
     container_name: redis-node12
@@ -198,10 +220,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.22
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=12"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node13:
     container_name: redis-node13
@@ -213,10 +237,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.23
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=13"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node14:
     container_name: redis-node14
@@ -228,10 +254,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.24
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=14"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node15:
     container_name: redis-node15
@@ -243,10 +271,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.25
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=15"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node16:
     container_name: redis-node16
@@ -258,10 +288,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.26
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=16"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node17:
     container_name: redis-node17
@@ -273,10 +305,12 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.27
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=17"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   redis-node18:
     container_name: redis-node18
@@ -288,54 +322,9 @@ services:
     environment:
       - REDIS_PASSWORD=pass
       - REDIS_NODES=redis-node1 redis-node2 redis-node3 redis-node4 redis-node5 redis-node6 redis-node7 redis-node8 redis-node9 redis-node10 redis-node11 redis-node12 redis-node13 redis-node14 redis-node15 redis-node16 redis-node17 redis-node18
-
     networks:
       network:
         ipv4_address: 172.20.0.28
-
-volumes:
-  redis-cluster_data1:
-    driver: local
-  redis-cluster_data2:
-    driver: local
-  redis-cluster_data3:
-    driver: local
-  redis-cluster_data4:
-    driver: local
-  redis-cluster_data5:
-    driver: local
-  redis-cluster_data6:
-    driver: local
-  redis-cluster_data7:
-    driver: local
-  redis-cluster_data8:
-    driver: local
-  redis-cluster_data9:
-    driver: local
-  redis-cluster_data10:
-    driver: local
-  redis-cluster_data11:
-    driver: local
-  redis-cluster_data12:
-    driver: local
-  redis-cluster_data13:
-    driver: local
-  redis-cluster_data14:
-    driver: local
-  redis-cluster_data15:
-    driver: local
-  redis-cluster_data16:
-    driver: local
-  redis-cluster_data17:
-    driver: local
-  redis-cluster_data18:
-    driver: local
-
-networks:
-  network:
-    name: redis-net
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/24
-          gateway: 172.20.0.1
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=18"
+      - "com.centurylinklabs.watchtower.enable=true"

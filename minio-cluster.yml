@@ -24,7 +24,10 @@ services:
     networks:
       network:
         ipv4_address: 172.101.0.11
-  
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=1"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   minio2:
     container_name: minio2
     image: 'bitnami/minio:latest'
@@ -46,7 +49,10 @@ services:
     networks:
       network:
         ipv4_address: 172.101.0.12
-  
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=2"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   minio3:
     container_name: minio3
     image: 'bitnami/minio:latest'
@@ -68,7 +74,10 @@ services:
     networks:
       network:
         ipv4_address: 172.101.0.13
-  
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=3"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   minio4:
     container_name: minio4
     image: 'bitnami/minio:latest'
@@ -90,6 +99,9 @@ services:
     networks:
       network:
         ipv4_address: 172.101.0.14
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=4"
+      - "com.centurylinklabs.watchtower.enable=true"
 
 networks:
   network:

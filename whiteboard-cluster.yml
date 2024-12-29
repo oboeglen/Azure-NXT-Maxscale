@@ -16,7 +16,10 @@ services:
     networks:
       network:
         ipv4_address: 172.100.0.10
-  
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=1"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   whiteboard-node2:
     container_name: whiteboard-node2
     image: 'ghcr.io/nextcloud-releases/whiteboard:release'
@@ -32,7 +35,10 @@ services:
     networks:
       network:
         ipv4_address: 172.100.0.11
-  
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=2"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   whiteboard-node3:
     container_name: whiteboard-node3
     image: 'ghcr.io/nextcloud-releases/whiteboard:release'
@@ -48,7 +54,10 @@ services:
     networks:
       network:
         ipv4_address: 172.100.0.12
-  
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=3"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   redis-whiteboard:
     container_name: redis-whiteboard
     image: 'bitnami/redis:latest'
@@ -61,6 +70,9 @@ services:
     networks:
       network:
         ipv4_address: 172.100.0.100
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=0"
+      - "com.centurylinklabs.watchtower.enable=true"
 
 networks:
   network:

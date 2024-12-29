@@ -22,6 +22,9 @@ services:
     networks:
       network:
         ipv4_address: 172.30.0.11
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=1"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   mariadb-node2:
     container_name: mariadb-node2
@@ -44,6 +47,10 @@ services:
     networks:
       network:
         ipv4_address: 172.30.0.12
+    labels:
+      - "com.centurylinklabs.watchtower.depends-on=mariadb-node1"
+      - "com.centurylinklabs.watchtower.update-order=2"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   mariadb-node3:
     container_name: mariadb-node3
@@ -66,6 +73,10 @@ services:
     networks:
       network:
         ipv4_address: 172.30.0.13
+    labels:
+      - "com.centurylinklabs.watchtower.depends-on=mariadb-node2"
+      - "com.centurylinklabs.watchtower.update-order=3"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   mariadb-node4:
     container_name: mariadb-node4
@@ -88,6 +99,10 @@ services:
     networks:
       network:
         ipv4_address: 172.30.0.14
+    labels:
+      - "com.centurylinklabs.watchtower.depends-on=mariadb-node3"
+      - "com.centurylinklabs.watchtower.update-order=4"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   mariadb-node5:
     container_name: mariadb-node5
@@ -110,6 +125,10 @@ services:
     networks:
       network:
         ipv4_address: 172.30.0.15
+    labels:
+      - "com.centurylinklabs.watchtower.depends-on=mariadb-node4"
+      - "com.centurylinklabs.watchtower.update-order=5"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   mariadb-node6:
     container_name: mariadb-node6
@@ -132,7 +151,11 @@ services:
     networks:
       network:
         ipv4_address: 172.30.0.16
-   
+    labels:
+      - "com.centurylinklabs.watchtower.depends-on=mariadb-node5"
+      - "com.centurylinklabs.watchtower.update-order=6"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   mariadb-node7:
     container_name: mariadb-node7
     image: docker.io/bitnami/mariadb-galera:latest
@@ -154,6 +177,10 @@ services:
     networks:
       network:
         ipv4_address: 172.30.0.17
+    labels:
+      - "com.centurylinklabs.watchtower.depends-on=mariadb-node6"
+      - "com.centurylinklabs.watchtower.update-order=7"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   mariadb-node8:
     container_name: mariadb-node8
@@ -176,6 +203,10 @@ services:
     networks:
       network:
         ipv4_address: 172.30.0.18
+    labels:
+      - "com.centurylinklabs.watchtower.depends-on=mariadb-node7"
+      - "com.centurylinklabs.watchtower.update-order=8"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   mariadb-node9:
     container_name: mariadb-node9
@@ -197,33 +228,8 @@ services:
       - MARIADB_GALERA_NODE_ADDRESS=172.30.0.19
     networks:
       network:
-        ipv4_address: 172.30.0.19   
-
-volumes:
-  mariadb_node1_data:
-    driver: local
-  mariadb_node2_data:
-    driver: local
-  mariadb_node3_data:
-    driver: local
-  mariadb_node4_data:
-    driver: local
-  mariadb_node5_data:
-    driver: local
-  mariadb_node6_data:
-    driver: local
-  mariadb_node7_data:
-    driver: local
-  mariadb_node8_data:
-    driver: local
-  mariadb_node9_data:
-    driver: local
-
-networks:
-  network:
-    name: galera-net
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.30.0.0/24
-          gateway: 172.30.0.1
+        ipv4_address: 172.30.0.19
+    labels:
+      - "com.centurylinklabs.watchtower.depends-on=mariadb-node8"
+      - "com.centurylinklabs.watchtower.update-order=9"
+      - "com.centurylinklabs.watchtower.enable=true"

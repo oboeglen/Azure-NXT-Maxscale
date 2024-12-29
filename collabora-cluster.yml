@@ -13,7 +13,10 @@ services:
       - MKNOD
     volumes:
       - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
-  
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=1"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   code-node2:
     container_name: code-node2
     image: docker.io/collabora/code
@@ -26,7 +29,10 @@ services:
       - MKNOD
     volumes:
       - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
-  
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=2"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   code-node3:
     container_name: code-node3
     image: docker.io/collabora/code
@@ -39,7 +45,10 @@ services:
       - MKNOD
     volumes:
       - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
-  
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=3"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   code-node4:
     container_name: code-node4
     image: docker.io/collabora/code
@@ -52,7 +61,10 @@ services:
       - MKNOD
     volumes:
       - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
-  
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=4"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   code-node5:
     container_name: code-node5
     image: docker.io/collabora/code
@@ -65,6 +77,9 @@ services:
       - MKNOD
     volumes:
       - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=5"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   code-node6:
     container_name: code-node6
@@ -78,7 +93,10 @@ services:
       - MKNOD
     volumes:
       - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
-  
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=6"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   code-node7:
     container_name: code-node7
     image: docker.io/collabora/code
@@ -91,6 +109,9 @@ services:
       - MKNOD
     volumes:
       - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=7"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   code-node8:
     container_name: code-node8
@@ -104,6 +125,9 @@ services:
       - MKNOD
     volumes:
       - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=8"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   code-node9:
     container_name: code-node9
@@ -117,3 +141,6 @@ services:
       - MKNOD
     volumes:
       - /collabora_conf/coolwsd.xml:/etc/coolwsd/coolwsd.xml:ro
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=9"
+      - "com.centurylinklabs.watchtower.enable=true"

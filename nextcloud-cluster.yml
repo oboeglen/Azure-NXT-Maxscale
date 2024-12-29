@@ -23,14 +23,15 @@ services:
       - type: volume
         source: data
         target: /var/www/html/data
-
     environment:
       - PHP_UPLOAD_LIMIT=2G
       - PHP_MEMORY_LIMIT=1G
-
     networks:
       network:
         ipv4_address: 172.10.0.11
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=1"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   app-next-02:
     container_name: app-next-02
@@ -54,14 +55,15 @@ services:
       - type: volume
         source: data
         target: /var/www/html/data
-
     environment:
       - PHP_UPLOAD_LIMIT=2G
       - PHP_MEMORY_LIMIT=1G
-
     networks:
       network:
         ipv4_address: 172.10.0.12
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=2"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   app-next-03:
     container_name: app-next-03
@@ -85,14 +87,15 @@ services:
       - type: volume
         source: data
         target: /var/www/html/data
-
     environment:
       - PHP_UPLOAD_LIMIT=2G
       - PHP_MEMORY_LIMIT=1G
-
     networks:
       network:
         ipv4_address: 172.10.0.13
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=3"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   app-next-04:
     container_name: app-next-04
@@ -116,14 +119,15 @@ services:
       - type: volume
         source: data
         target: /var/www/html/data
-
     environment:
       - PHP_UPLOAD_LIMIT=2G
       - PHP_MEMORY_LIMIT=1G
-
     networks:
       network:
         ipv4_address: 172.10.0.14
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=4"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   app-next-05:
     container_name: app-next-05
@@ -147,14 +151,15 @@ services:
       - type: volume
         source: data
         target: /var/www/html/data
-
     environment:
       - PHP_UPLOAD_LIMIT=2G
       - PHP_MEMORY_LIMIT=1G
-
     networks:
       network:
         ipv4_address: 172.10.0.15
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=5"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   app-next-06:
     container_name: app-next-06
@@ -178,14 +183,15 @@ services:
       - type: volume
         source: data
         target: /var/www/html/data
-
     environment:
       - PHP_UPLOAD_LIMIT=2G
       - PHP_MEMORY_LIMIT=1G
-
     networks:
       network:
         ipv4_address: 172.10.0.16
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=6"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   app-next-07:
     container_name: app-next-07
@@ -209,14 +215,15 @@ services:
       - type: volume
         source: data
         target: /var/www/html/data
-
     environment:
       - PHP_UPLOAD_LIMIT=2G
       - PHP_MEMORY_LIMIT=1G
-
     networks:
       network:
         ipv4_address: 172.10.0.17
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=7"
+      - "com.centurylinklabs.watchtower.enable=true"
 
   app-next-08:
     container_name: app-next-08
@@ -240,15 +247,16 @@ services:
       - type: volume
         source: data
         target: /var/www/html/data
-
     environment:
       - PHP_UPLOAD_LIMIT=2G
       - PHP_MEMORY_LIMIT=1G
-
     networks:
       network:
         ipv4_address: 172.10.0.18
-  
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=8"
+      - "com.centurylinklabs.watchtower.enable=true"
+
   app-next-09:
     container_name: app-next-09
     image: docker.io/nextcloud
@@ -271,14 +279,15 @@ services:
       - type: volume
         source: data
         target: /var/www/html/data
-
     environment:
       - PHP_UPLOAD_LIMIT=2G
       - PHP_MEMORY_LIMIT=1G
-
     networks:
       network:
         ipv4_address: 172.10.0.19
+    labels:
+      - "com.centurylinklabs.watchtower.update-order=9"
+      - "com.centurylinklabs.watchtower.enable=true"
 
 volumes:
   nextcloud:
