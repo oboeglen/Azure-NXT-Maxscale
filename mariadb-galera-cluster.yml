@@ -233,3 +233,32 @@ services:
       - "com.centurylinklabs.watchtower.depends-on=mariadb-node8"
       - "com.centurylinklabs.watchtower.update-order=9"
       - "com.centurylinklabs.watchtower.enable=true"
+
+networks:
+  network:
+    name: galera-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1
+
+volumes:
+  mariadb_node1_data:
+    driver: local
+  mariadb_node2_data:
+    driver: local
+  mariadb_node3_data:
+    driver: local
+  mariadb_node4_data:
+    driver: local
+  mariadb_node5_data:
+    driver: local
+  mariadb_node6_data:
+    driver: local
+  mariadb_node7_data:
+    driver: local
+  mariadb_node8_data:
+    driver: local
+  mariadb_node9_data:
+    driver: local
