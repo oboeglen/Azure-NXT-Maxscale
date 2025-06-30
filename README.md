@@ -55,7 +55,7 @@ L’utilisateur est libre d’ajuster ce nombre en fonction de ses besoins et de
 | `haproxy.cfg`                      | Configuration de HAProxy pour routage multi-services                       |
 | `backup_database.sh`               | Sauvegarde de la base de données                                           |
 | `restore_database.sh`              | Restauration de la base de données                                         |
-
+| `config.php`                       | Configuration Nextcloud type                                               |
 ---
 
 ## 🧰 Déploiement recommandé
