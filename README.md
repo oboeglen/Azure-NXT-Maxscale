@@ -14,7 +14,7 @@ L’architecture repose sur un proxy central **HAProxy** qui achemine le trafic 
 - `collabora.domaine.tld` → Éditeur Collabora Online  
 - `whiteboard.domaine.tld` → Tableau blanc collaboratif  
 
-Chaque service est déployé en **mode cluster** pour assurer la haute disponibilité et la montée en charge. Les communications internes se font via un **réseau Docker commun**.
+Chaque service est déployé **en mode cluster** pour assurer la haute disponibilité et la montée en charge. Chaque cluster dispose de son propre réseau Docker, à l’exception de Redis qui doit impérativement être relié au réseau du cluster Nextcloud afin de permettre une communication directe entre les deux.
 
 Les composants principaux sont :
 
