@@ -5,6 +5,7 @@
 **Azure NXT Maxscale** est une solution conçue pour déployer une infrastructure Nextcloud hautement disponible, adaptée aux grandes structures et aux environnements critiques. Elle regroupe l’ensemble des services nécessaires à un déploiement complet : base de données, stockage, application, édition collaborative, cache, équilibrage de charge et certificats SSL.
 
 ---
+![Schéma de principe - Maxscale](https://github.com/AzureInformatique/Azure-NXT-Maxscale/raw/main/Sch%C3%A9ma%20de%20principe%20-%20Maxscale.png)
 
 ## 🧱 Fonctionnement global
 
