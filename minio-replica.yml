@@ -3,7 +3,7 @@ version: '3.2'
 services:
   storage-replica-node1:
     container_name: storage-replica-node1
-    image: 'bitnami/minio:latest'
+    image: 'bitnami/minio:2025.4.22'
     user: root
     ports:
       - 9090:9001
@@ -31,7 +31,7 @@ services:
 
   storage-replica-node2:
     container_name: storage-replica-node2
-    image: 'bitnami/minio:latest'
+    image: 'bitnami/minio:2025.4.22'
     user: root
     ports:
       - 9092:9000
@@ -58,7 +58,7 @@ services:
 
   storage-replica-node3:
     container_name: storage-replica-node3
-    image: 'bitnami/minio:latest'
+    image: 'bitnami/minio:2025.4.22'
     user: root
     ports:
       - 9093:9000
@@ -85,7 +85,7 @@ services:
 
   storage-replica-node4:
     container_name: storage-replica-node4
-    image: 'bitnami/minio:latest'
+    image: 'bitnami/minio:2025.4.22'
     user: root
     ports:
       - 9094:9000
@@ -112,7 +112,7 @@ services:
 
   storage-replica-node5:
     container_name: storage-replica-node5
-    image: 'bitnami/minio:latest'
+    image: 'bitnami/minio:2025.4.22'
     user: root
     ports:
       - 9095:9000
@@ -139,7 +139,7 @@ services:
 
   storage-replica-node6:
     container_name: storage-replica-node6
-    image: 'bitnami/minio:latest'
+    image: 'bitnami/minio:2025.4.22'
     user: root
     ports:
       - 9096:9000

@@ -3,7 +3,7 @@ version: '3'
 services:
   minio1:
     container_name: minio1
-    image: 'bitnami/minio:latest'
+    image: 'bitnami/minio:2025.4.22'
     user: root
     ports:
       - 9001:9001
@@ -30,7 +30,7 @@ services:
 
   minio2:
     container_name: minio2
-    image: 'bitnami/minio:latest'
+    image: 'bitnami/minio:2025.4.22'
     user: root
     volumes:
       - type: bind
@@ -55,7 +55,7 @@ services:
 
   minio3:
     container_name: minio3
-    image: 'bitnami/minio:latest'
+    image: 'bitnami/minio:2025.4.22'
     user: root
     volumes:
       - type: bind
@@ -80,7 +80,7 @@ services:
 
   minio4:
     container_name: minio4
-    image: 'bitnami/minio:latest'
+    image: 'bitnami/minio:2025.4.22'
     user: root
     volumes:
       - type: bind
