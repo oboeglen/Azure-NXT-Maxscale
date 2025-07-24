@@ -29,6 +29,18 @@ Les composants principaux sont :
 
 ---
 
+> ⚠️ **Note importante concernant MinIO**
+>
+> Pour conserver toutes les fonctionnalités de la **console Web** de MinIO, utilisez impérativement l’image suivante :
+>
+> ```
+> bitnami/minio:2025.4.22
+> ```
+>
+> Les versions ultérieures peuvent désactiver ou modifier l'accès à la console.
+
+ ---
+
 ## 🔁 Clusters et personnalisation
 
 Tous les fichiers `.yml` et `.sh` fournis sont conçus pour être **modulables**. Le **nombre de nœuds** dans les fichiers est **donné à titre d’exemple uniquement**.  
@@ -37,7 +49,7 @@ L’utilisateur est libre d’ajuster ce nombre en fonction de ses besoins et de
 ### Exemple :
 - **MariaDB Galera** : il est recommandé d’utiliser un **nombre impair** de nœuds pour assurer le quorum (ex : 3 ou 5)  
 - **MinIO** : nécessite un nombre pair de disques/nœuds pour la parité  
-- **Redis** et **Nextcloud** : scalables horizontalement  
+- **Redis** et **Nextcloud** : scalables horizontalement
 
 ---
 
