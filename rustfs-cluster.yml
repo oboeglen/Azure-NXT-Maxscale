@@ -1,0 +1,76 @@
+
+services:
+  rustfs-node1:
+    image: rustfs/rustfs:latest
+    container_name: rustfs-node1
+    hostname: rustfs-node1
+    ports:
+      - "9000:9000"  # Port S3 exposed externally
+    volumes:
+      - /rustfs_data1:/data
+
+    environment:
+      - RUSTFS_ACCESS_KEY=YOUR_ACCESS_KEY
+      - RUSTFS_SECRET_KEY=YOUR_SECRET_KEY
+      - RUSTFS_ADDRESS=0.0.0.0:9000
+      - RUSTFS_CONSOLE_ENABLE=true
+      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data
+    networks:
+      rustfsnet:
+        ipv4_address: 172.50.0.11
+
+  rustfs-node2:
+    image: rustfs/rustfs:latest
+    container_name: rustfs-node2
+    hostname: rustfs-node2
+    volumes:
+      - /rustfs_data2:/data
+
+    environment:
+      - RUSTFS_ACCESS_KEY=YOUR_ACCESS_KEY
+      - RUSTFS_SECRET_KEY=YOUR_SECRET_KEY
+      - RUSTFS_ADDRESS=0.0.0.0:9000
+      - RUSTFS_CONSOLE_ENABLE=true
+      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data
+    networks:
+      rustfsnet:
+        ipv4_address: 172.50.0.12
+
+  rustfs-node3:
+    image: rustfs/rustfs:latest
+    container_name: rustfs-node3
+    hostname: rustfs-node3
+    volumes:
+      - /rustfs_data3:/data
+    environment:
+      - RUSTFS_ACCESS_KEY=YOUR_ACCESS_KEY
+      - RUSTFS_SECRET_KEY=YOUR_SECRET_KEY
+      - RUSTFS_ADDRESS=0.0.0.0:9000
+      - RUSTFS_CONSOLE_ENABLE=true
+      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data
+    networks:
+      rustfsnet:
+        ipv4_address: 172.50.0.13
+
+  rustfs-node4:
+    image: rustfs/rustfs:latest
+    container_name: rustfs-node4
+    hostname: rustfs-node4
+    volumes:
+      - /rustfs_data4:/data
+    environment:
+      - RUSTFS_ACCESS_KEY=YOUR_ACCESS_KEY
+      - RUSTFS_SECRET_KEY=YOUR_SECRET_KEY
+      - RUSTFS_ADDRESS=0.0.0.0:9000
+      - RUSTFS_CONSOLE_ENABLE=true
+      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data
+    networks:
+      rustfsnet:
+        ipv4_address: 172.50.0.14
+
+networks:
+  rustfsnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.50.0.0/24
