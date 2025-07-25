@@ -23,9 +23,12 @@ Les composants principaux sont :
 - **Nextcloud (app)** : Application principale  
 - **MariaDB Galera** : Base de données répliquée  
 - **Redis** : Cache distribué  
-- **MinIO** : Stockage d’objets distribué, répliqué localement et/ou sur site distant  
+- **MinIO** *ou* **RustFS** : Stockage d’objets distribué, répliqué localement et/ou sur site distant  
 - **Collabora Online** : Édition collaborative de documents  
 - **Whiteboard** : Tableau blanc partagé  
+
+> ✅ **Alternative à MinIO** :  
+> Il est possible de se passer totalement de **MinIO** en migrant vers **[RustFS](https://github.com/rustfs/rustfs)**, une solution moderne, compatible S3 et orientée haute disponibilité. Les fichiers de configuration RustFS sont disponibles dans le dépôt et peuvent remplacer ceux de MinIO sans perte de compatibilité avec Nextcloud.
 
 ---
 
@@ -39,7 +42,7 @@ Les composants principaux sont :
 >
 > Les versions ultérieures peuvent désactiver ou modifier l'accès à la console.
 
- ---
+---
 
 ## 🔁 Clusters et personnalisation
 
@@ -48,7 +51,7 @@ L’utilisateur est libre d’ajuster ce nombre en fonction de ses besoins et de
 
 ### Exemple :
 - **MariaDB Galera** : il est recommandé d’utiliser un **nombre impair** de nœuds pour assurer le quorum (ex : 3 ou 5)  
-- **MinIO** : nécessite un nombre pair de disques/nœuds pour la parité  
+- **MinIO** / **RustFS** : nécessite un nombre pair de disques/nœuds pour la parité  
 - **Redis** et **Nextcloud** : scalables horizontalement
 
 ---
@@ -60,6 +63,7 @@ L’utilisateur est libre d’ajuster ce nombre en fonction de ses besoins et de
 | `minio-cluster.yml`                | Déploiement du cluster principal MinIO                                     |
 | `minio-replica.yml`                | Déploiement du cluster MinIO de réplication vers un site distant           |
 | `minio_heal.sh`                    | Réparation automatique du cluster MinIO                                    |
+| `rustfs-cluster.yml`               | **Alternative à MinIO** : déploiement du cluster RustFS                    |
 | `nextcloud-cluster.yml`            | Déploiement de Nextcloud en haute disponibilité                            |
 | `mariadb-galera-cluster.yml`       | Déploiement du cluster MariaDB Galera                                      |
 | `redis-cluster.yml`                | Déploiement du cluster Redis                                               |
@@ -69,6 +73,7 @@ L’utilisateur est libre d’ajuster ce nombre en fonction de ses besoins et de
 | `backup_database.sh`               | Sauvegarde de la base de données                                           |
 | `restore_database.sh`              | Restauration de la base de données                                         |
 | `config.php`                       | Configuration Nextcloud type                                               |
+
 ---
 
 ## 🧰 Déploiement recommandé
