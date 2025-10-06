@@ -1,4 +1,3 @@
-
 services:
   rustfs-node1:
     image: rustfs/rustfs:latest
@@ -8,13 +7,14 @@ services:
       - "9000:9000"  # Port S3 exposed externally
     volumes:
       - /rustfs_data1:/data
-
+      - rustfs_logs1:/logs
     environment:
-      - RUSTFS_ACCESS_KEY=YOUR_ACCESS_KEY
-      - RUSTFS_SECRET_KEY=YOUR_SECRET_KEY
+      - RUSTFS_ACCESS_KEY=rustadmin
+      - RUSTFS_SECRET_KEY=rustadmin
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=true
       - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data
+      - RUST_LOG=error
     networks:
       rustfsnet:
         ipv4_address: 172.50.0.11
@@ -25,13 +25,14 @@ services:
     hostname: rustfs-node2
     volumes:
       - /rustfs_data2:/data
-
+      - rustfs_logs2:/logs
     environment:
-      - RUSTFS_ACCESS_KEY=YOUR_ACCESS_KEY
-      - RUSTFS_SECRET_KEY=YOUR_SECRET_KEY
+      - RUSTFS_ACCESS_KEY=rustadmin
+      - RUSTFS_SECRET_KEY=rustadmin
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=true
       - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data
+      - RUST_LOG=error
     networks:
       rustfsnet:
         ipv4_address: 172.50.0.12
@@ -42,12 +43,14 @@ services:
     hostname: rustfs-node3
     volumes:
       - /rustfs_data3:/data
+      - rustfs_logs3:/logs
     environment:
-      - RUSTFS_ACCESS_KEY=YOUR_ACCESS_KEY
-      - RUSTFS_SECRET_KEY=YOUR_SECRET_KEY
+      - RUSTFS_ACCESS_KEY=rustadmin
+      - RUSTFS_SECRET_KEY=rustadmin
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=true
       - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data
+      - RUST_LOG=error
     networks:
       rustfsnet:
         ipv4_address: 172.50.0.13
@@ -58,15 +61,23 @@ services:
     hostname: rustfs-node4
     volumes:
       - /rustfs_data4:/data
+      - rustfs_logs4:/logs
     environment:
-      - RUSTFS_ACCESS_KEY=YOUR_ACCESS_KEY
-      - RUSTFS_SECRET_KEY=YOUR_SECRET_KEY
+      - RUSTFS_ACCESS_KEY=rustadmin
+      - RUSTFS_SECRET_KEY=rustadmin
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=true
       - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data
+      - RUST_LOG=error
     networks:
       rustfsnet:
         ipv4_address: 172.50.0.14
+
+volumes:
+  rustfs_logs1:
+  rustfs_logs2:
+  rustfs_logs3:
+  rustfs_logs4:
 
 networks:
   rustfsnet:
