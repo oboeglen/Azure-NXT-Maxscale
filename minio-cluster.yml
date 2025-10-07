@@ -1,107 +1,91 @@
 version: '3'
-
 services:
   minio1:
     container_name: minio1
-    image: 'bitnami/minio:2025.4.22'
-    user: root
+    image: 'bitnamilegacy/minio:2025.4.22'
     ports:
       - 9001:9001
+      - 9000:9000
     volumes:
-      - type: bind
-        source: /data1
-        target: /bitnami/minio/data
-      - type: volume
-        source: certs1
-        target: /certs
+      - /minio1_data1:/bitnami/minio/data-1
+      - /minio1_data2:/bitnami/minio/data-2
+      - /minio1_data3:/bitnami/minio/data-3
+      - /minio1_data4:/bitnami/minio/data-4
+      - certs1:/certs
     environment:
-      - MINIO_ROOT_USER=
-      - MINIO_ROOT_PASSWORD=pass
+      - MINIO_ROOT_USER=default
+      - MINIO_ROOT_PASSWORD=password
       - MINIO_DISTRIBUTED_MODE_ENABLED=yes
-      - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
+      - MINIO_DISTRIBUTED_NODES=172.101.0.{11...14}/bitnami/minio/data-{1...4}
       - MINIO_SKIP_CLIENT=yes
-      - MINIO_STORAGE_CLASS_STANDARD=EC:2
+      - MINIO_STORAGE_CLASS_STANDARD=EC:4
+      - MINIO_STORAGE_CLASS_RRS=EC:2
     networks:
       network:
         ipv4_address: 172.101.0.11
-    labels:
-      - "com.centurylinklabs.watchtower.update-order=1"
-      - "com.centurylinklabs.watchtower.enable=true"
 
   minio2:
     container_name: minio2
-    image: 'bitnami/minio:2025.4.22'
-    user: root
+    image: 'bitnamilegacy/minio:2025.4.22'
     volumes:
-      - type: bind
-        source: /data2
-        target: /bitnami/minio/data
-      - type: volume
-        source: certs2
-        target: /certs
+      - /minio2_data1:/bitnami/minio/data-1
+      - /minio2_data2:/bitnami/minio/data-2
+      - /minio2_data3:/bitnami/minio/data-3
+      - /minio2_data4:/bitnami/minio/data-4
+      - certs2:/certs
     environment:
-      - MINIO_ROOT_USER=
-      - MINIO_ROOT_PASSWORD=pass
+      - MINIO_ROOT_USER=default
+      - MINIO_ROOT_PASSWORD=password
       - MINIO_DISTRIBUTED_MODE_ENABLED=yes
-      - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
+      - MINIO_DISTRIBUTED_NODES=172.101.0.{11...14}/bitnami/minio/data-{1...4}
       - MINIO_SKIP_CLIENT=yes
-      - MINIO_STORAGE_CLASS_STANDARD=EC:2
+      - MINIO_STORAGE_CLASS_STANDARD=EC:4
+      - MINIO_STORAGE_CLASS_RRS=EC:2
     networks:
       network:
         ipv4_address: 172.101.0.12
-    labels:
-      - "com.centurylinklabs.watchtower.update-order=2"
-      - "com.centurylinklabs.watchtower.enable=true"
 
   minio3:
     container_name: minio3
-    image: 'bitnami/minio:2025.4.22'
-    user: root
+    image: 'bitnamilegacy/minio:2025.4.22'
     volumes:
-      - type: bind
-        source: /data3
-        target: /bitnami/minio/data
-      - type: volume
-        source: certs3
-        target: /certs
+      - /minio3_data1:/bitnami/minio/data-1
+      - /minio3_data2:/bitnami/minio/data-2
+      - /minio3_data3:/bitnami/minio/data-3
+      - /minio3_data4:/bitnami/minio/data-4
+      - certs3:/certs
     environment:
-      - MINIO_ROOT_USER=
-      - MINIO_ROOT_PASSWORD=pass
+      - MINIO_ROOT_USER=default
+      - MINIO_ROOT_PASSWORD=password
       - MINIO_DISTRIBUTED_MODE_ENABLED=yes
-      - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
+      - MINIO_DISTRIBUTED_NODES=172.101.0.{11...14}/bitnami/minio/data-{1...4}
       - MINIO_SKIP_CLIENT=yes
-      - MINIO_STORAGE_CLASS_STANDARD=EC:2
+      - MINIO_STORAGE_CLASS_STANDARD=EC:4
+      - MINIO_STORAGE_CLASS_RRS=EC:2
     networks:
       network:
         ipv4_address: 172.101.0.13
-    labels:
-      - "com.centurylinklabs.watchtower.update-order=3"
-      - "com.centurylinklabs.watchtower.enable=true"
 
   minio4:
     container_name: minio4
-    image: 'bitnami/minio:2025.4.22'
-    user: root
+    image: 'bitnamilegacy/minio:2025.4.22'
     volumes:
-      - type: bind
-        source: /data4
-        target: /bitnami/minio/data
-      - type: volume
-        source: certs4
-        target: /certs
+      - /minio4_data1:/bitnami/minio/data-1
+      - /minio4_data2:/bitnami/minio/data-2
+      - /minio4_data3:/bitnami/minio/data-3
+      - /minio4_data4:/bitnami/minio/data-4
+      - certs4:/certs
     environment:
-      - MINIO_ROOT_USER=
-      - MINIO_ROOT_PASSWORD=pass
+      - MINIO_ROOT_USER=default
+      - MINIO_ROOT_PASSWORD=password
       - MINIO_DISTRIBUTED_MODE_ENABLED=yes
-      - MINIO_DISTRIBUTED_NODES=minio1,minio2,minio3,minio4
+      - MINIO_DISTRIBUTED_NODES=172.101.0.{11...14}/bitnami/minio/data-{1...4}
       - MINIO_SKIP_CLIENT=yes
-      - MINIO_STORAGE_CLASS_STANDARD=EC:2
+      - MINIO_STORAGE_CLASS_STANDARD=EC:4
+      - MINIO_STORAGE_CLASS_RRS=EC:2
     networks:
       network:
         ipv4_address: 172.101.0.14
-    labels:
-      - "com.centurylinklabs.watchtower.update-order=4"
-      - "com.centurylinklabs.watchtower.enable=true"
 
 networks:
   network:
