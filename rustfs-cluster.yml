@@ -3,17 +3,22 @@ services:
     image: rustfs/rustfs:latest
     container_name: rustfs-node1
     hostname: rustfs-node1
+    user: root
     ports:
       - "9000:9000"  # Port S3 exposed externally
     volumes:
-      - /rustfs_data1:/data
+      - /minio1_data1:/data1
+      - /minio1_data2:/data2
+      - /minio1_data3:/data3
+      - /minio1_data4:/data4
+      - rustfs_data_base1:/data
       - rustfs_logs1:/logs
     environment:
       - RUSTFS_ACCESS_KEY=rustadmin
       - RUSTFS_SECRET_KEY=rustadmin
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=true
-      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data
+      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data{1...4}
       - RUST_LOG=error
     networks:
       rustfsnet:
@@ -23,15 +28,20 @@ services:
     image: rustfs/rustfs:latest
     container_name: rustfs-node2
     hostname: rustfs-node2
+    user: root
     volumes:
-      - /rustfs_data2:/data
+      - /minio2_data1:/data1
+      - /minio2_data2:/data2
+      - /minio2_data3:/data3
+      - /minio2_data4:/data4
+      - rustfs_data_base2:/data
       - rustfs_logs2:/logs
     environment:
       - RUSTFS_ACCESS_KEY=rustadmin
       - RUSTFS_SECRET_KEY=rustadmin
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=true
-      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data
+      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data{1...4}
       - RUST_LOG=error
     networks:
       rustfsnet:
@@ -41,15 +51,20 @@ services:
     image: rustfs/rustfs:latest
     container_name: rustfs-node3
     hostname: rustfs-node3
+    user: root
     volumes:
-      - /rustfs_data3:/data
+      - /minio3_data1:/data1
+      - /minio3_data2:/data2
+      - /minio3_data3:/data3
+      - /minio3_data4:/data4
+      - rustfs_data_base3:/data
       - rustfs_logs3:/logs
     environment:
       - RUSTFS_ACCESS_KEY=rustadmin
       - RUSTFS_SECRET_KEY=rustadmin
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=true
-      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data
+      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data{1...4}
       - RUST_LOG=error
     networks:
       rustfsnet:
@@ -59,15 +74,20 @@ services:
     image: rustfs/rustfs:latest
     container_name: rustfs-node4
     hostname: rustfs-node4
+    user: root
     volumes:
-      - /rustfs_data4:/data
+      - /minio4_data1:/data1
+      - /minio4_data2:/data2
+      - /minio4_data3:/data3
+      - /minio4_data4:/data4
+      - rustfs_data_base4:/data
       - rustfs_logs4:/logs
     environment:
       - RUSTFS_ACCESS_KEY=rustadmin
       - RUSTFS_SECRET_KEY=rustadmin
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=true
-      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data
+      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data{1...4}
       - RUST_LOG=error
     networks:
       rustfsnet:
@@ -78,6 +98,10 @@ volumes:
   rustfs_logs2:
   rustfs_logs3:
   rustfs_logs4:
+  rustfs_data_base1:
+  rustfs_data_base2:
+  rustfs_data_base3:
+  rustfs_data_base4:
 
 networks:
   rustfsnet:
