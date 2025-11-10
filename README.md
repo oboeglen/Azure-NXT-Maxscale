@@ -82,13 +82,4 @@ L’utilisateur est libre d’ajuster ce nombre en fonction de ses besoins et de
 - Docker et Docker Compose  
 - Certbot (pour SSL)  
 - DNS configuré pour les sous-domaines  
-- Accès root ou sudo  
-
----
-
-## 📬 Contact
-
-Pour toute demande de déploiement, assistance ou personnalisation :
-
-**Azure Informatique**  
-📧 contact@azure-informatique.fr
+- Accès root ou sudo
