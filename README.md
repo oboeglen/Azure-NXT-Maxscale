@@ -29,7 +29,7 @@ Les composants principaux sont :
 
 > ✅ **Alternative à MinIO** :  
 > Il est possible de se passer totalement de **MinIO** en migrant vers **[RustFS](https://github.com/rustfs/rustfs)**, une solution moderne, compatible S3 et orientée haute disponibilité. Les fichiers de configuration RustFS sont disponibles dans le dépôt et peuvent remplacer ceux de MinIO sans perte de compatibilité avec Nextcloud.
-
+> ✅ Si vous souhaitez utiliser la dernière version de MinIO voici un projet GitHub pour retrouver la console web : **[Console MinIO](https://github.com/georgmangold/console)**
 ---
 
 > ⚠️ **Note importante concernant MinIO**
@@ -41,8 +41,6 @@ Les composants principaux sont :
 > ```
 >
 > Les versions ultérieures peuvent désactiver ou modifier l'accès à la console.
-
-> ✅ Si vous souhaitez utiliser la dernière version de MinIO voici un projet GitHub pour retrouver la console web : **[Console MinIO](https://github.com/georgmangold/console)**
 
 ---
 
