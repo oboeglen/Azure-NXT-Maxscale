@@ -42,7 +42,7 @@ Les composants principaux sont :
 >
 > Les versions ultérieures peuvent désactiver ou modifier l'accès à la console.
 
-> Si vous souhaitez utilisez la dernière version de MinIO voici un projet GitHub pour retrouver la console web : **[Console MinIO]([https://github.com/rustfs/rustfs](https://github.com/georgmangold/console))**
+> Si vous souhaitez utiliser la dernière version de MinIO voici un projet GitHub pour retrouver la console web : **[Console MinIO]([https://github.com/rustfs/rustfs](https://github.com/georgmangold/console))**
 
 ---
 
