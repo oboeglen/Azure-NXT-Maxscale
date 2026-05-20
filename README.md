@@ -120,6 +120,7 @@ Client → HAProxy (SSL) → nginx-next-0X (statique) → app-next-0X (PHP-FPM :
 | `collabora-node1..N` | `collabora/code:latest` | Édition bureautique en ligne |
 | `whiteboard-node1..N` | `ghcr.io/nextcloud-releases/whiteboard:stable` | Tableau blanc collaboratif |
 | `redis-whiteboard` | `redis:7.4-alpine` | État partagé whiteboard (Redis Streams) |
+| `galera-autoheal` | `willfarrell/autoheal` | Redémarrage automatique des nœuds Galera unhealthy |
 
 **Ports exposés :** `80` (→ HTTPS) · `443` (Nextcloud, Collabora, Whiteboard, stats HAProxy sur `/stats`)
 
@@ -137,6 +138,7 @@ Tout est appliqué automatiquement par `nextcloud-setup` au premier démarrage.
 - Mises à jour via CLI uniquement — `upgrade.disable-web = true`
 - Lien d'inscription masqué sur la page de login
 - Dossier skeleton vide — aucun fichier exemple pour les nouveaux comptes
+- `allow_local_remote_servers` et `overwriteprotocol` définis dans `nextcloud-custom.config.php` (monté en `:ro` dans tous les conteneurs Nextcloud) — corrige `.well-known/caldav` et force HTTPS permanent
 
 **Performance**
 - Cron système — `nextcloud-cron` exécute `cron.php` toutes les 5 minutes
@@ -157,7 +159,7 @@ Tout est appliqué automatiquement par `nextcloud-setup` au premier démarrage.
 | Composant | Tolérance | Effet d'une panne |
 |-----------|-----------|-------------------|
 | Nextcloud | ✅ Automatique | Aucun — HAProxy redispatch instantané |
-| MariaDB | ✅ Automatique | Aucun — Galera quorum maintenu |
+| MariaDB | ✅ Automatique | Aucun — Galera quorum maintenu (`galera-autoheal` redémarre les nœuds hors-sync) |
 | Redis | ✅ Automatique | Aucun — cluster tolère 1 panne par slot |
 | MinIO | ✅ Automatique | Lecture continue, écritures rétablies après resync |
 | Collabora | ✅ Automatique | Session perdue, reconnexion automatique |
