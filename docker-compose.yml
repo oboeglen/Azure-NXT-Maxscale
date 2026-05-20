@@ -1,0 +1,954 @@
+# =============================================================================
+# Azure NXT Maxscale — Infrastructure Nextcloud Haute Disponibilité
+# Version : 2.1
+#
+# Usage production :
+#   cp .env.example .env && nano .env
+#   chmod +x init.sh && ./init.sh   # génère les certificats Let's Encrypt
+#   docker compose up -d
+#
+# Usage test local (sans DNS ni Let's Encrypt) :
+#   cp .env.example .env && nano .env  # utiliser *.local comme domaines
+#   mkdir -p certs
+#   docker run --rm -v "$(pwd)/certs:/certs" alpine/openssl req -x509 \
+#     -newkey rsa:2048 -keyout /certs/key.pem -out /certs/cert.pem \
+#     -days 365 -nodes -subj "/CN=localhost"
+#   docker run --rm -v "$(pwd)/certs:/certs" alpine sh -c \
+#     "cat /certs/cert.pem /certs/key.pem > /certs/stack.pem && \
+#      chmod 644 /certs/stack.pem && rm /certs/cert.pem /certs/key.pem"
+#   docker compose up -d
+# =============================================================================
+
+services:
+
+  # ===========================================================================
+  # HAProxy — Point d'entrée unique, reverse proxy et load balancer
+  # Les domaines sont injectés via haproxy-entrypoint.sh (sed/envsubst)
+  # Seul conteneur exposant des ports vers l'extérieur (80, 443, 8404)
+  # ===========================================================================
+  haproxy:
+    image: haproxy:2.8-alpine
+    container_name: haproxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8404:8404"
+    entrypoint: ["/bin/sh", "/haproxy-entrypoint.sh"]
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./haproxy-entrypoint.sh:/haproxy-entrypoint.sh:ro
+      - ./certs:/certs:ro
+    environment:
+      - NEXTCLOUD_DOMAIN=${NEXTCLOUD_DOMAIN}
+      - COLLABORA_DOMAIN=${COLLABORA_DOMAIN}
+      - WHITEBOARD_DOMAIN=${WHITEBOARD_DOMAIN}
+      - HAPROXY_STATS_PASSWORD=${HAPROXY_STATS_PASSWORD}
+    networks:
+      next-net:
+        aliases:
+          - "${NEXTCLOUD_DOMAIN}"
+          - "${COLLABORA_DOMAIN}"
+          - "${WHITEBOARD_DOMAIN}"
+      galera-net: {}
+      storage-net: {}
+      collabora-net:
+        ipv4_address: 172.40.0.10
+        aliases:
+          - "${NEXTCLOUD_DOMAIN}"
+      whiteboard-net:
+        ipv4_address: 172.100.0.10
+        aliases:
+          - "${NEXTCLOUD_DOMAIN}"
+    healthcheck:
+      test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 80 > /dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================================================
+  # nextcloud-setup — Configuration automatique post-installation (one-shot)
+  # Configure : Redis Cluster, Collabora Online, Whiteboard, stockage S3
+  # S'exécute automatiquement une seule fois après que app-next-01 est healthy
+  # Pour relancer manuellement : docker compose rm nextcloud-setup && docker compose up -d nextcloud-setup
+  # ===========================================================================
+  nextcloud-setup:
+    image: nextcloud:33.0.3-fpm
+    container_name: nextcloud-setup
+    restart: "no"
+    user: "33"
+    entrypoint: ["/bin/bash", "/nextcloud-init.sh"]
+    volumes:
+      - ./nextcloud-init.sh:/nextcloud-init.sh:ro
+      - nextcloud_html:/var/www/html
+      - nextcloud_apps:/var/www/html/custom_apps
+      - nextcloud_config:/var/www/html/config
+      - nextcloud_data:/var/www/html/data
+      - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - NEXTCLOUD_DOMAIN=${NEXTCLOUD_DOMAIN}
+      - COLLABORA_DOMAIN=${COLLABORA_DOMAIN}
+      - WHITEBOARD_DOMAIN=${WHITEBOARD_DOMAIN}
+      - WHITEBOARD_JWT_SECRET=${WHITEBOARD_JWT_SECRET}
+      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
+      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
+      - NEXTCLOUD_S3_BUCKET=${NEXTCLOUD_S3_BUCKET:-nextcloud}
+    networks:
+      - next-net
+    depends_on:
+      app-next-01:
+        condition: service_healthy
+
+  # ===========================================================================
+  # nginx-acme — Sert les challenges ACME pour le renouvellement Let's Encrypt
+  # ===========================================================================
+  nginx-acme:
+    image: nginx:1.27-alpine
+    container_name: nginx-acme
+    restart: always
+    expose:
+      - "80"
+    volumes:
+      - certbot_webroot:/usr/share/nginx/html:ro
+    networks:
+      - next-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null 2>&1 || exit 0"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ===========================================================================
+  # Certbot — Renouvellement automatique des certificats Let's Encrypt
+  # ===========================================================================
+  certbot:
+    image: certbot/certbot:latest
+    container_name: certbot
+    restart: unless-stopped
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+      - ./certs:/certs
+    entrypoint: >
+      /bin/sh -c "
+        trap exit TERM;
+        while :; do
+          certbot renew --webroot -w /var/www/certbot --quiet
+            --post-hook 'cat /etc/letsencrypt/live/stack/fullchain.pem /etc/letsencrypt/live/stack/privkey.pem > /certs/stack.pem && chmod 600 /certs/stack.pem';
+          sleep 12h & wait $$!;
+        done"
+    depends_on:
+      - nginx-acme
+
+  # ===========================================================================
+  # Nextcloud — Application (3 nœuds, partage des mêmes volumes)
+  # L'objectstore S3 (RustFS) est configuré via variables d'environnement
+  # ===========================================================================
+  app-next-01:
+    image: nextcloud:33.0.3-fpm
+    container_name: app-next-01
+    restart: always
+    expose:
+      - "9000"
+    volumes:
+      - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
+      - nextcloud_html:/var/www/html
+      - nextcloud_apps:/var/www/html/custom_apps
+      - nextcloud_config:/var/www/html/config
+      - nextcloud_data:/var/www/html/data
+    environment:
+      - PHP_UPLOAD_LIMIT=16G
+      - PHP_MEMORY_LIMIT=1G
+      - NEXTCLOUD_ADMIN_USER=${NEXTCLOUD_ADMIN_USER}
+      - NEXTCLOUD_ADMIN_PASSWORD=${NEXTCLOUD_ADMIN_PASSWORD}
+      - MYSQL_HOST=haproxy
+      - MYSQL_DATABASE=${MARIADB_DATABASE}
+      - MYSQL_USER=${MARIADB_USER}
+      - MYSQL_PASSWORD=${MARIADB_PASSWORD}
+      - NEXTCLOUD_TRUSTED_DOMAINS=${NEXTCLOUD_DOMAIN} localhost 127.0.0.1
+      # Stockage objet S3 via RustFS — configuré dès la première installation
+      - OBJECTSTORE_S3_HOST=haproxy
+      - OBJECTSTORE_S3_PORT=9000
+      - OBJECTSTORE_S3_BUCKET=${NEXTCLOUD_S3_BUCKET:-nextcloud}
+      - OBJECTSTORE_S3_KEY=${RUSTFS_ACCESS_KEY}
+      - OBJECTSTORE_S3_SECRET=${RUSTFS_SECRET_KEY}
+      - OBJECTSTORE_S3_USEPATH_STYLE=true
+      - OBJECTSTORE_S3_SSL=false
+      - OBJECTSTORE_S3_AUTOCREATE=true
+      - OBJECTSTORE_S3_REGION=us-east-1
+    networks:
+      - next-net
+    depends_on:
+      mariadb-node1:
+        condition: service_healthy
+      redis-node1:
+        condition: service_healthy
+      haproxy:
+        condition: service_healthy
+      rustfs-node1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php /var/www/html/occ status 2>/dev/null | grep -q 'installed: true' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  app-next-02:
+    image: nextcloud:33.0.3-fpm
+    container_name: app-next-02
+    restart: always
+    expose:
+      - "9000"
+    volumes:
+      - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
+      - nextcloud_html:/var/www/html
+      - nextcloud_apps:/var/www/html/custom_apps
+      - nextcloud_config:/var/www/html/config
+      - nextcloud_data:/var/www/html/data
+    environment:
+      - PHP_UPLOAD_LIMIT=16G
+      - PHP_MEMORY_LIMIT=1G
+      - MYSQL_HOST=haproxy
+      - MYSQL_DATABASE=${MARIADB_DATABASE}
+      - MYSQL_USER=${MARIADB_USER}
+      - MYSQL_PASSWORD=${MARIADB_PASSWORD}
+      - NEXTCLOUD_TRUSTED_DOMAINS=${NEXTCLOUD_DOMAIN} localhost 127.0.0.1
+      - OBJECTSTORE_S3_HOST=haproxy
+      - OBJECTSTORE_S3_PORT=9000
+      - OBJECTSTORE_S3_BUCKET=${NEXTCLOUD_S3_BUCKET:-nextcloud}
+      - OBJECTSTORE_S3_KEY=${RUSTFS_ACCESS_KEY}
+      - OBJECTSTORE_S3_SECRET=${RUSTFS_SECRET_KEY}
+      - OBJECTSTORE_S3_USEPATH_STYLE=true
+      - OBJECTSTORE_S3_SSL=false
+      - OBJECTSTORE_S3_AUTOCREATE=true
+      - OBJECTSTORE_S3_REGION=us-east-1
+    networks:
+      - next-net
+    depends_on:
+      app-next-01:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php /var/www/html/occ status 2>/dev/null | grep -q 'installed: true' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  app-next-03:
+    image: nextcloud:33.0.3-fpm
+    container_name: app-next-03
+    restart: always
+    expose:
+      - "9000"
+    volumes:
+      - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
+      - nextcloud_html:/var/www/html
+      - nextcloud_apps:/var/www/html/custom_apps
+      - nextcloud_config:/var/www/html/config
+      - nextcloud_data:/var/www/html/data
+    environment:
+      - PHP_UPLOAD_LIMIT=16G
+      - PHP_MEMORY_LIMIT=1G
+      - MYSQL_HOST=haproxy
+      - MYSQL_DATABASE=${MARIADB_DATABASE}
+      - MYSQL_USER=${MARIADB_USER}
+      - MYSQL_PASSWORD=${MARIADB_PASSWORD}
+      - NEXTCLOUD_TRUSTED_DOMAINS=${NEXTCLOUD_DOMAIN} localhost 127.0.0.1
+      - OBJECTSTORE_S3_HOST=haproxy
+      - OBJECTSTORE_S3_PORT=9000
+      - OBJECTSTORE_S3_BUCKET=${NEXTCLOUD_S3_BUCKET:-nextcloud}
+      - OBJECTSTORE_S3_KEY=${RUSTFS_ACCESS_KEY}
+      - OBJECTSTORE_S3_SECRET=${RUSTFS_SECRET_KEY}
+      - OBJECTSTORE_S3_USEPATH_STYLE=true
+      - OBJECTSTORE_S3_SSL=false
+      - OBJECTSTORE_S3_AUTOCREATE=true
+      - OBJECTSTORE_S3_REGION=us-east-1
+    networks:
+      - next-net
+    depends_on:
+      app-next-01:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php /var/www/html/occ status 2>/dev/null | grep -q 'installed: true' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ===========================================================================
+  # nginx — Serveurs web FPM (1 par nœud Nextcloud, accès aux fichiers via volumes_from)
+  # Reçoit les requêtes de HAProxy et proxifie le PHP vers le container FPM associé
+  # La variable FPM_HOST est substituée au démarrage par envsubst (mécanisme nginx natif)
+  # ===========================================================================
+  nginx-next-01:
+    image: nginx:1.27-alpine
+    container_name: nginx-next-01
+    restart: always
+    expose:
+      - "80"
+    volumes_from:
+      - app-next-01
+    volumes:
+      - ./nginx-nextcloud.conf.template:/etc/nginx/templates/default.conf.template:ro
+    environment:
+      - FPM_HOST=app-next-01
+    networks:
+      - next-net
+    depends_on:
+      app-next-01:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 80 > /dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  nginx-next-02:
+    image: nginx:1.27-alpine
+    container_name: nginx-next-02
+    restart: always
+    expose:
+      - "80"
+    volumes_from:
+      - app-next-02
+    volumes:
+      - ./nginx-nextcloud.conf.template:/etc/nginx/templates/default.conf.template:ro
+    environment:
+      - FPM_HOST=app-next-02
+    networks:
+      - next-net
+    depends_on:
+      app-next-02:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 80 > /dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  nginx-next-03:
+    image: nginx:1.27-alpine
+    container_name: nginx-next-03
+    restart: always
+    expose:
+      - "80"
+    volumes_from:
+      - app-next-03
+    volumes:
+      - ./nginx-nextcloud.conf.template:/etc/nginx/templates/default.conf.template:ro
+    environment:
+      - FPM_HOST=app-next-03
+    networks:
+      - next-net
+    depends_on:
+      app-next-03:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 80 > /dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ===========================================================================
+  # MariaDB Galera — Base de données répliquée (3 nœuds, quorum impair)
+  #
+  # PREMIER DÉMARRAGE : node1 démarre en mode bootstrap (--wsrep-new-cluster).
+  # Après que les 3 nœuds sont synchronisés, supprimer la ligne
+  # "command: --wsrep-new-cluster" et relancer : docker compose up -d mariadb-node1
+  # ===========================================================================
+  mariadb-node1:
+    build:
+      context: .
+      dockerfile: Dockerfile.mariadb-galera
+    image: maxscale-mariadb-galera:11.4
+    container_name: mariadb-node1
+    restart: always
+    command: --wsrep-new-cluster
+    expose:
+      - "3306"
+      - "4444"
+      - "4567"
+      - "4568"
+    volumes:
+      - ./mariadb/galera-node1.cnf:/etc/mysql/conf.d/galera.cnf:ro
+      - ./mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - mariadb_n1_data:/var/lib/mysql
+    environment:
+      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD}
+      - MARIADB_USER=${MARIADB_USER}
+      - MARIADB_PASSWORD=${MARIADB_PASSWORD}
+      - MARIADB_DATABASE=${MARIADB_DATABASE}
+    networks:
+      - galera-net
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -uroot -p$$MARIADB_ROOT_PASSWORD --silent 2>/dev/null && echo ok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+
+  mariadb-node2:
+    build:
+      context: .
+      dockerfile: Dockerfile.mariadb-galera
+    image: maxscale-mariadb-galera:11.4
+    container_name: mariadb-node2
+    restart: always
+    expose:
+      - "3306"
+      - "4444"
+      - "4567"
+      - "4568"
+    volumes:
+      - ./mariadb/galera-node2.cnf:/etc/mysql/conf.d/galera.cnf:ro
+      - mariadb_n2_data:/var/lib/mysql
+    environment:
+      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD}
+    networks:
+      - galera-net
+    depends_on:
+      mariadb-node1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -uroot -p$$MARIADB_ROOT_PASSWORD --silent 2>/dev/null && echo ok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  mariadb-node3:
+    build:
+      context: .
+      dockerfile: Dockerfile.mariadb-galera
+    image: maxscale-mariadb-galera:11.4
+    container_name: mariadb-node3
+    restart: always
+    expose:
+      - "3306"
+      - "4444"
+      - "4567"
+      - "4568"
+    volumes:
+      - ./mariadb/galera-node3.cnf:/etc/mysql/conf.d/galera.cnf:ro
+      - mariadb_n3_data:/var/lib/mysql
+    environment:
+      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD}
+    networks:
+      - galera-net
+    depends_on:
+      mariadb-node2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -uroot -p$$MARIADB_ROOT_PASSWORD --silent 2>/dev/null && echo ok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  # ===========================================================================
+  # Redis Cluster — Cache distribué pour Nextcloud (6 nœuds : 3 masters + 3 replicas)
+  # Initialisation automatique du cluster au premier démarrage
+  # ===========================================================================
+  redis-node1:
+    image: redis:7.4-alpine
+    container_name: redis-node1
+    restart: always
+    expose:
+      - "6379"
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --bind 0.0.0.0
+      --protected-mode no
+    volumes:
+      - redis_data_1:/data
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    networks:
+      - next-net
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD --no-auth-warning ping | grep -q PONG || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis-node2:
+    image: redis:7.4-alpine
+    container_name: redis-node2
+    restart: always
+    expose:
+      - "6379"
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --bind 0.0.0.0
+      --protected-mode no
+    volumes:
+      - redis_data_2:/data
+    networks:
+      - next-net
+
+  redis-node3:
+    image: redis:7.4-alpine
+    container_name: redis-node3
+    restart: always
+    expose:
+      - "6379"
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --bind 0.0.0.0
+      --protected-mode no
+    volumes:
+      - redis_data_3:/data
+    networks:
+      - next-net
+
+  redis-node4:
+    image: redis:7.4-alpine
+    container_name: redis-node4
+    restart: always
+    expose:
+      - "6379"
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --bind 0.0.0.0
+      --protected-mode no
+    volumes:
+      - redis_data_4:/data
+    networks:
+      - next-net
+
+  redis-node5:
+    image: redis:7.4-alpine
+    container_name: redis-node5
+    restart: always
+    expose:
+      - "6379"
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --bind 0.0.0.0
+      --protected-mode no
+    volumes:
+      - redis_data_5:/data
+    networks:
+      - next-net
+
+  redis-node6:
+    image: redis:7.4-alpine
+    container_name: redis-node6
+    restart: always
+    expose:
+      - "6379"
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file /data/nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --masterauth ${REDIS_PASSWORD}
+      --bind 0.0.0.0
+      --protected-mode no
+    volumes:
+      - redis_data_6:/data
+    networks:
+      - next-net
+
+  redis-cluster-init:
+    image: redis:7.4-alpine
+    container_name: redis-cluster-init
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: >
+      sh -c "
+        echo 'Attente du démarrage de tous les nœuds Redis...';
+        for i in 1 2 3 4 5 6; do
+          until redis-cli -h redis-node$$i -a $$REDIS_PASSWORD --no-auth-warning ping 2>/dev/null | grep -q PONG; do
+            echo 'En attente de redis-node'$$i; sleep 3;
+          done;
+          echo 'redis-node'$$i' prêt.';
+        done;
+        CLUSTER_STATE=$$(redis-cli -h redis-node1 -a $$REDIS_PASSWORD --no-auth-warning cluster info 2>/dev/null | grep cluster_state | cut -d: -f2 | tr -d '[:space:]');
+        if [ \"$$CLUSTER_STATE\" = \"ok\" ]; then
+          echo 'Le cluster Redis est déjà initialisé.';
+        else
+          echo 'Création du cluster Redis...';
+          redis-cli --cluster create redis-node1:6379 redis-node2:6379 redis-node3:6379 redis-node4:6379 redis-node5:6379 redis-node6:6379 --cluster-replicas 1 -a $$REDIS_PASSWORD --no-auth-warning --cluster-yes;
+          echo 'Cluster Redis créé avec succès.';
+        fi"
+    networks:
+      - next-net
+    depends_on:
+      redis-node1:
+        condition: service_healthy
+      redis-node2:
+        condition: service_started
+      redis-node3:
+        condition: service_started
+      redis-node4:
+        condition: service_started
+      redis-node5:
+        condition: service_started
+      redis-node6:
+        condition: service_started
+    restart: "no"
+
+  # ===========================================================================
+  # RustFS — Stockage objet distribué compatible S3 (4 nœuds × 4 drives)
+  # Réseau dédié rustfsnet avec IPs statiques pour la communication inter-nœuds
+  # Production : retirer RUSTFS_UNSAFE_BYPASS_DISK_CHECK (nécessite des disques séparés)
+  # ===========================================================================
+  rustfs-node1:
+    image: rustfs/rustfs:latest
+    container_name: rustfs-node1
+    hostname: rustfs-node1
+    restart: always
+    user: root
+    expose:
+      - "9000"
+      - "9001"
+    volumes:
+      - ${RUSTFS_NODE1_DATA1:-/data/rustfs/node1/data1}:/data1
+      - ${RUSTFS_NODE1_DATA2:-/data/rustfs/node1/data2}:/data2
+      - ${RUSTFS_NODE1_DATA3:-/data/rustfs/node1/data3}:/data3
+      - ${RUSTFS_NODE1_DATA4:-/data/rustfs/node1/data4}:/data4
+      - ${RUSTFS_NODE1_PATH:-/data/rustfs/node1}/base:/data
+    environment:
+      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
+      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
+      - RUSTFS_ADDRESS=0.0.0.0:9000
+      - RUSTFS_CONSOLE_ENABLE=true
+      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data{1...4}
+      # En production avec des disques physiques séparés, supprimer la ligne ci-dessous
+      - RUSTFS_UNSAFE_BYPASS_DISK_CHECK=true
+      - RUST_LOG=error
+    networks:
+      storage-net: {}
+      rustfsnet:
+        ipv4_address: 172.50.0.11
+    healthcheck:
+      test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 9000 > /dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  rustfs-node2:
+    image: rustfs/rustfs:latest
+    container_name: rustfs-node2
+    hostname: rustfs-node2
+    restart: always
+    user: root
+    expose:
+      - "9000"
+    volumes:
+      - ${RUSTFS_NODE2_DATA1:-/data/rustfs/node2/data1}:/data1
+      - ${RUSTFS_NODE2_DATA2:-/data/rustfs/node2/data2}:/data2
+      - ${RUSTFS_NODE2_DATA3:-/data/rustfs/node2/data3}:/data3
+      - ${RUSTFS_NODE2_DATA4:-/data/rustfs/node2/data4}:/data4
+      - ${RUSTFS_NODE2_PATH:-/data/rustfs/node2}/base:/data
+    environment:
+      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
+      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
+      - RUSTFS_ADDRESS=0.0.0.0:9000
+      - RUSTFS_CONSOLE_ENABLE=true
+      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data{1...4}
+      - RUSTFS_UNSAFE_BYPASS_DISK_CHECK=true
+      - RUST_LOG=error
+    networks:
+      storage-net: {}
+      rustfsnet:
+        ipv4_address: 172.50.0.12
+
+  rustfs-node3:
+    image: rustfs/rustfs:latest
+    container_name: rustfs-node3
+    hostname: rustfs-node3
+    restart: always
+    user: root
+    expose:
+      - "9000"
+    volumes:
+      - ${RUSTFS_NODE3_DATA1:-/data/rustfs/node3/data1}:/data1
+      - ${RUSTFS_NODE3_DATA2:-/data/rustfs/node3/data2}:/data2
+      - ${RUSTFS_NODE3_DATA3:-/data/rustfs/node3/data3}:/data3
+      - ${RUSTFS_NODE3_DATA4:-/data/rustfs/node3/data4}:/data4
+      - ${RUSTFS_NODE3_PATH:-/data/rustfs/node3}/base:/data
+    environment:
+      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
+      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
+      - RUSTFS_ADDRESS=0.0.0.0:9000
+      - RUSTFS_CONSOLE_ENABLE=true
+      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data{1...4}
+      - RUSTFS_UNSAFE_BYPASS_DISK_CHECK=true
+      - RUST_LOG=error
+    networks:
+      storage-net: {}
+      rustfsnet:
+        ipv4_address: 172.50.0.13
+
+  rustfs-node4:
+    image: rustfs/rustfs:latest
+    container_name: rustfs-node4
+    hostname: rustfs-node4
+    restart: always
+    user: root
+    expose:
+      - "9000"
+    volumes:
+      - ${RUSTFS_NODE4_DATA1:-/data/rustfs/node4/data1}:/data1
+      - ${RUSTFS_NODE4_DATA2:-/data/rustfs/node4/data2}:/data2
+      - ${RUSTFS_NODE4_DATA3:-/data/rustfs/node4/data3}:/data3
+      - ${RUSTFS_NODE4_DATA4:-/data/rustfs/node4/data4}:/data4
+      - ${RUSTFS_NODE4_PATH:-/data/rustfs/node4}/base:/data
+    environment:
+      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
+      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
+      - RUSTFS_ADDRESS=0.0.0.0:9000
+      - RUSTFS_CONSOLE_ENABLE=true
+      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data{1...4}
+      - RUSTFS_UNSAFE_BYPASS_DISK_CHECK=true
+      - RUST_LOG=error
+    networks:
+      storage-net: {}
+      rustfsnet:
+        ipv4_address: 172.50.0.14
+
+  # ===========================================================================
+  # Collabora Online (CODE) — Édition collaborative de documents (3 nœuds)
+  # ===========================================================================
+  collabora-node1:
+    image: collabora/code:latest
+    container_name: collabora-node1
+    restart: always
+    expose:
+      - "9980"
+    environment:
+      - dictionaries=fr_FR en_US
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=true --o:net.listen=any --o:server_name=${COLLABORA_DOMAIN}
+      - DONT_GEN_SSL_CERT=true
+      - aliasgroup1=https://${NEXTCLOUD_DOMAIN}:443
+    cap_add:
+      - MKNOD
+      - SYS_ADMIN
+    networks:
+      - collabora-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9980/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  collabora-node2:
+    image: collabora/code:latest
+    container_name: collabora-node2
+    restart: always
+    expose:
+      - "9980"
+    environment:
+      - dictionaries=fr_FR en_US
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=true --o:net.listen=any --o:server_name=${COLLABORA_DOMAIN}
+      - DONT_GEN_SSL_CERT=true
+      - aliasgroup1=https://${NEXTCLOUD_DOMAIN}:443
+    cap_add:
+      - MKNOD
+      - SYS_ADMIN
+    networks:
+      - collabora-net
+
+  collabora-node3:
+    image: collabora/code:latest
+    container_name: collabora-node3
+    restart: always
+    expose:
+      - "9980"
+    environment:
+      - dictionaries=fr_FR en_US
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=true --o:net.listen=any --o:server_name=${COLLABORA_DOMAIN}
+      - DONT_GEN_SSL_CERT=true
+      - aliasgroup1=https://${NEXTCLOUD_DOMAIN}:443
+    cap_add:
+      - MKNOD
+      - SYS_ADMIN
+    networks:
+      - collabora-net
+
+  # ===========================================================================
+  # Whiteboard — Tableau blanc collaboratif (2 nœuds + Redis dédié)
+  # État partagé entre nœuds via Redis Streams (image :stable requise)
+  # ===========================================================================
+  whiteboard-node1:
+    image: ghcr.io/nextcloud-releases/whiteboard:stable
+    container_name: whiteboard-node1
+    restart: always
+    expose:
+      - "3002"
+    environment:
+      - NEXTCLOUD_URL=https://${NEXTCLOUD_DOMAIN}
+      - JWT_SECRET_KEY=${WHITEBOARD_JWT_SECRET}
+      - STORAGE_STRATEGY=redis
+      - REDIS_URL=redis://:${REDIS_WHITEBOARD_PASSWORD}@redis-whiteboard:6379/0
+    networks:
+      - whiteboard-net
+    depends_on:
+      redis-whiteboard:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 3002 > /dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  whiteboard-node2:
+    image: ghcr.io/nextcloud-releases/whiteboard:stable
+    container_name: whiteboard-node2
+    restart: always
+    expose:
+      - "3002"
+    environment:
+      - NEXTCLOUD_URL=https://${NEXTCLOUD_DOMAIN}
+      - JWT_SECRET_KEY=${WHITEBOARD_JWT_SECRET}
+      - STORAGE_STRATEGY=redis
+      - REDIS_URL=redis://:${REDIS_WHITEBOARD_PASSWORD}@redis-whiteboard:6379/0
+    networks:
+      - whiteboard-net
+    depends_on:
+      redis-whiteboard:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 3002 > /dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis-whiteboard:
+    image: redis:7.4-alpine
+    container_name: redis-whiteboard
+    restart: always
+    expose:
+      - "6379"
+    command: >
+      redis-server
+      --requirepass ${REDIS_WHITEBOARD_PASSWORD}
+      --appendonly yes
+      --bind 0.0.0.0
+    volumes:
+      - redis_whiteboard_data:/data
+    environment:
+      - REDIS_WHITEBOARD_PASSWORD=${REDIS_WHITEBOARD_PASSWORD}
+    networks:
+      - whiteboard-net
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_WHITEBOARD_PASSWORD --no-auth-warning ping | grep -q PONG || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# =============================================================================
+# Réseaux — Isolation par service, HAProxy sur tous les réseaux
+# =============================================================================
+networks:
+  next-net:
+    name: next-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.10.0.0/24
+
+  galera-net:
+    name: galera-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+  storage-net:
+    name: storage-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+  collabora-net:
+    name: collabora-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.40.0.0/24
+
+  whiteboard-net:
+    name: whiteboard-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.100.0.0/24
+
+  rustfsnet:
+    name: rustfsnet
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.50.0.0/24
+
+# =============================================================================
+# Volumes — Données persistantes
+# =============================================================================
+volumes:
+  letsencrypt:
+  certbot_webroot:
+
+  nextcloud_html:
+  nextcloud_apps:
+  nextcloud_config:
+  nextcloud_data:
+
+  mariadb_n1_data:
+  mariadb_n2_data:
+  mariadb_n3_data:
+
+  redis_data_1:
+  redis_data_2:
+  redis_data_3:
+  redis_data_4:
+  redis_data_5:
+  redis_data_6:
+
+  redis_whiteboard_data:

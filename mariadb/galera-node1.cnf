@@ -1,0 +1,24 @@
+# Configuration Galera — Nœud 1 (Bootstrap initial)
+# Après le premier démarrage réussi du cluster, supprimer wsrep_cluster_address=gcomm://
+# et le remplacer par gcomm://mariadb-node1,mariadb-node2,mariadb-node3
+# Puis supprimer également "command: --wsrep-new-cluster" dans docker-compose.yml
+
+[mysqld]
+wsrep_on                 = ON
+wsrep_provider           = /usr/lib/galera/libgalera_smm.so
+wsrep_cluster_name       = galera-cluster
+wsrep_cluster_address    = gcomm://
+wsrep_node_name          = mariadb-node1
+wsrep_node_address       = mariadb-node1
+wsrep_sst_method         = rsync
+
+binlog_format            = ROW
+default_storage_engine   = InnoDB
+innodb_autoinc_lock_mode = 2
+innodb_flush_log_at_trx_commit = 0
+innodb_buffer_pool_size  = 512M
+innodb_log_file_size     = 128M
+
+# Résolution DNS Docker
+[mysqld_safe]
+skip_log_error

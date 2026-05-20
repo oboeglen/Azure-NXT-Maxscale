@@ -1,0 +1,12 @@
+* text=auto
+*.sh text eol=lf
+*.cfg text eol=lf
+*.cnf text eol=lf
+*.sql text eol=lf
+*.yml text eol=lf
+*.ini text eol=lf
+*.php text eol=lf
+*.md text eol=lf
+*.template text eol=lf
+*.example text eol=lf
+*.png binary
