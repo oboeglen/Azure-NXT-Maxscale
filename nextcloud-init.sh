@@ -15,15 +15,15 @@ warn()  { echo "[setup] ⚠  $*"; }
 err()   { echo "[setup] ✗  $*" >&2; exit 1; }
 
 # Le container tourne en user www-data (uid 33) — pas besoin de su
-# Wrapper avec retry automatique (3 tentatives, 5s entre chaque)
-# Utile pour les commandes qui peuvent échouer si Redis/MinIO ne sont pas encore prêts
+# Wrapper avec retry automatique (5 tentatives, 10s entre chaque)
+# Délai augmenté pour absorber les failovers Galera (re-élection ~5-8s)
 occ() {
-  local attempt=0 max=3
+  local attempt=0 max=5
   while (( attempt < max )); do
     if ${OCC_BIN} "$@"; then return 0; fi
     (( attempt++ )) || true
-    warn "occ $* — tentative ${attempt}/${max} échouée, retry dans 5s..."
-    sleep 5
+    warn "occ $* — tentative ${attempt}/${max} échouée, retry dans 10s..."
+    sleep 10
   done
   err "occ $* a échoué après ${max} tentatives"
 }

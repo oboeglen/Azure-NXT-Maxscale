@@ -76,7 +76,7 @@ services:
   nextcloud-setup:
     image: nextcloud:33.0.3-fpm
     container_name: nextcloud-setup
-    restart: "no"
+    restart: on-failure:3
     user: "33"
     entrypoint: ["/bin/bash", "/nextcloud-init.sh"]
     volumes:

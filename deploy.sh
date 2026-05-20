@@ -754,7 +754,7 @@ HAPROXY
   nextcloud-setup:
     image: nextcloud:${NC_VERSION}
     container_name: nextcloud-setup
-    restart: "no"
+    restart: on-failure:3
     user: "33"
     entrypoint: ["/bin/bash", "/nextcloud-init.sh"]
     volumes:
