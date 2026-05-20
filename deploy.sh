@@ -1405,6 +1405,7 @@ validate_haproxy() {
   WHITEBOARD_DOMAIN=wb.valid \
   HAPROXY_STATS_PASSWORD=check \
     envsubst < "$file" > "$tmp"
+  chmod 644 "$tmp"
 
   local output
   if output=$(docker run --rm \
