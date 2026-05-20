@@ -1411,13 +1411,15 @@ validate_haproxy() {
     envsubst < "$file" > "$tmp"
   chmod 644 "$tmp"
 
-  # Certificat SSL factice — haproxy -c vérifie que bind :443 peut lire /certs/
+  # Certificat SSL factice — seul stack.pem dans /certs/ (HAProxy charge tous les fichiers du dossier)
+  local tmp_key tmp_cert
+  tmp_key=$(mktemp); tmp_cert=$(mktemp)
   openssl req -x509 -newkey rsa:2048 \
-    -keyout "${tmp_certs}/key.pem" \
-    -out    "${tmp_certs}/cert.pem" \
+    -keyout "$tmp_key" -out "$tmp_cert" \
     -days 1 -nodes -subj "/CN=validate" 2>/dev/null
-  cat "${tmp_certs}/cert.pem" "${tmp_certs}/key.pem" > "${tmp_certs}/stack.pem"
+  cat "$tmp_cert" "$tmp_key" > "${tmp_certs}/stack.pem"
   chmod 644 "${tmp_certs}/stack.pem"
+  rm -f "$tmp_key" "$tmp_cert"
 
   local output
   if output=$(docker run --rm \
