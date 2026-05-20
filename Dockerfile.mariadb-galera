@@ -1,0 +1,10 @@
+# Image MariaDB officielle étendue avec le plugin Galera 4
+# Basé sur l'image officielle mariadb:11.4 (Debian)
+FROM mariadb:11.4
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      galera-4 \
+      rsync \
+      socat \
+ && rm -rf /var/lib/apt/lists/*

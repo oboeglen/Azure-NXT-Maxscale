@@ -1,0 +1,17 @@
+# Configuration Galera — Nœud 3
+
+[mysqld]
+wsrep_on                 = ON
+wsrep_provider           = /usr/lib/galera/libgalera_smm.so
+wsrep_cluster_name       = galera-cluster
+wsrep_cluster_address    = gcomm://mariadb-node1,mariadb-node2,mariadb-node3
+wsrep_node_name          = mariadb-node3
+wsrep_node_address       = mariadb-node3
+wsrep_sst_method         = rsync
+
+binlog_format            = ROW
+default_storage_engine   = InnoDB
+innodb_autoinc_lock_mode = 2
+innodb_flush_log_at_trx_commit = 0
+innodb_buffer_pool_size  = 512M
+innodb_log_file_size     = 128M
