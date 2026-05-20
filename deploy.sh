@@ -1401,6 +1401,7 @@ validate_haproxy() {
   local tmp tmp_certs
   tmp=$(mktemp)
   tmp_certs=$(mktemp -d)
+  chmod 755 "$tmp_certs"
 
   # Substituer les variables avec des valeurs fictives
   NEXTCLOUD_DOMAIN=nc.valid \
