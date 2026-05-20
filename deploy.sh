@@ -764,6 +764,7 @@ HAPROXY
       - nextcloud_config:/var/www/html/config
       - nextcloud_data:/var/www/html/data
       - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
+      - ./nextcloud-custom.config.php:/var/www/html/config/custom.config.php:ro
     environment:
       - REDIS_PASSWORD=\${REDIS_PASSWORD}
       - NEXTCLOUD_DOMAIN=\${NEXTCLOUD_DOMAIN}
@@ -795,6 +796,7 @@ NCSETUP
       - nextcloud_apps:/var/www/html/custom_apps
       - nextcloud_config:/var/www/html/config
       - nextcloud_data:/var/www/html/data
+      - ./nextcloud-custom.config.php:/var/www/html/config/custom.config.php:ro
     environment:
       - MYSQL_HOST=haproxy
       - MYSQL_DATABASE=\${MARIADB_DATABASE}
@@ -897,6 +899,7 @@ ${entrypoint_override}
       - nextcloud_apps:/var/www/html/custom_apps
       - nextcloud_config:/var/www/html/config
       - nextcloud_data:/var/www/html/data
+      - ./nextcloud-custom.config.php:/var/www/html/config/custom.config.php:ro
     environment:
       - PHP_UPLOAD_LIMIT=16G
       - PHP_MEMORY_LIMIT=1G
