@@ -92,8 +92,8 @@ services:
       - COLLABORA_DOMAIN=${COLLABORA_DOMAIN}
       - WHITEBOARD_DOMAIN=${WHITEBOARD_DOMAIN}
       - WHITEBOARD_JWT_SECRET=${WHITEBOARD_JWT_SECRET}
-      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
-      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - NEXTCLOUD_S3_BUCKET=${NEXTCLOUD_S3_BUCKET:-nextcloud}
     networks:
       - next-net
@@ -194,12 +194,11 @@ services:
       - MYSQL_USER=${MARIADB_USER}
       - MYSQL_PASSWORD=${MARIADB_PASSWORD}
       - NEXTCLOUD_TRUSTED_DOMAINS=${NEXTCLOUD_DOMAIN} localhost 127.0.0.1
-      # Stockage objet S3 via RustFS — configuré dès la première installation
       - OBJECTSTORE_S3_HOST=haproxy
       - OBJECTSTORE_S3_PORT=9000
       - OBJECTSTORE_S3_BUCKET=${NEXTCLOUD_S3_BUCKET:-nextcloud}
-      - OBJECTSTORE_S3_KEY=${RUSTFS_ACCESS_KEY}
-      - OBJECTSTORE_S3_SECRET=${RUSTFS_SECRET_KEY}
+      - OBJECTSTORE_S3_KEY=${MINIO_ACCESS_KEY}
+      - OBJECTSTORE_S3_SECRET=${MINIO_SECRET_KEY}
       - OBJECTSTORE_S3_USEPATH_STYLE=true
       - OBJECTSTORE_S3_SSL=false
       - OBJECTSTORE_S3_AUTOCREATE=true
@@ -213,7 +212,7 @@ services:
         condition: service_healthy
       haproxy:
         condition: service_healthy
-      rustfs-node1:
+      minio-node1:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "php /var/www/html/occ status 2>/dev/null | grep -q 'installed: true' || exit 1"]
@@ -679,124 +678,107 @@ services:
     restart: "no"
 
   # ===========================================================================
-  # RustFS — Stockage objet distribué compatible S3 (4 nœuds × 4 drives)
-  # Réseau dédié rustfsnet avec IPs statiques pour la communication inter-nœuds
-  # Production : retirer RUSTFS_UNSAFE_BYPASS_DISK_CHECK (nécessite des disques séparés)
+  # MinIO — Stockage objet distribué compatible S3 (4 nœuds × 4 drives)
+  # Réseau dédié minionet avec IPs statiques pour la communication inter-nœuds
+  # Production : retirer MINIO_CI_CD et pointer chaque DATA vers un disque physique
   # ===========================================================================
-  rustfs-node1:
-    image: rustfs/rustfs:latest
-    container_name: rustfs-node1
-    hostname: rustfs-node1
+  minio-node1:
+    image: minio/minio:latest
+    container_name: minio-node1
+    hostname: minio-node1
     restart: always
     user: root
+    command: server http://minio-node{1...4}/data{1...4} --address :9000
     expose:
       - "9000"
-      - "9001"
     volumes:
-      - ${RUSTFS_NODE1_DATA1:-/data/rustfs/node1/data1}:/data1
-      - ${RUSTFS_NODE1_DATA2:-/data/rustfs/node1/data2}:/data2
-      - ${RUSTFS_NODE1_DATA3:-/data/rustfs/node1/data3}:/data3
-      - ${RUSTFS_NODE1_DATA4:-/data/rustfs/node1/data4}:/data4
-      - ${RUSTFS_NODE1_PATH:-/data/rustfs/node1}/base:/data
+      - ${MINIO_NODE1_DATA1:-/data/minio/node1/data1}:/data1
+      - ${MINIO_NODE1_DATA2:-/data/minio/node1/data2}:/data2
+      - ${MINIO_NODE1_DATA3:-/data/minio/node1/data3}:/data3
+      - ${MINIO_NODE1_DATA4:-/data/minio/node1/data4}:/data4
     environment:
-      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
-      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
-      - RUSTFS_ADDRESS=0.0.0.0:9000
-      - RUSTFS_CONSOLE_ENABLE=true
-      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data{1...4}
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
       # En production avec des disques physiques séparés, supprimer la ligne ci-dessous
-      - RUSTFS_UNSAFE_BYPASS_DISK_CHECK=true
-      - RUST_LOG=error
+      - MINIO_CI_CD=on
     networks:
       storage-net: {}
-      rustfsnet:
+      minionet:
         ipv4_address: 172.50.0.11
     healthcheck:
-      test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 9000 > /dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
       start_period: 90s
 
-  rustfs-node2:
-    image: rustfs/rustfs:latest
-    container_name: rustfs-node2
-    hostname: rustfs-node2
+  minio-node2:
+    image: minio/minio:latest
+    container_name: minio-node2
+    hostname: minio-node2
     restart: always
     user: root
+    command: server http://minio-node{1...4}/data{1...4} --address :9000
     expose:
       - "9000"
     volumes:
-      - ${RUSTFS_NODE2_DATA1:-/data/rustfs/node2/data1}:/data1
-      - ${RUSTFS_NODE2_DATA2:-/data/rustfs/node2/data2}:/data2
-      - ${RUSTFS_NODE2_DATA3:-/data/rustfs/node2/data3}:/data3
-      - ${RUSTFS_NODE2_DATA4:-/data/rustfs/node2/data4}:/data4
-      - ${RUSTFS_NODE2_PATH:-/data/rustfs/node2}/base:/data
+      - ${MINIO_NODE2_DATA1:-/data/minio/node2/data1}:/data1
+      - ${MINIO_NODE2_DATA2:-/data/minio/node2/data2}:/data2
+      - ${MINIO_NODE2_DATA3:-/data/minio/node2/data3}:/data3
+      - ${MINIO_NODE2_DATA4:-/data/minio/node2/data4}:/data4
     environment:
-      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
-      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
-      - RUSTFS_ADDRESS=0.0.0.0:9000
-      - RUSTFS_CONSOLE_ENABLE=true
-      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data{1...4}
-      - RUSTFS_UNSAFE_BYPASS_DISK_CHECK=true
-      - RUST_LOG=error
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+      - MINIO_CI_CD=on
     networks:
       storage-net: {}
-      rustfsnet:
+      minionet:
         ipv4_address: 172.50.0.12
 
-  rustfs-node3:
-    image: rustfs/rustfs:latest
-    container_name: rustfs-node3
-    hostname: rustfs-node3
+  minio-node3:
+    image: minio/minio:latest
+    container_name: minio-node3
+    hostname: minio-node3
     restart: always
     user: root
+    command: server http://minio-node{1...4}/data{1...4} --address :9000
     expose:
       - "9000"
     volumes:
-      - ${RUSTFS_NODE3_DATA1:-/data/rustfs/node3/data1}:/data1
-      - ${RUSTFS_NODE3_DATA2:-/data/rustfs/node3/data2}:/data2
-      - ${RUSTFS_NODE3_DATA3:-/data/rustfs/node3/data3}:/data3
-      - ${RUSTFS_NODE3_DATA4:-/data/rustfs/node3/data4}:/data4
-      - ${RUSTFS_NODE3_PATH:-/data/rustfs/node3}/base:/data
+      - ${MINIO_NODE3_DATA1:-/data/minio/node3/data1}:/data1
+      - ${MINIO_NODE3_DATA2:-/data/minio/node3/data2}:/data2
+      - ${MINIO_NODE3_DATA3:-/data/minio/node3/data3}:/data3
+      - ${MINIO_NODE3_DATA4:-/data/minio/node3/data4}:/data4
     environment:
-      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
-      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
-      - RUSTFS_ADDRESS=0.0.0.0:9000
-      - RUSTFS_CONSOLE_ENABLE=true
-      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data{1...4}
-      - RUSTFS_UNSAFE_BYPASS_DISK_CHECK=true
-      - RUST_LOG=error
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+      - MINIO_CI_CD=on
     networks:
       storage-net: {}
-      rustfsnet:
+      minionet:
         ipv4_address: 172.50.0.13
 
-  rustfs-node4:
-    image: rustfs/rustfs:latest
-    container_name: rustfs-node4
-    hostname: rustfs-node4
+  minio-node4:
+    image: minio/minio:latest
+    container_name: minio-node4
+    hostname: minio-node4
     restart: always
     user: root
+    command: server http://minio-node{1...4}/data{1...4} --address :9000
     expose:
       - "9000"
     volumes:
-      - ${RUSTFS_NODE4_DATA1:-/data/rustfs/node4/data1}:/data1
-      - ${RUSTFS_NODE4_DATA2:-/data/rustfs/node4/data2}:/data2
-      - ${RUSTFS_NODE4_DATA3:-/data/rustfs/node4/data3}:/data3
-      - ${RUSTFS_NODE4_DATA4:-/data/rustfs/node4/data4}:/data4
-      - ${RUSTFS_NODE4_PATH:-/data/rustfs/node4}/base:/data
+      - ${MINIO_NODE4_DATA1:-/data/minio/node4/data1}:/data1
+      - ${MINIO_NODE4_DATA2:-/data/minio/node4/data2}:/data2
+      - ${MINIO_NODE4_DATA3:-/data/minio/node4/data3}:/data3
+      - ${MINIO_NODE4_DATA4:-/data/minio/node4/data4}:/data4
     environment:
-      - RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}
-      - RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}
-      - RUSTFS_ADDRESS=0.0.0.0:9000
-      - RUSTFS_CONSOLE_ENABLE=true
-      - RUSTFS_VOLUMES=http://172.50.0.{11...14}:9000/data{1...4}
-      - RUSTFS_UNSAFE_BYPASS_DISK_CHECK=true
-      - RUST_LOG=error
+      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+      - MINIO_CI_CD=on
     networks:
       storage-net: {}
-      rustfsnet:
+      minionet:
         ipv4_address: 172.50.0.14
 
   # ===========================================================================
@@ -971,8 +953,8 @@ networks:
       config:
         - subnet: 172.100.0.0/24
 
-  rustfsnet:
-    name: rustfsnet
+  minionet:
+    name: minionet
     driver: bridge
     ipam:
       config:
