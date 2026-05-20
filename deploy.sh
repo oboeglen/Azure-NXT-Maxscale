@@ -981,9 +981,9 @@ NGNX
     fi
 
     # node1 : laisse le temps au bootstrap + init schema
-    # nodes 2+ : SST d'une DB fraîche est rapide (< 10s), 20s suffit
-    local start_period_db="20s"
-    (( i == 1 )) && start_period_db="60s"
+    # nodes 2+ : 180s pour absorber un SST complet avant qu'autoheal intervienne
+    local start_period_db="180s"
+    (( i == 1 )) && start_period_db="120s"
 
     cat >> "$dest" <<DBNODE
 
@@ -994,6 +994,8 @@ NGNX
     image: maxscale-mariadb-galera:11.4
     container_name: mariadb-node${i}
     restart: always
+    labels:
+      autoheal: "true"
 ${db_cmd}
     expose:
       - "3306"
@@ -1018,6 +1020,22 @@ ${db_depends}
       start_period: ${start_period_db}
 DBNODE
   done
+
+  # ── galera-autoheal ────────────────────────────────────────────────────
+  cat >> "$dest" <<'AUTOHEAL'
+
+  galera-autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: galera-autoheal
+    restart: always
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_INTERVAL=60
+      - AUTOHEAL_START_PERIOD=300
+      - AUTOHEAL_DEFAULT_STOP_TIMEOUT=30
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+AUTOHEAL
 
   # ── Redis Cluster nodes (dynamic) ───────────────────────────────────────
   for i in $(seq 1 "$REDIS_NODES"); do

@@ -395,6 +395,8 @@ services:
     image: maxscale-mariadb-galera:11.4
     container_name: mariadb-node1
     restart: always
+    labels:
+      autoheal: "true"
     command: --wsrep-new-cluster
     expose:
       - "3306"
@@ -413,11 +415,11 @@ services:
     networks:
       - galera-net
     healthcheck:
-      test: ["CMD-SHELL", "mariadb-admin ping -uroot -p$$MARIADB_ROOT_PASSWORD --silent 2>/dev/null && echo ok || exit 1"]
+      test: ["CMD-SHELL", "mariadb -uroot -p$$MARIADB_ROOT_PASSWORD -e \"SHOW STATUS LIKE 'wsrep_ready'\" 2>/dev/null | grep -q ON || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 90s
+      start_period: 120s
 
   mariadb-node2:
     build:
@@ -426,6 +428,8 @@ services:
     image: maxscale-mariadb-galera:11.4
     container_name: mariadb-node2
     restart: always
+    labels:
+      autoheal: "true"
     expose:
       - "3306"
       - "4444"
@@ -442,11 +446,11 @@ services:
       mariadb-node1:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "mariadb-admin ping -uroot -p$$MARIADB_ROOT_PASSWORD --silent 2>/dev/null && echo ok || exit 1"]
+      test: ["CMD-SHELL", "mariadb -uroot -p$$MARIADB_ROOT_PASSWORD -e \"SHOW STATUS LIKE 'wsrep_ready'\" 2>/dev/null | grep -q ON || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 60s
+      start_period: 180s
 
   mariadb-node3:
     build:
@@ -455,6 +459,8 @@ services:
     image: maxscale-mariadb-galera:11.4
     container_name: mariadb-node3
     restart: always
+    labels:
+      autoheal: "true"
     expose:
       - "3306"
       - "4444"
@@ -471,11 +477,29 @@ services:
       mariadb-node2:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "mariadb-admin ping -uroot -p$$MARIADB_ROOT_PASSWORD --silent 2>/dev/null && echo ok || exit 1"]
+      test: ["CMD-SHELL", "mariadb -uroot -p$$MARIADB_ROOT_PASSWORD -e \"SHOW STATUS LIKE 'wsrep_ready'\" 2>/dev/null | grep -q ON || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 60s
+      start_period: 180s
+
+  # ===========================================================================
+  # galera-autoheal — Redémarre automatiquement les nœuds Galera unhealthy
+  # Le healthcheck wsrep_ready détecte les nœuds sortis du cluster ;
+  # autoheal les redémarre pour déclencher un IST/SST automatique.
+  # start_period doit être > durée max d'un SST pour éviter les faux positifs.
+  # ===========================================================================
+  galera-autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: galera-autoheal
+    restart: always
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_INTERVAL=60
+      - AUTOHEAL_START_PERIOD=300
+      - AUTOHEAL_DEFAULT_STOP_TIMEOUT=30
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
   # ===========================================================================
   # Redis Cluster — Cache distribué pour Nextcloud (6 nœuds : 3 masters + 3 replicas)
