@@ -150,6 +150,9 @@ occ config:system:set maintenance_window_start --type integer --value 1
 occ config:system:set skeletondirectory --value ''
 
 # Sécurité / UX
+# Autoriser Nextcloud à appeler sa propre URL (IPs locales Docker) — requis pour le check .well-known
+occ config:system:set allow_local_remote_servers --type boolean --value true
+
 occ config:system:set upgrade.disable-web      --type boolean --value true
 occ config:system:set simpleSignUpLink.shown   --type boolean --value false
 
