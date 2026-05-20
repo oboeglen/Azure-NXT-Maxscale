@@ -240,8 +240,8 @@ detect_os() {
 install_deps() {
   phase 2 7 "Installation des dépendances"
 
-  local pkgs_apt="git curl wget openssl python3 ca-certificates gnupg lsb-release netcat-openbsd"
-  local pkgs_dnf="git curl wget openssl python3 ca-certificates gnupg2"
+  local pkgs_apt=(git curl wget openssl python3 ca-certificates gnupg lsb-release netcat-openbsd)
+  local pkgs_dnf=(git curl wget openssl python3 ca-certificates gnupg2)
 
   step "Mise à jour des sources et installation des paquets essentiels"
   start_spinner "Mise à jour des paquets..."
@@ -249,12 +249,12 @@ install_deps() {
     DEBIAN_FRONTEND=noninteractive apt-get update -qq
     stop_spinner "Sources mises à jour"
     start_spinner "Installation des paquets essentiels..."
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $pkgs_apt
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${pkgs_apt[@]}"
   else
     dnf makecache -q
     stop_spinner "Sources mises à jour"
     start_spinner "Installation des paquets essentiels..."
-    dnf install -y -q $pkgs_dnf
+    dnf install -y -q "${pkgs_dnf[@]}"
   fi
   stop_spinner "Paquets essentiels installés"
 
@@ -766,7 +766,6 @@ HAPROXY
       - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
     environment:
       - REDIS_PASSWORD=\${REDIS_PASSWORD}
-      - REDIS_NODES=\${REDIS_NODES}
       - NEXTCLOUD_DOMAIN=\${NEXTCLOUD_DOMAIN}
       - COLLABORA_DOMAIN=\${COLLABORA_DOMAIN}
       - WHITEBOARD_DOMAIN=\${WHITEBOARD_DOMAIN}
