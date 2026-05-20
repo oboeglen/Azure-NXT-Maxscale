@@ -102,6 +102,32 @@ services:
         condition: service_healthy
 
   # ===========================================================================
+  # nextcloud-cron — Exécute cron.php toutes les 5 min (mode background:cron)
+  # ===========================================================================
+  nextcloud-cron:
+    image: nextcloud:33.0.3-fpm
+    container_name: nextcloud-cron
+    restart: unless-stopped
+    entrypoint: /cron.sh
+    volumes:
+      - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
+      - nextcloud_html:/var/www/html
+      - nextcloud_apps:/var/www/html/custom_apps
+      - nextcloud_config:/var/www/html/config
+      - nextcloud_data:/var/www/html/data
+    environment:
+      - MYSQL_HOST=haproxy
+      - MYSQL_DATABASE=${MARIADB_DATABASE}
+      - MYSQL_USER=${MARIADB_USER}
+      - MYSQL_PASSWORD=${MARIADB_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    networks:
+      - next-net
+    depends_on:
+      app-next-01:
+        condition: service_healthy
+
+  # ===========================================================================
   # nginx-acme — Sert les challenges ACME pour le renouvellement Let's Encrypt
   # ===========================================================================
   nginx-acme:
