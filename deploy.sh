@@ -1398,8 +1398,11 @@ validate_haproxy() {
   local file="${1:-$INSTALL_DIR/haproxy.cfg}"
   step "Validation de la configuration HAProxy"
 
-  local tmp; tmp=$(mktemp)
-  # Substituer les variables avec des valeurs fictives pour que haproxy -c puisse parser
+  local tmp tmp_certs
+  tmp=$(mktemp)
+  tmp_certs=$(mktemp -d)
+
+  # Substituer les variables avec des valeurs fictives
   NEXTCLOUD_DOMAIN=nc.valid \
   COLLABORA_DOMAIN=co.valid \
   WHITEBOARD_DOMAIN=wb.valid \
@@ -1407,15 +1410,24 @@ validate_haproxy() {
     envsubst < "$file" > "$tmp"
   chmod 644 "$tmp"
 
+  # Certificat SSL factice — haproxy -c vérifie que bind :443 peut lire /certs/
+  openssl req -x509 -newkey rsa:2048 \
+    -keyout "${tmp_certs}/key.pem" \
+    -out    "${tmp_certs}/cert.pem" \
+    -days 1 -nodes -subj "/CN=validate" 2>/dev/null
+  cat "${tmp_certs}/cert.pem" "${tmp_certs}/key.pem" > "${tmp_certs}/stack.pem"
+  chmod 644 "${tmp_certs}/stack.pem"
+
   local output
   if output=$(docker run --rm \
       -v "${tmp}:/tmp/haproxy.cfg:ro" \
+      -v "${tmp_certs}:/certs:ro" \
       haproxy:2.8-alpine \
       haproxy -c -f /tmp/haproxy.cfg 2>&1); then
-    rm -f "$tmp"
+    rm -f "$tmp"; rm -rf "$tmp_certs"
     info "Configuration HAProxy valide ✓"
   else
-    rm -f "$tmp"
+    rm -f "$tmp"; rm -rf "$tmp_certs"
     error "Configuration HAProxy invalide :"
     echo "$output" >&2
     die "Corrigez haproxy.cfg avant de relancer le déploiement."
