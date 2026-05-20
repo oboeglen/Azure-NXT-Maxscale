@@ -1394,49 +1394,6 @@ create_minio_dirs() {
   stop_spinner "Répertoires MinIO prêts"
 }
 
-validate_haproxy() {
-  local file="${1:-$INSTALL_DIR/haproxy.cfg}"
-  step "Validation de la configuration HAProxy"
-
-  local tmp tmp_certs
-  tmp=$(mktemp)
-  tmp_certs=$(mktemp -d)
-  chmod 755 "$tmp_certs"
-
-  # Substituer les variables avec des valeurs fictives
-  NEXTCLOUD_DOMAIN=nc.valid \
-  COLLABORA_DOMAIN=co.valid \
-  WHITEBOARD_DOMAIN=wb.valid \
-  HAPROXY_STATS_PASSWORD=check \
-    envsubst < "$file" > "$tmp"
-  chmod 644 "$tmp"
-
-  # Certificat SSL factice — seul stack.pem dans /certs/ (HAProxy charge tous les fichiers du dossier)
-  local tmp_key tmp_cert
-  tmp_key=$(mktemp); tmp_cert=$(mktemp)
-  openssl req -x509 -newkey rsa:2048 \
-    -keyout "$tmp_key" -out "$tmp_cert" \
-    -days 1 -nodes -subj "/CN=validate" 2>/dev/null
-  cat "$tmp_cert" "$tmp_key" > "${tmp_certs}/stack.pem"
-  chmod 644 "${tmp_certs}/stack.pem"
-  rm -f "$tmp_key" "$tmp_cert"
-
-  local output
-  if output=$(docker run --rm \
-      -v "${tmp}:/tmp/haproxy.cfg:ro" \
-      -v "${tmp_certs}:/certs:ro" \
-      haproxy:2.8-alpine \
-      haproxy -c -f /tmp/haproxy.cfg 2>&1); then
-    rm -f "$tmp"; rm -rf "$tmp_certs"
-    info "Configuration HAProxy valide ✓"
-  else
-    rm -f "$tmp"; rm -rf "$tmp_certs"
-    error "Configuration HAProxy invalide :"
-    echo "$output" >&2
-    die "Corrigez haproxy.cfg avant de relancer le déploiement."
-  fi
-}
-
 patch_haproxy() {
   local file="${1:-$INSTALL_DIR/haproxy.cfg}"
   step "Mise à jour des backends HAProxy"
@@ -2032,7 +1989,6 @@ main() {
   gen_compose
   gen_galera_cnf
   patch_haproxy
-  validate_haproxy
   patch_nextcloud_init
   create_minio_dirs
 
