@@ -1394,6 +1394,33 @@ create_minio_dirs() {
   stop_spinner "Répertoires MinIO prêts"
 }
 
+validate_haproxy() {
+  local file="${1:-$INSTALL_DIR/haproxy.cfg}"
+  step "Validation de la configuration HAProxy"
+
+  local tmp; tmp=$(mktemp)
+  # Substituer les variables avec des valeurs fictives pour que haproxy -c puisse parser
+  NEXTCLOUD_DOMAIN=nc.valid \
+  COLLABORA_DOMAIN=co.valid \
+  WHITEBOARD_DOMAIN=wb.valid \
+  HAPROXY_STATS_PASSWORD=check \
+    envsubst < "$file" > "$tmp"
+
+  local output
+  if output=$(docker run --rm \
+      -v "${tmp}:/tmp/haproxy.cfg:ro" \
+      haproxy:2.8-alpine \
+      haproxy -c -f /tmp/haproxy.cfg 2>&1); then
+    rm -f "$tmp"
+    info "Configuration HAProxy valide ✓"
+  else
+    rm -f "$tmp"
+    error "Configuration HAProxy invalide :"
+    echo "$output" >&2
+    die "Corrigez haproxy.cfg avant de relancer le déploiement."
+  fi
+}
+
 patch_haproxy() {
   local file="${1:-$INSTALL_DIR/haproxy.cfg}"
   step "Mise à jour des backends HAProxy"
@@ -1989,6 +2016,7 @@ main() {
   gen_compose
   gen_galera_cnf
   patch_haproxy
+  validate_haproxy
   patch_nextcloud_init
   create_minio_dirs
 
