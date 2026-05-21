@@ -299,15 +299,24 @@ info "Attente cluster Redis (cluster_state:ok)..."
 redis_ok=0
 for _attempt in $(seq 1 30); do
     # Interroge CLUSTER INFO via socket raw (pas de PHP Redis, pas de bootstrap NC)
+    # stream_set_timeout évite que fgets() bloque indéfiniment après les données CLUSTER INFO
+    # (la socket reste ouverte après la réponse → feof() ne revient jamais sans timeout)
     _state=$(php -r '
         $fp = @fsockopen("redis-node1", 6379, $e, $m, 5);
         if (!$fp) { exit(1); }
+        stream_set_timeout($fp, 3);
         $pass = getenv("REDIS_PASSWORD");
         fwrite($fp, "*2\r\n$4\r\nAUTH\r\n$" . strlen($pass) . "\r\n" . $pass . "\r\n");
         fgets($fp, 128);
         fwrite($fp, "*2\r\n$7\r\nCLUSTER\r\n$4\r\nINFO\r\n");
         $buf = ""; $lines = 0;
-        while (!feof($fp) && $lines < 30) { $buf .= fgets($fp, 256); $lines++; }
+        while ($lines < 30) {
+            $line = fgets($fp, 256);
+            if ($line === false) break;
+            $buf .= $line;
+            $lines++;
+            if (stream_get_meta_data($fp)["timed_out"]) break;
+        }
         fclose($fp);
         echo strpos($buf, "cluster_state:ok") !== false ? "ok" : "loading";
     ' 2>/dev/null)
@@ -340,7 +349,7 @@ cp "/img/Favicon.png"                  /tmp/nxt-favicon.png
 
 # Appliquer le thème — non-bloquant : si Redis est instable au moment du theming
 # le setup continue quand même (le thème sera incomplet mais NC fonctionnera).
-theming() { ${OCC_BIN} theming:config "$@" 2>&1 && return 0; warn "theming:config $* ignoré (Redis instable)"; return 0; }
+theming() { timeout 30s ${OCC_BIN} theming:config "$@" 2>&1 && return 0; warn "theming:config $* ignoré (timeout ou Redis instable)"; return 0; }
 theming name       "NXT Maxscale"
 theming color      "#3a3a3c"
 theming slogan     "Infrastructure Nextcloud HA"
