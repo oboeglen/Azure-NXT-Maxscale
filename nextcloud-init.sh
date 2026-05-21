@@ -200,6 +200,45 @@ for app in \
 done
 
 # ---------------------------------------------------------------------------
+# 9. Thème NXT — Logos, fond d'écran, favicon, CSS personnalisé
+# ---------------------------------------------------------------------------
+step "Configuration du thème NXT"
+
+# S'assurer que l'app theming est active (activée par défaut)
+occ app:enable theming || true
+
+# Installer et activer Custom CSS
+if occ app:list --output=plain 2>/dev/null | grep -qE '^theming_customcss$|^\s*theming_customcss\s'; then
+    warn "theming_customcss déjà présent — activation"
+    occ app:enable theming_customcss || true
+else
+    echo "[setup] Installation de theming_customcss depuis l'App Store..."
+    occ app:install theming_customcss
+fi
+
+# Copier les assets vers /tmp pour éviter les problèmes d'encodage des noms de fichiers
+cp "/img/Logo.png"                     /tmp/nxt-logo.png
+cp "/img/Logo barre de navigation.png" /tmp/nxt-logoheader.png
+cp "/img/Arrière plan.webp"            /tmp/nxt-background.webp
+cp "/img/Favicon.png"                  /tmp/nxt-favicon.png
+
+# Appliquer le thème (couleur primaire + slogan + images)
+occ theming:config color      "#2563eb"
+occ theming:config slogan     "Infrastructure Nextcloud HA"
+occ theming:config logo        /tmp/nxt-logo.png
+occ theming:config logoheader  /tmp/nxt-logoheader.png
+occ theming:config background  /tmp/nxt-background.webp
+occ theming:config favicon     /tmp/nxt-favicon.png
+
+# Désactiver la personnalisation du thème par les utilisateurs
+occ config:app:set theming disable-user-theming --value "yes"
+
+# Appliquer le CSS personnalisé (login page + éléments globaux)
+occ config:app:set theming_customcss customcss --value "$(cat /nxt-custom.css)"
+
+info "Thème NXT configuré (logos, fond, favicon, CSS, user-theming désactivé)."
+
+# ---------------------------------------------------------------------------
 # 10. Maintenance finale
 # ---------------------------------------------------------------------------
 step "Maintenance et optimisation finale"

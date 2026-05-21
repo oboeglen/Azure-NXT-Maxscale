@@ -1,0 +1,1139 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   NXT Login Theme — Page de connexion Nextcloud
+   Design calqué sur login.php du NXT Dashboard :
+   fond sombre #0c1220, grille, blobs, bordure cônique animée.
+
+   → Coller dans : Admin → Apparence → CSS personnalisé
+     (ou /themes/nxt/css/login.css si thème serveur)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── CSS Houdini : rend --border-angle animable ── */
+@property --border-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   0. VARIABLES
+   Deux couches :
+   a) Surcharge des variables Nextcloud → NC applique automatiquement
+      la couleur sans nécessiter !important sur chaque règle
+   b) Variables NXT propres pour ce qui sort du périmètre NC
+────────────────────────────────────────────────────────────────────── */
+#body-login {
+
+  /* ── a) Variables Nextcloud surchargées pour le thème sombre ── */
+
+  /* Fond body — NC lit --color-background-plain dans guest.css */
+  --color-background-plain:            #0c1220;
+  --color-background-plain-text:       #e2e8f0;
+  --image-background:                  none;          /* désactive le dégradé NC */
+
+  /* Fonds généraux */
+  --color-main-background:             #0f1829;       /* .guest-box et .body-login-container */
+  --color-main-background-blur:        rgba(15, 24, 41, .97);
+  --color-background-hover:            rgba(37, 99, 235, .08);
+  --color-background-dark:             rgba(255, 255, 255, .06);
+  --color-background-darker:           rgba(255, 255, 255, .10);
+
+  /* Texte */
+  --color-main-text:                   #e2e8f0;
+  --color-text-maxcontrast:            #94a3b8;
+  --color-text-maxcontrast-background-blur: #94a3b8;
+
+  /* Couleur primaire — utilisée par .button-vue--vue-primary, input:focus… */
+  --color-primary-element:             #2563eb;
+  --color-primary-element-hover:       #1d4ed8;
+  --color-primary-element-text:        #ffffff;
+  --color-primary-element-text-dark:   rgba(255, 255, 255, .85);
+  --color-primary-element-light:       rgba(37, 99, 235, .10);
+  --color-primary-element-light-hover: rgba(37, 99, 235, .16);
+  --color-primary-element-light-text:  #60a5fa;
+
+  /* Bordures */
+  --color-border:                      rgba(37, 99, 235, .20);
+  --color-border-dark:                 rgba(37, 99, 235, .30);
+  --color-border-maxcontrast:          rgba(37, 99, 235, .55);
+  --color-border-error:                rgba(239, 68, 68, .55);
+
+  /* Ombres */
+  --color-box-shadow:                  rgba(0, 0, 0, .55);
+
+  /* Erreurs / succès / alertes */
+  --color-error:                       rgba(239, 68, 68, .10);
+  --color-error-text:                  #fca5a5;
+  --color-error-hover:                 rgba(239, 68, 68, .18);
+  --color-warning:                     rgba(202, 138, 4, .10);
+  --color-warning-text:                #fde047;
+  --color-success:                     rgba(34, 197, 94, .10);
+  --color-success-rgb:                 34, 197, 94;
+
+  /* Rayons NC */
+  --border-radius:                     8px;
+  --border-radius-large:               14px;
+  --border-radius-element:             10px;
+  --border-radius-container:           22px;
+  --border-radius-container-large:     22px;
+
+  /* Backdrop : désactivé */
+  --filter-background-blur:            none;
+
+  /* ── b) Variables NXT propres ── */
+  --nxt-bg:         #0c1220;
+  --nxt-card-bg:    #0f1829;
+  --nxt-autofill:   #131e35;
+
+  --nxt-900:        #1e3a8a;
+  --nxt-700:        #1d4ed8;
+  --nxt-600:        #2563eb;
+  --nxt-500:        #3b82f6;
+  --nxt-400:        #60a5fa;
+  --nxt-300:        #93c5fd;
+  --nxt-200:        #bfdbfe;
+
+  --nxt-text:       #e2e8f0;
+  --nxt-muted:      #94a3b8;
+  --nxt-subtle:     #64748b;
+  --nxt-dim:        #334155;
+
+  --nxt-err:        #ef4444;
+  --nxt-err-text:   #fca5a5;
+
+  --nxt-r-xl:       22px;
+  --nxt-r-lg:       14px;
+  --nxt-r-md:       10px;
+  --nxt-r-sm:       8px;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   1. FOND GLOBAL
+────────────────────────────────────────────────────────────────────── */
+#body-login,
+#body-login body {
+  background-color: var(--nxt-bg) !important;
+  background-image: var(--image-background) !important; /* = none via var */
+  color: var(--color-main-text) !important;
+  min-height: 100dvh !important;
+  overflow-x: hidden !important;
+  /* Safe area pour iPhone avec encoche / Dynamic Island */
+  padding-top:    env(safe-area-inset-top,    0px) !important;
+  padding-right:  env(safe-area-inset-right,  0px) !important;
+  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  padding-left:   env(safe-area-inset-left,   0px) !important;
+}
+
+/* ── Grille subtile ── */
+#body-login::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(37, 99, 235, .05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, .05) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+/* ── Blobs lumineux ── */
+#body-login::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  will-change: opacity;
+  background:
+    radial-gradient(ellipse 700px 700px at -15% -22%, rgba(29, 78, 216, .18) 0%, transparent 65%),
+    radial-gradient(ellipse 450px 450px at 110% 108%, rgba(59, 130, 246, .14) 0%, transparent 65%),
+    radial-gradient(ellipse 380px 380px at 52%  50%,  rgba(3, 105, 161, .11) 0%, transparent 65%);
+  animation: nxt-blob-pulse 8s ease-in-out infinite;
+}
+
+@keyframes nxt-blob-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .65; }
+}
+
+/* ── Wrappers NC ── */
+#body-login #wrap,
+#body-login .wrapper,
+#body-login .login-wrapper,
+#body-login main {
+  background: transparent !important;
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   2. CARTE DE LOGIN / 2FA — bordure cônique animée
+   S'applique à .guest-box (login) ET .body-login-container (2FA, reset…)
+   NC applique déjà background-color et border-radius via les variables §0.
+────────────────────────────────────────────────────────────────────── */
+#body-login .guest-box,
+#body-login .body-login-container {
+  --border-angle: 0deg;
+
+  position: relative !important;
+  z-index: 1 !important;
+  border-radius: var(--border-radius-container) !important;
+  padding: 44px 40px 36px !important;
+  width: 100% !important;
+  max-width: 420px !important;
+  box-sizing: border-box !important;
+
+  background:
+    linear-gradient(var(--nxt-card-bg), var(--nxt-card-bg)) padding-box,
+    conic-gradient(
+      from var(--border-angle),
+      transparent      0deg 220deg,
+      var(--nxt-900) 220deg 255deg,
+      var(--nxt-600) 255deg 285deg,
+      var(--nxt-400) 285deg 308deg,
+      var(--nxt-300) 308deg 322deg,
+      var(--nxt-400) 322deg 338deg,
+      var(--nxt-600) 338deg 350deg,
+      transparent    350deg 360deg
+    ) border-box !important;
+
+  border: 2px solid transparent !important;
+  box-shadow:
+    0 8px 60px var(--color-box-shadow),
+    0 0 40px rgba(37, 99, 235, .12) !important;
+  backdrop-filter: var(--filter-background-blur) !important;
+  -webkit-backdrop-filter: var(--filter-background-blur) !important;
+  animation:
+    nxt-border-spin 5s linear infinite,
+    nxt-card-enter .55s cubic-bezier(.22, 1, .36, 1) both !important;
+}
+
+@keyframes nxt-border-spin {
+  to { --border-angle: 360deg; }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   3. LOGO & TITRE
+────────────────────────────────────────────────────────────────────── */
+#body-login .guest-box h2,
+#body-login .guest-box h1,
+#body-login .login-header h1,
+#body-login .guest-box .header,
+#body-login .guest-box .login-logo {
+  color: var(--color-main-text) !important;
+  font-size: 1.5rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -.02em !important;
+  text-align: center !important;
+}
+
+/* Logo NC → filtre blanc */
+#body-login .guest-box .logo,
+#body-login .login-logo img {
+  filter: brightness(0) invert(1) !important;
+  opacity: .92 !important;
+}
+
+/* Sous-titre */
+#body-login .guest-box p:not(.button-group),
+#body-login .guest-box .warning {
+  color: var(--color-text-maxcontrast) !important;
+  font-size: .82rem !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   4. LABELS
+────────────────────────────────────────────────────────────────────── */
+#body-login .input-field__label {
+  color: var(--nxt-subtle) !important;
+  font-size: .72rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: .07em !important;
+  background: transparent !important;
+}
+
+/* Label flottant actif (margin-inline-start pour RTL) */
+#body-login .input-field__main-wrapper:focus-within .input-field__label,
+#body-login .input-field__main-wrapper:has(.input-field__input:not(:placeholder-shown)) .input-field__label {
+  color: var(--nxt-400) !important;
+  background: var(--nxt-card-bg) !important;
+  padding: 0 4px !important;
+  margin-inline-start: -4px !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   5. INPUTS
+────────────────────────────────────────────────────────────────────── */
+#body-login .input-field__main-wrapper {
+  background: var(--color-background-dark) !important;
+  border: 1.5px solid var(--color-border-dark) !important;
+  border-radius: var(--border-radius-large) !important;
+  transition: border-color .25s, box-shadow .25s !important;
+  overflow: visible !important;
+}
+
+#body-login .input-field__main-wrapper:focus-within {
+  border-color: var(--color-primary-element) !important;
+  box-shadow:
+    0 0 0 3px rgba(37, 99, 235, .18),
+    0 0 16px rgba(37, 99, 235, .10) !important;
+  background: rgba(255, 255, 255, .08) !important;
+}
+
+#body-login .input-field__input {
+  background: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  color: var(--color-main-text) !important;
+  font-family: var(--font-face) !important;
+  font-size: var(--default-font-size) !important;
+}
+
+#body-login .input-field__input:focus {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+#body-login .input-field__input::placeholder {
+  color: var(--nxt-subtle) !important;
+}
+
+/* Chrome autofill */
+#body-login .input-field__input:-webkit-autofill,
+#body-login .input-field__input:-webkit-autofill:hover,
+#body-login .input-field__input:-webkit-autofill:focus,
+#body-login .input-field__input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--nxt-autofill) inset !important;
+  box-shadow:         0 0 0 1000px var(--nxt-autofill) inset !important;
+  -webkit-text-fill-color: var(--color-main-text) !important;
+  caret-color: var(--color-main-text) !important;
+  transition: background-color 99999s ease !important;
+}
+
+/* ── Icône d'erreur ──────────────────────────────────────────────────
+   La page "Se connecter avec un périphérique" utilise .body-login-container.
+   NC y affiche l'icône dans le trailing slot ET dans le helper text → doublon.
+   On cache toutes les icônes dans .body-login-container sauf le trailing slot.
+   La page login principale utilise .guest-box → non affectée.             */
+#body-login .body-login-container .alert-circle-outline-icon {
+  display: none !important;
+}
+#body-login .body-login-container .input-field__main-wrapper .alert-circle-outline-icon {
+  display: flex !important;
+  color: var(--nxt-err) !important;
+}
+
+/* ── Icône dans la barre — centrage sans agrandir la barre ──────────
+   L'icône peut être enfant direct du wrapper (flex child) et cause
+   une expansion. On la sort du flux avec position:absolute.
+   S'applique à .input-field__icon--trailing ET directement à l'icône
+   pour couvrir les deux structures possibles selon la version NC.      */
+#body-login .input-field__main-wrapper {
+  position: relative !important;
+}
+
+#body-login .input-field__icon--trailing,
+#body-login .input-field__main-wrapper > .alert-circle-outline-icon,
+#body-login .input-field__main-wrapper > .material-design-icon {
+  position: absolute !important;
+  right: 8px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  pointer-events: none !important;
+}
+
+#body-login .input-field__main-wrapper > .alert-circle-outline-icon,
+#body-login .input-field__icon--trailing .alert-circle-outline-icon {
+  color: var(--nxt-err) !important;
+}
+
+/* Bouton œil */
+#body-login .input-field__trailing-button {
+  color: var(--color-primary-element-light-text) !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 50% !important;
+}
+
+#body-login .input-field__trailing-button .button-vue__wrapper {
+  border-radius: 50% !important;
+  background: transparent !important;
+}
+
+#body-login .input-field__trailing-button:hover,
+#body-login .input-field__trailing-button:hover .button-vue__wrapper {
+  color: var(--nxt-300) !important;
+  background: var(--color-background-hover) !important;
+  border-radius: 50% !important;
+}
+
+/* Fieldset */
+#body-login .login-form__fieldset {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 12px !important;
+}
+
+/* Checkbox "Se souvenir de moi" */
+#body-login .login-form__fieldset > .checkbox-radio-switch {
+  align-self: center !important;
+  background: transparent !important;
+  border-radius: var(--border-radius-element) !important;
+  --color-background-hover: rgba(37, 99, 235, .08) !important;
+  --color-background-dark: transparent !important;
+}
+
+#body-login .checkbox-radio-switch:hover,
+#body-login .checkbox-radio-switch:focus-within {
+  background: var(--color-background-hover) !important;
+}
+
+#body-login .checkbox-radio-switch *,
+#body-login .checkbox-radio-switch__content {
+  background: transparent !important;
+}
+
+#body-login .checkbox-radio-switch__label,
+#body-login .checkbox-radio-switch__content,
+#body-login .checkbox-radio-switch label,
+#body-login .checkbox-radio-switch span:not(.checkbox-radio-switch__icon) {
+  color: var(--color-text-maxcontrast) !important;
+  font-size: .82rem !important;
+  font-weight: 500 !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   6. BOUTONS
+────────────────────────────────────────────────────────────────────── */
+
+/* "Se connecter" */
+#body-login .button-vue--vue-primary.button-vue--wide {
+  background: linear-gradient(135deg, var(--nxt-700), var(--nxt-500)) !important;
+  border: 1.5px solid transparent !important;
+  border-radius: var(--border-radius-element) !important;
+  color: var(--color-primary-element-text) !important;
+  font-weight: 700 !important;
+  font-family: var(--font-face) !important;
+  padding: 9px 20px !important;
+  box-shadow:
+    0 3px 14px rgba(37, 99, 235, .40),
+    0 0 18px rgba(37, 99, 235, .10) !important;
+  transition: background .2s, box-shadow .2s, transform .15s !important;
+  cursor: pointer !important;
+}
+
+#body-login .button-vue--vue-primary.button-vue--wide:hover {
+  background: linear-gradient(135deg, #1e40af, var(--nxt-600)) !important;
+  box-shadow:
+    0 5px 22px rgba(37, 99, 235, .55),
+    0 0 28px rgba(37, 99, 235, .18) !important;
+  transform: translateY(-1px) !important;
+}
+
+#body-login .button-vue--vue-primary.button-vue--wide:active {
+  transform: translateY(0) scale(.98) !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, .35) !important;
+}
+
+/* État loading pendant la soumission du formulaire */
+#body-login .button-vue--vue-primary[aria-busy="true"],
+#body-login .button-vue--vue-primary.button-vue--loading {
+  opacity: .65 !important;
+  cursor: wait !important;
+  transform: none !important;
+}
+
+/* "Se connecter avec un périphérique" */
+#body-login .button-vue--wide.button-vue--tertiary:not(.input-field__trailing-button) {
+  background: var(--color-primary-element-light) !important;
+  border: 1.5px solid var(--color-border-dark) !important;
+  border-radius: var(--border-radius-element) !important;
+  color: var(--color-primary-element-light-text) !important;
+  font-weight: 700 !important;
+  font-family: var(--font-face) !important;
+  padding: 9px 20px !important;
+  transition: background .2s, border-color .2s, transform .15s !important;
+  cursor: pointer !important;
+}
+
+#body-login .button-vue--wide.button-vue--tertiary:not(.input-field__trailing-button):hover {
+  background: var(--color-primary-element-light-hover) !important;
+  border-color: var(--color-border-maxcontrast) !important;
+  transform: translateY(-1px) !important;
+}
+
+#body-login .button-vue--wide.button-vue--tertiary:not(.input-field__trailing-button):active {
+  transform: translateY(0) scale(.98) !important;
+}
+
+/* Focus clavier (navigation au Tab) */
+#body-login .button-vue--vue-primary.button-vue--wide:focus-visible,
+#body-login .button-vue--wide.button-vue--tertiary:not(.input-field__trailing-button):focus-visible {
+  outline: 2px solid var(--nxt-400) !important;
+  outline-offset: 3px !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   7. LIENS
+────────────────────────────────────────────────────────────────────── */
+#body-login a,
+#body-login .guest-box a {
+  color: var(--color-primary-element-light-text) !important;
+  transition: color .2s !important;
+}
+
+#body-login a:hover,
+#body-login .guest-box a:hover {
+  color: var(--nxt-300) !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   8. MESSAGES D'ERREUR / ALERTE
+   Accent gauche (border-inline-start) + fond teinté + animation d'entrée
+   Appliqué uniquement dans le login flow via #body-login
+────────────────────────────────────────────────────────────────────── */
+
+/* Base commune */
+#body-login .notecard {
+  border-radius: var(--border-radius) !important;
+  padding: 12px 16px !important;
+  margin: 8px 0 !important;
+  font-size: .84rem !important;
+  line-height: 1.55 !important;
+  text-align: start !important;
+  animation: nxt-message-appear .25s cubic-bezier(.22, 1, .36, 1) both !important;
+}
+
+@keyframes nxt-message-appear {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Erreur */
+#body-login .notecard.error,
+#body-login .warning-box {
+  background: rgba(239, 68, 68, .08) !important;
+  border: 1px solid rgba(239, 68, 68, .22) !important;
+  border-inline-start: 3px solid var(--nxt-err) !important;
+  color: var(--nxt-err-text) !important;
+}
+
+/* Alerte */
+#body-login .notecard.warning {
+  background: rgba(202, 138, 4, .08) !important;
+  border: 1px solid rgba(202, 138, 4, .22) !important;
+  border-inline-start: 3px solid #ca8a04 !important;
+  color: #fde047 !important;
+}
+
+/* Info */
+#body-login .notecard.info {
+  background: rgba(37, 99, 235, .08) !important;
+  border: 1px solid rgba(37, 99, 235, .22) !important;
+  border-inline-start: 3px solid var(--nxt-600) !important;
+  color: var(--nxt-300) !important;
+}
+
+/* Succès */
+#body-login .notecard.success {
+  background: rgba(34, 197, 94, .08) !important;
+  border: 1px solid rgba(34, 197, 94, .22) !important;
+  border-inline-start: 3px solid #22c55e !important;
+  color: #86efac !important;
+}
+
+/* Input en état d'erreur — wrapper */
+#body-login .input-field--error .input-field__main-wrapper,
+#body-login .input-field__main-wrapper[aria-invalid="true"] {
+  border-color: var(--nxt-err) !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, .20) !important;
+}
+
+/* Texte d'erreur sous l'input */
+#body-login .input-field__error,
+#body-login .input-field .error-message {
+  color: var(--nxt-err-text) !important;
+  font-size: .78rem !important;
+  margin-top: 4px !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   9. AMÉLIORATIONS VISUELLES — Login
+────────────────────────────────────────────────────────────────────── */
+
+/* ── Animation d'entrée de la carte ── */
+@keyframes nxt-card-enter {
+  from { opacity: 0; transform: translateY(22px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+
+#body-login .guest-content,
+#body-login .login-box__wrapper {
+  animation: nxt-card-enter .45s cubic-bezier(.22, 1, .36, 1) .08s both !important;
+}
+
+/* ── Titre "Se connecter" en dégradé ── */
+#body-login .login-form__headline {
+  background: linear-gradient(135deg, var(--nxt-200) 0%, var(--nxt-400) 50%, var(--nxt-300) 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  font-size: 1.55rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -.03em !important;
+  text-align: center !important;
+  line-height: 1.2 !important;
+  padding-bottom: 2px !important;
+}
+
+/* ── Séparateur "ou" — uniquement si le bouton secondaire existe ── */
+#body-login .login-form:has(~ .button-vue--wide):after {
+  content: '— ou —';
+  display: block;
+  text-align: center;
+  font-size: .7rem;
+  font-weight: 600;
+  color: var(--nxt-dim);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  margin: 2px 0 0;
+}
+
+/* ── Logo — glow animé ── */
+#body-login .guest-content img,
+#body-login .guest-content .logo-icon,
+#body-login .guest-content svg {
+  filter: drop-shadow(0 0 10px rgba(96, 165, 250, .45)) !important;
+  animation: nxt-logo-glow 3.5s ease-in-out infinite !important;
+}
+
+@keyframes nxt-logo-glow {
+  0%, 100% { filter: drop-shadow(0 0 8px  rgba(96, 165, 250, .35)); }
+  50%       { filter: drop-shadow(0 0 22px rgba(96, 165, 250, .70)); }
+}
+
+/* ── Sélection de texte — couleur de marque ── */
+#body-login ::selection {
+  background: rgba(37, 99, 235, .35);
+  color: var(--color-main-text);
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   10. ÉLÉMENTS MASQUÉS — uniquement dans le login flow
+────────────────────────────────────────────────────────────────────── */
+#body-login .development-notice { display: none !important; }
+#body-login footer.guest-box    { display: none !important; }
+
+/* ──────────────────────────────────────────────────────────────────────
+   11. SCROLLBAR
+────────────────────────────────────────────────────────────────────── */
+#body-login ::-webkit-scrollbar             { width: 5px; height: 5px; }
+#body-login ::-webkit-scrollbar-track       { background: transparent; }
+#body-login ::-webkit-scrollbar-thumb       { background: rgba(37, 99, 235, .28); border-radius: 3px; }
+#body-login ::-webkit-scrollbar-thumb:hover { background: rgba(37, 99, 235, .50); }
+
+/* ──────────────────────────────────────────────────────────────────────
+   12. PAGE 2FA — Sélection du second facteur
+   Structure NC :
+     .body-login-container.two-factor
+       h3 + p  (titre + description)
+       a.two-factor-provider  (répété pour chaque méthode)
+         img  (icône 64×64)
+         div
+           h3   (nom du provider)
+           p    (description)
+────────────────────────────────────────────────────────────────────── */
+
+/* Conteneur 2FA — max-width seulement, width héritée de §2 */
+#body-login .body-login-container.two-factor {
+  max-width: 420px !important;
+}
+
+/* ── Titre principal : gradient identique à .login-form__headline ── */
+#body-login .body-login-container > h3,
+#body-login .two-factor-selection h3 {
+  background: linear-gradient(135deg, var(--nxt-200) 0%, var(--nxt-400) 50%, var(--nxt-300) 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  font-size: 1.4rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -.03em !important;
+  text-align: center !important;
+  line-height: 1.2 !important;
+  padding-bottom: 2px !important;
+  margin-bottom: 8px !important;
+}
+
+/* ── Description introductive ── */
+#body-login .body-login-container > p,
+#body-login .two-factor-selection > p {
+  color: var(--color-text-maxcontrast) !important;
+  font-size: .82rem !important;
+  text-align: center !important;
+  margin-bottom: 20px !important;
+  line-height: 1.6 !important;
+}
+
+/* ── Carte provider — l'élément <a> lui-même ── */
+#body-login .two-factor-provider {
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+  width: 100% !important;
+  padding: 14px 16px !important;
+  margin: 0 0 8px !important;
+  box-sizing: border-box !important;
+
+  background: rgba(255, 255, 255, .04) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--border-radius-large) !important;
+  color: var(--color-main-text) !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+
+  transition: background .2s, border-color .2s, transform .15s, box-shadow .2s !important;
+}
+
+#body-login .two-factor-provider:hover,
+#body-login .two-factor-provider:focus,
+#body-login .two-factor-provider:active {
+  background: var(--color-primary-element-light) !important;
+  border-color: var(--color-border-dark) !important;
+  box-shadow: 0 0 20px rgba(37, 99, 235, .18) !important;
+  transform: translateX(3px) !important;
+}
+
+/* ── Icône provider — fond arrondi subtil ── */
+#body-login .two-factor-provider img,
+#body-login .two-factor-provider .two-factor-icon {
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
+  padding: 8px !important;
+  box-sizing: border-box !important;
+  background: var(--color-primary-element-light) !important;
+  border-radius: 12px !important;
+  filter: brightness(0) invert(1) !important;
+  opacity: .90 !important;
+  object-fit: contain !important;
+  flex-shrink: 0 !important;
+}
+
+/* ── Zone texte ── */
+#body-login .two-factor-provider > div {
+  flex: 1 !important;
+  min-width: 0 !important;
+  text-align: start !important;
+  margin: 0 !important;
+}
+
+/* ── Nom du provider ── */
+#body-login .two-factor-provider h3 {
+  font-size: .92rem !important;
+  font-weight: 700 !important;
+  color: var(--color-main-text) !important;
+  margin: 0 0 2px !important;
+  line-height: 1.3 !important;
+  /* Annule le gradient du titre principal sur les h3 imbriqués */
+  background: none !important;
+  -webkit-text-fill-color: var(--color-main-text) !important;
+  letter-spacing: normal !important;
+}
+
+/* ── Description du provider ── */
+#body-login .two-factor-provider p {
+  font-size: .78rem !important;
+  color: var(--color-primary-element-light-text) !important;
+  font-weight: 400 !important;
+  line-height: 1.4 !important;
+  white-space: normal !important;
+  margin: 0 !important;
+}
+
+/* ── Chevron (3e flex item via ::after) ── */
+#body-login .two-factor-provider::after {
+  content: '›';
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--nxt-dim);
+  flex-shrink: 0;
+  transition: transform .2s, color .2s;
+}
+
+#body-login .two-factor-provider:hover::after,
+#body-login .two-factor-provider:focus::after {
+  transform: translateX(3px);
+  color: var(--nxt-400);
+}
+
+/* ── Lien retour "Utiliser une autre méthode" ── */
+#body-login .two-factor-selection a:not(.two-factor-provider),
+#body-login .two-factor-form a,
+#body-login .two-factor-back,
+#body-login a[href*="two_factor"],
+#body-login .back-link {
+  display: block !important;
+  text-align: center !important;
+  margin-top: 16px !important;
+  color: var(--color-primary-element-light-text) !important;
+  font-size: .82rem !important;
+  font-weight: 500 !important;
+}
+
+#body-login .two-factor-selection a:not(.two-factor-provider)::before,
+#body-login .two-factor-back::before,
+#body-login .back-link::before {
+  content: '← ';
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   13. PAGE 2FA — Formulaire de saisie du code (TOTP etc.)
+   Structure NC :
+     .body-login-container
+       h3 + p  (titre + description)
+       form.two-factor-form
+         .input-field (ou input[type=text])
+         input.two-factor-submit  (bouton)
+       a  (retour)
+────────────────────────────────────────────────────────────────────── */
+
+/* ── Input OTP — grand, centré, espacé ── */
+#body-login input[type="text"][autocomplete="one-time-code"],
+#body-login input[name="challenge"],
+#body-login .two-factor-form input[type="text"],
+#body-login .two-factor-form input[type="number"] {
+  background: var(--color-background-dark) !important;
+  border: 1.5px solid var(--color-border-dark) !important;
+  border-radius: var(--border-radius-element) !important;
+  color: var(--color-main-text) !important;
+  font-size: 1.6rem !important;
+  font-weight: 700 !important;
+  text-align: center !important;
+  letter-spacing: .3em !important;
+  font-family: 'Consolas', 'SF Mono', monospace !important;
+  width: 100% !important;
+  padding: 16px 12px !important;
+  box-sizing: border-box !important;
+  margin: 0 0 4px !important;
+  /* Glow doux au repos */
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, .12) !important;
+  transition: border-color .25s, box-shadow .25s, background .25s !important;
+}
+
+#body-login input[type="text"][autocomplete="one-time-code"]::placeholder,
+#body-login input[name="challenge"]::placeholder,
+#body-login .two-factor-form input[type="text"]::placeholder {
+  letter-spacing: normal !important;
+  font-size: var(--default-font-size) !important;
+  font-weight: 400 !important;
+  font-family: var(--font-face) !important;
+  color: var(--nxt-subtle) !important;
+}
+
+#body-login input[type="text"][autocomplete="one-time-code"]:focus,
+#body-login input[name="challenge"]:focus,
+#body-login .two-factor-form input[type="text"]:focus {
+  border-color: var(--color-primary-element) !important;
+  box-shadow:
+    0 0 0 3px rgba(37, 99, 235, .22),
+    0 0 24px rgba(37, 99, 235, .15) !important;
+  background: rgba(255, 255, 255, .09) !important;
+  outline: none !important;
+}
+
+/* ── Bouton Envoyer — même gradient que "Se connecter" ── */
+#body-login .two-factor-submit,
+#body-login input.two-factor-submit,
+#body-login .two-factor-form input[type="submit"],
+#body-login .two-factor-form button[type="submit"],
+#body-login .totp-form button {
+  background: linear-gradient(135deg, var(--nxt-700), var(--nxt-500)) !important;
+  border: none !important;
+  border-radius: var(--border-radius-element) !important;
+  color: var(--color-primary-element-text) !important;
+  font-weight: 700 !important;
+  font-family: var(--font-face) !important;
+  font-size: var(--default-font-size) !important;
+  width: 100% !important;
+  padding: 10px 20px !important;
+  box-shadow:
+    0 3px 14px rgba(37, 99, 235, .40),
+    0 0 18px rgba(37, 99, 235, .10) !important;
+  transition: background .2s, box-shadow .2s, transform .15s !important;
+  cursor: pointer !important;
+  margin: 8px 0 0 !important;
+}
+
+#body-login .two-factor-submit:hover,
+#body-login input.two-factor-submit:hover,
+#body-login .two-factor-form input[type="submit"]:hover,
+#body-login .two-factor-form button[type="submit"]:hover {
+  background: linear-gradient(135deg, #1e40af, var(--nxt-600)) !important;
+  box-shadow:
+    0 5px 22px rgba(37, 99, 235, .55),
+    0 0 28px rgba(37, 99, 235, .18) !important;
+  transform: translateY(-1px) !important;
+}
+
+#body-login .two-factor-submit:active,
+#body-login input.two-factor-submit:active {
+  transform: translateY(0) scale(.98) !important;
+}
+
+/* Fix largeur NC (.two-factor-primary a width: 226px hardcodé) */
+#body-login .two-factor-primary {
+  width: 100% !important;
+  padding: 10px 20px !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   14. AUTH PICKER — fenêtre de sélection de périphérique
+────────────────────────────────────────────────────────────────────── */
+#body-login .picker-window {
+  background: var(--nxt-card-bg) !important;
+  border: 1px solid var(--color-border-dark) !important;
+  border-radius: var(--border-radius-container) !important;
+  color: var(--color-main-text) !important;
+  box-shadow: 0 8px 40px var(--color-box-shadow) !important;
+  padding: 28px 24px !important;
+}
+
+#body-login .picker-window h2 {
+  color: var(--color-main-text) !important;
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+  margin: 0 0 16px !important;
+}
+
+#body-login .apptoken-link {
+  color: var(--color-primary-element-light-text) !important;
+  font-size: .85rem !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   15. RESPONSIVE — Tablette (481px – 768px)
+────────────────────────────────────────────────────────────────────── */
+@media (min-width: 481px) and (max-width: 768px) {
+  #body-login .guest-box,
+  #body-login .body-login-container {
+    padding: 38px 34px 30px !important;
+    max-width: 400px !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   16. RESPONSIVE — Mobile (≤ 480px)
+────────────────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+
+  /* Cartes — width explicite pour éviter width:100% + margin = overflow */
+  #body-login .guest-box,
+  #body-login .body-login-container {
+    padding: 28px 18px 24px !important;
+    border-radius: 16px !important;
+    width: calc(100% - 32px) !important;
+    max-width: 420px !important;
+    margin: 0 !important;
+  }
+
+  /* Titres */
+  #body-login .guest-box h2,
+  #body-login .guest-box h1 {
+    font-size: 1.15rem !important;
+  }
+
+  #body-login .login-form__headline,
+  #body-login .body-login-container > h3,
+  #body-login .two-factor-selection h3 {
+    font-size: 1.25rem !important;
+  }
+
+  /* Labels */
+  #body-login .input-field__label {
+    font-size: .8rem !important;
+    text-transform: none !important;
+    letter-spacing: 0 !important;
+    font-weight: 500 !important;
+  }
+
+  #body-login .input-field__main-wrapper:focus-within .input-field__label,
+  #body-login .input-field__main-wrapper:has(.input-field__input:not(:placeholder-shown)) .input-field__label {
+    font-size: .7rem !important;
+  }
+
+  #body-login .input-field__main-wrapper {
+    border-radius: 12px !important;
+  }
+
+  #body-login .input-field__input {
+    font-size: .9rem !important;
+    line-height: 1.5 !important;
+  }
+
+  /* Boutons */
+  #body-login .button-vue--vue-primary.button-vue--wide,
+  #body-login .button-vue--wide.button-vue--tertiary:not(.input-field__trailing-button) {
+    padding: 8px 18px !important;
+    font-size: .88rem !important;
+  }
+
+  /* 2FA — provider cards */
+  #body-login .two-factor-provider {
+    padding: 12px 14px !important;
+    gap: 12px !important;
+  }
+
+  #body-login .two-factor-provider img,
+  #body-login .two-factor-provider .two-factor-icon {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    padding: 6px !important;
+    border-radius: 10px !important;
+  }
+
+  #body-login .two-factor-provider h3 {
+    font-size: .85rem !important;
+  }
+
+  /* 2FA — input OTP */
+  #body-login input[type="text"][autocomplete="one-time-code"],
+  #body-login input[name="challenge"],
+  #body-login .two-factor-form input[type="text"] {
+    font-size: 1.3rem !important;
+    letter-spacing: .22em !important;
+    padding: 14px 10px !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   17. RESPONSIVE — Très petit écran (≤ 360px)
+────────────────────────────────────────────────────────────────────── */
+@media (max-width: 360px) {
+  #body-login .guest-box,
+  #body-login .body-login-container {
+    padding: 22px 12px 18px !important;
+    border-radius: 12px !important;
+    width: calc(100% - 24px) !important;
+    max-width: 360px !important;
+    margin: 0 !important;
+  }
+
+  #body-login .input-field__label,
+  #body-login .input-field:has(input) label {
+    font-size: .78rem !important;
+  }
+
+  #body-login input[type="text"][autocomplete="one-time-code"],
+  #body-login input[name="challenge"],
+  #body-login .two-factor-form input[type="text"] {
+    font-size: 1.1rem !important;
+    letter-spacing: .15em !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   18. RESPONSIVE — Paysage mobile (hauteur ≤ 500px)
+────────────────────────────────────────────────────────────────────── */
+@media (max-height: 500px) and (orientation: landscape) {
+  #body-login #wrap,
+  #body-login .wrapper,
+  #body-login .login-wrapper,
+  #body-login main {
+    justify-content: flex-start !important;
+    overflow-y: auto !important;
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+  }
+
+  #body-login .guest-box,
+  #body-login .body-login-container {
+    padding: 18px 32px 16px !important;
+    max-width: 440px !important;
+  }
+
+  /* Logo réduit */
+  #body-login .guest-content img,
+  #body-login .guest-content .logo-icon,
+  #body-login .guest-content svg {
+    max-height: 36px !important;
+    width: auto !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   19. ACCESSIBILITÉ — Mouvement réduit
+   Arrête TOUTES les animations. Bordure statique dégradée en remplacement.
+────────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  #body-login::after {
+    animation: none !important;
+  }
+
+  #body-login .guest-box,
+  #body-login .body-login-container {
+    animation: none !important;
+    border: 2px solid rgba(37, 99, 235, .40) !important;
+    background:
+      linear-gradient(var(--nxt-card-bg), var(--nxt-card-bg)) padding-box,
+      linear-gradient(135deg, var(--nxt-900), var(--nxt-600), var(--nxt-400)) border-box !important;
+  }
+
+  #body-login .guest-content img,
+  #body-login .guest-content .logo-icon,
+  #body-login .guest-content svg {
+    animation: none !important;
+    filter: drop-shadow(0 0 10px rgba(96, 165, 250, .40)) !important;
+  }
+
+  #body-login .guest-content,
+  #body-login .login-box__wrapper {
+    animation: none !important;
+  }
+
+  #body-login .two-factor-provider {
+    transition: background .2s, border-color .2s !important;
+  }
+
+  #body-login .two-factor-provider:hover {
+    transform: none !important;
+  }
+
+  #body-login .two-factor-provider:hover::after {
+    transform: none !important;
+  }
+
+  #body-login .notecard,
+  #body-login .warning-box {
+    animation: none !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+   20. IMPRESSION
+────────────────────────────────────────────────────────────────────── */
+@media print {
+  #body-login::before,
+  #body-login::after { display: none !important; }
+
+  #body-login .guest-box,
+  #body-login .body-login-container {
+    border: 1px solid #999 !important;
+    box-shadow: none !important;
+    animation: none !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+}

@@ -87,6 +87,8 @@ services:
       - nextcloud_data:/var/www/html/data
       - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
       - ./nextcloud-custom.config.php:/var/www/html/config/custom.config.php:ro
+      - ./img:/img:ro
+      - ./nxt-custom.css:/nxt-custom.css:ro
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - NEXTCLOUD_DOMAIN=${NEXTCLOUD_DOMAIN}
