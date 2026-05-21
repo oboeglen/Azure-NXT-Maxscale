@@ -165,7 +165,9 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 | `redis-whiteboard` | `redis:7.4-alpine` | État partagé du whiteboard (Redis Streams) |
 | `minio-console` *(optionnel)* | `ghcr.io/georgmangold/console` | Console web MinIO — accessible via `/s3-console` |
 
-**Ports exposés :** `80` (redirection HTTPS) · `443` (Nextcloud, Collabora, Whiteboard, stats HAProxy sur `/stats`, console MinIO sur `/s3-console` si activée)
+**Ports exposés :** `80` (redirection HTTPS) · `443` (Nextcloud, Collabora, Whiteboard)
+
+> ⚠️ **Options déconseillées en production :** les stats HAProxy (`/stats`) et la console MinIO (`/s3-console`) sont des outils de diagnostic activables lors du déploiement. Ils exposent des informations sensibles sur l'infrastructure (métriques internes, accès direct aux buckets S3) sur l'URL publique de Nextcloud. À réserver à un environnement de test ou à désactiver après usage.
 
 ---
 
@@ -264,6 +266,8 @@ docker run --rm --network storage-net --entrypoint sh minio/mc -c "
 
 ### Console web MinIO (optionnelle)
 
+> ⚠️ **Déconseillée en production.** La console est exposée sur l'URL publique de Nextcloud (`/s3-console`) sans restriction d'IP ni couche réseau supplémentaire. Elle donne accès direct à tous les buckets MinIO avec les identifiants administrateur. À utiliser uniquement en environnement de test ou de diagnostic, et à désactiver ensuite.
+
 Activée lors du déploiement par `deploy.sh` (même principe que les stats HAProxy sur `/stats`). Une fois activée, la console est accessible depuis le navigateur sans exposer de port supplémentaire.
 
 | | |
@@ -275,11 +279,17 @@ Activée lors du déploiement par `deploy.sh` (même principe que les stats HAPr
 
 HAProxy route `/s3-console/*` vers le container `minio-console:9090` en **strippant le préfixe** `/s3-console` avant de forwarder au serveur Go, ce qui évite les erreurs MIME sur les assets statiques du SPA React. La racine `/s3-console` et `/s3-console/` sont automatiquement redirigées vers `/s3-console/login`.
 
-> Pour activer la console sur un déploiement existant, relancer `deploy.sh` — la réponse est sauvegardée dans le fichier de configuration et réutilisée à chaque relance.
+> Pour activer ou désactiver la console sur un déploiement existant, relancer `deploy.sh` — la réponse est sauvegardée dans le fichier de configuration et réutilisée à chaque relance.
 
 ---
 
 ## Sécurité HAProxy
+
+### Stats HAProxy (optionnelles)
+
+> ⚠️ **Déconseillées en production.** Les stats (`/stats`) sont protégées par mot de passe mais restent exposées sur l'URL publique de Nextcloud. Elles révèlent la topologie interne de l'infrastructure (noms des containers, états des backends, métriques réseau). À réserver à un environnement de test ou à désactiver après usage.
+
+Activées lors du déploiement par `deploy.sh`. Accessibles à `https://<NEXTCLOUD_DOMAIN>/stats` avec les identifiants définis à l'installation (`HAPROXY_STATS_PASSWORD`).
 
 ### TLS
 
