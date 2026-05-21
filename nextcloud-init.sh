@@ -66,12 +66,15 @@ occ config:system:set filelocking.ttl       --type integer --value 3600
 
 # 3 seeds fixes — minimum 6 nœuds imposé, node1/node3/node5 existent toujours.
 # Le client découvre la topologie complète depuis un seul seed vivant.
-occ config:system:set redis.cluster seeds 0 --value "redis-node1:6379"
-occ config:system:set redis.cluster seeds 1 --value "redis-node3:6379"
-occ config:system:set redis.cluster seeds 2 --value "redis-node5:6379"
-occ config:system:set redis.cluster password       --value "${REDIS_PASSWORD}"
-occ config:system:set redis.cluster timeout        --type float   --value 1.5
-occ config:system:set redis.cluster read_timeout   --type float   --value 1.5
+# IMPORTANT : "redis cluster seeds N" (espaces) crée $config['redis']['cluster']['seeds'][N]
+# "redis.cluster seeds N" (point) crée $config['redis.cluster']['seeds'][N] — clé littérale
+# que RedisFactory ne lit pas → "Redis cluster config is missing the seeds attribute"
+occ config:system:set redis cluster seeds 0 --value "redis-node1:6379"
+occ config:system:set redis cluster seeds 1 --value "redis-node3:6379"
+occ config:system:set redis cluster seeds 2 --value "redis-node5:6379"
+occ config:system:set redis cluster password       --value "${REDIS_PASSWORD}"
+occ config:system:set redis cluster timeout        --type float   --value 1.5
+occ config:system:set redis cluster read_timeout   --type float   --value 1.5
 
 info "Redis Cluster configuré (seeds : redis-node1, redis-node3, redis-node5)."
 
