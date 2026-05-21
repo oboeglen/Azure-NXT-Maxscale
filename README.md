@@ -395,6 +395,55 @@ docker compose logs -f nextcloud-setup
 
 ---
 
+### Test de charge grandeur nature — PME 500 utilisateurs quotidiens
+
+> Test réalisé sur la configuration de référence **6 FPM · 5 Galera · 6 Redis · 4 MinIO · 3 Collabora · 3 Whiteboard** sur un VPS 7,6 Go RAM (sous-dimensionné vs. production recommandée — 32 Go). k6 v0.55 lancé **depuis le serveur lui-même** : la latence réseau TLS est quasi nulle ; en usage réel, ajouter ~50–150 ms par requête selon la géographie du client.
+
+#### Protocole
+
+| Paramètre | Valeur |
+|-----------|--------|
+| Outil | [k6](https://k6.io) v0.55 |
+| Durée | 1 min ramp-up · 6 min charge soutenue · 1 min ramp-down |
+| VUs peak | **34** (→ ~500 DAU au ratio session 1:15) |
+| Utilisateurs test | 25 comptes PME (`pme_user_01..25`) + fichiers pré-uploadés |
+| Itérations complètes | 980 en 8m30s |
+| Requêtes HTTP totales | 3 911 — 7,68 req/s moyen |
+
+**Scénarios simulés**
+
+| Scénario | VUs | Comportement |
+|----------|:---:|--------------|
+| Sync client WebDAV desktop | 20 | `PROPFIND` · `GET` · `PUT` txt · `PUT` binaire — intervalle 10–30 s |
+| Sessions navigateur | 8 | Login CSRF · Dashboard · Files app · OCS Activity · Upload |
+| Éditeurs Collabora | 4 | WOPI discovery · config richdocuments · upload .odt · save |
+| Utilisateurs Whiteboard | 2 | Création `.whiteboard` · lecture · session 20–50 s |
+
+#### Résultats
+
+| Scénario | avg | p(50) | p(90) | **p(95)** | p(99) | SLA | Statut |
+|---|---:|---:|---:|---:|---:|:---:|:---:|
+| Sessions navigateur | 74 ms | 68 ms | 123 ms | **155 ms** | 243 ms | < 4 s | ✅ |
+| Sync WebDAV | 862 ms | 689 ms | 1 680 ms | **1 980 ms** | 2 660 ms | < 3 s | ✅ |
+| Collabora WOPI | 959 ms | 864 ms | 1 920 ms | **2 160 ms** | 3 010 ms | < 5 s | ✅ |
+| Whiteboard | 904 ms | 930 ms | 1 770 ms | **2 060 ms** | 2 720 ms | < 5 s | ✅ |
+| **Login** (p.m.) | 167 ms | 149 ms | 244 ms | 303 ms | 444 ms | — | — |
+| **Upload fichier** (p.m.) | 449 ms | 392 ms | 694 ms | 764 ms | 1 070 ms | — | — |
+
+**Fiabilité pendant le test**
+
+| Métrique | Valeur |
+|----------|--------|
+| Erreurs HTTP 5xx | **0** |
+| Crashs de conteneurs | **0** |
+| `http_req_failed` (timeouts + resets TLS) | 0,97 % (38 / 3 911) |
+| Données reçues | 45 MB · 88 kB/s |
+| Données envoyées | 3,4 MB · 6,6 kB/s |
+
+**Tous les seuils de performance passent.** La configuration 6 FPM tient le pic PME sans erreur serveur ni crash, y compris sur un VPS limité à 7,6 Go RAM.
+
+---
+
 ### Simulation par nombre de nœuds FPM
 
 > Modèle basé sur les mesures réelles. Rendement décroissant de **88 % par nœud** dû aux ressources partagées (DB, Redis, HAProxy). Avec 5 nœuds Galera (~2 500 TPS en écriture), le goulot DB n'est atteint qu'à partir de **14 nœuds FPM**.
