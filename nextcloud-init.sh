@@ -249,6 +249,23 @@ for app in \
     || warn "$app : non trouvé ou déjà désactivé"
 done
 
+# Purge des cron jobs orphelins — occ app:disable ne les retire pas de oc_jobs,
+# ce qui génère des warnings QueryNotFoundException à chaque exécution du cron.
+php -r "
+require_once '/var/www/html/lib/base.php';
+\$db = \OC::$server->getDatabaseConnection();
+\$prefixes = [
+  'OCA\\\AppAPI\\\\', 'OCA\\\FirstRunWizard\\\\', 'OCA\\\NextcloudAnnouncements\\\\',
+  'OCA\\\Support\\\\', 'OCA\\\UpdateNotification\\\\', 'OCA\\\RelatedResources\\\\',
+  'OCA\\\Recommendations\\\\', 'OCA\\\SurveyClient\\\\',
+];
+\$total = 0;
+foreach (\$prefixes as \$p) {
+  \$total += \$db->executeStatement('DELETE FROM oc_jobs WHERE class LIKE ?', [\$p . '%']);
+}
+echo '[setup] ' . \$total . ' cron job(s) orphelin(s) supprimé(s)' . PHP_EOL;
+" 2>/dev/null || warn "Nettoyage des cron jobs orphelins ignoré"
+
 # ---------------------------------------------------------------------------
 # 9. Thème NXT — Logos, fond d'écran, favicon, CSS personnalisé
 # ---------------------------------------------------------------------------
