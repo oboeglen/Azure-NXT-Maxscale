@@ -384,8 +384,11 @@ occ db:convert-filecache-bigint --no-interaction
 step "Purge des logs de démarrage (erreurs Redis au boot)"
 log_file=$(${OCC_BIN} config:system:get logfile 2>/dev/null || echo "/var/www/html/data/nextcloud.log")
 if [ -f "${log_file}" ]; then
-    : > "${log_file}"
-    info "Journal Nextcloud purgé."
+    if : > "${log_file}" 2>/dev/null; then
+        info "Journal Nextcloud purgé."
+    else
+        warn "Journal Nextcloud : permission refusée — ignoré."
+    fi
 fi
 
 # ---------------------------------------------------------------------------
