@@ -9,8 +9,8 @@ GSTATE="/var/lib/mysql/grastate.dat"
 
 if [ ! -f "$GSTATE" ] || grep -qs "safe_to_bootstrap: 1" "$GSTATE"; then
     echo "[galera] Bootstrap — safe_to_bootstrap=1 ou premier démarrage"
-    exec docker-entrypoint.sh mysqld --wsrep-new-cluster
+    exec docker-entrypoint.sh --wsrep-new-cluster
 else
     echo "[galera] Rejoindre le cluster (safe_to_bootstrap=0)"
-    exec docker-entrypoint.sh mysqld
+    exec docker-entrypoint.sh mariadbd
 fi
