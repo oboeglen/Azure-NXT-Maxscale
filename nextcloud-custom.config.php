@@ -11,4 +11,8 @@ $CONFIG = [
 
   // SSL terminé par HAProxy — forcer HTTPS dans les URLs générées par Nextcloud
   'overwriteprotocol' => 'https',
+
+  // Niveau de log : 3 = Erreur uniquement (supprime les Avertissements PHP)
+  // 0=Débogage 1=Info 2=Avertissement 3=Erreur 4=Fatal
+  'loglevel' => 3,
 ];
