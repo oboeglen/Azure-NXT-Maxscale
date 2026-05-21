@@ -400,8 +400,7 @@ Avec **5 nœuds Galera**, le goulot d'étranglement en écriture (~2 500 TPS) n'
 | 🏦 **Entreprise** | 9–12 | 5–7 | 6–8 | 48–64 Go | 3 000 – 3 600 |
 | 🏛️ **Grande organisation** | 15–20 | 7 | 8 | 64–80 Go | ~4 000 |
 
-> ⭐ Configuration actuelle  
-> Pour tous les profils **Entreprise et au-delà**, prévoir des disques physiques dédiés pour MinIO (`MINIO_DISKS=4+`) et augmenter `innodb_buffer_pool_size` dans les configs Galera.
+> ⭐ Configuration de référence utilisée pour les benchmarks
 
 ---
 
