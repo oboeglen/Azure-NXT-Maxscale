@@ -2023,8 +2023,24 @@ CREDS
   [[ "$HAPROXY_STATS" == "yes" ]] && \
     stats_line="Stats HAProxy  : https://${NC_DOMAIN}/stats  (admin / ${GEN_HAPROXY_STATS_PASS})"
 
-  local I=66
-  local _B; printf -v _B '%*s' 68 ''; _B="${_B// /═}"
+  # Largeur dynamique : s'adapte à la ligne la plus longue (mot de passe, domaine, etc.)
+  local I=0 _lw
+  for _line in \
+      "✓  DÉPLOIEMENT TERMINÉ AVEC SUCCÈS" \
+      "URL      : https://${NC_DOMAIN}" \
+      "Password : ${GEN_NC_ADMIN_PASS}" \
+      "Collabora  : https://${COLLAB_DOMAIN}" \
+      "Whiteboard : https://${WB_DOMAIN}" \
+      "$stats_line" \
+      "Nextcloud ${NC_NODES}×FPM + ${NC_NODES}×nginx  │  MariaDB ${MARIADB_NODES} nœuds  │  Redis ${REDIS_NODES} nœuds" \
+      "MinIO ${MINIO_NODES}×${MINIO_DISKS}  │  Collabora ${COLLAB_NODES} nœuds  │  Whiteboard ${WB_NODES} nœuds" \
+      "Credentials : ${creds_file}" \
+      "APRÈS UNE PANNE NŒUD MINIO — commande de réparation :" \
+      "docker run --rm --network storage-net --entrypoint sh minio/mc \\"; do
+    _lw=$(_vlen "$_line")
+    (( _lw > I )) && I=$_lw
+  done
+  local _B; printf -v _B '%*s' $(( I + 2 )) ''; _B="${_B// /═}"
   local _TOP="╔${_B}╗" _SEP="╠${_B}╣" _BOT="╚${_B}╝"
   _sl() { printf '║  '; _rpad "$1" $I; printf '║\n'; }
 
