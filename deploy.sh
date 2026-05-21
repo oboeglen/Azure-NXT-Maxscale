@@ -1342,9 +1342,11 @@ MINIONODE
         until mc alias set local http://minio-node1:9000 \${MINIO_ACCESS_KEY} \${MINIO_SECRET_KEY} --quiet 2>/dev/null; do
           echo 'Attente MinIO...'; sleep 5;
         done;
+        i=0;
         until mc ls local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} >/dev/null 2>&1; do
-          mc mb --ignore-existing local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null || true;
-          echo 'Attente bucket \${NEXTCLOUD_S3_BUCKET:-nextcloud}...'; sleep 5;
+          i=\$((i+1));
+          [ \$i -ge 30 ] && echo 'Timeout bucket - versioning ignoré' && exit 0;
+          echo \"Attente bucket \${NEXTCLOUD_S3_BUCKET:-nextcloud} (\${i}/30)...\"; sleep 5;
         done;
         mc version enable local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null && echo 'Versioning actif' || echo 'Erreur versioning';
         mc ilm rule add --expire-delete-marker local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} 2>/dev/null || true;
