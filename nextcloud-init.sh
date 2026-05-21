@@ -249,20 +249,30 @@ done
 
 # Purge des cron jobs orphelins — occ app:disable ne les retire pas de oc_jobs,
 # ce qui génère des warnings QueryNotFoundException à chaque exécution du cron.
-php -r "
+# Heredoc single-quoté : aucune expansion bash, LEFT() évite les pb d'échappement LIKE+backslash.
+php <<'PHPCLEAN' 2>/dev/null || warn "Nettoyage des cron jobs orphelins ignoré"
+<?php
 require_once '/var/www/html/lib/base.php';
-\$db = \OC::$server->getDatabaseConnection();
-\$prefixes = [
-  'OCA\\\AppAPI\\\\', 'OCA\\\FirstRunWizard\\\\', 'OCA\\\NextcloudAnnouncements\\\\',
-  'OCA\\\Support\\\\', 'OCA\\\UpdateNotification\\\\', 'OCA\\\RelatedResources\\\\',
-  'OCA\\\Recommendations\\\\', 'OCA\\\SurveyClient\\\\',
+$db = \OC::$server->getDatabaseConnection();
+$prefixes = [
+    'OCA\AppAPI\\',
+    'OCA\FirstRunWizard\\',
+    'OCA\NextcloudAnnouncements\\',
+    'OCA\Support\\',
+    'OCA\UpdateNotification\\',
+    'OCA\RelatedResources\\',
+    'OCA\Recommendations\\',
+    'OCA\SurveyClient\\',
 ];
-\$total = 0;
-foreach (\$prefixes as \$p) {
-  \$total += \$db->executeStatement('DELETE FROM oc_jobs WHERE class LIKE ?', [\$p . '%']);
+$total = 0;
+foreach ($prefixes as $p) {
+    $total += (int)$db->executeStatement(
+        'DELETE FROM oc_jobs WHERE LEFT(class, ?) = ?',
+        [strlen($p), $p]
+    );
 }
-echo '[setup] ' . \$total . ' cron job(s) orphelin(s) supprimé(s)' . PHP_EOL;
-" 2>/dev/null || warn "Nettoyage des cron jobs orphelins ignoré"
+echo '[setup] ' . $total . ' cron job(s) orphelin(s) supprimé(s)' . PHP_EOL;
+PHPCLEAN
 
 # ---------------------------------------------------------------------------
 # 9. Thème NXT — Logos, fond d'écran, favicon, CSS personnalisé
