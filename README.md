@@ -18,7 +18,7 @@
 
 <div align="center">
 
-![Page de connexion NXT](img/login-preview.png)
+![Page de connexion NXT](img/login-preview-v2.png)
 
 *Thème NXT — page de connexion avec fond sombre, bordure cônique animée et logo personnalisé*
 
