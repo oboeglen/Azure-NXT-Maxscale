@@ -85,12 +85,11 @@ info "Proxies de confiance configurés (172.10.0.0/24)."
 # ---------------------------------------------------------------------------
 step "Installation Collabora Online (richdocuments)"
 
-if occ app:list --output=plain 2>/dev/null | grep -qE '^richdocuments$|^\s*richdocuments\s'; then
-    warn "richdocuments déjà présent — activation"
-    occ app:enable richdocuments || true
-else
+if ! ${OCC_BIN} app:enable richdocuments 2>/dev/null; then
     echo "[setup] Téléchargement depuis le Nextcloud App Store..."
     occ app:install richdocuments
+else
+    info "richdocuments déjà présent — activé"
 fi
 
 occ config:app:set richdocuments wopi_url        --value "https://${COLLABORA_DOMAIN}"
@@ -105,12 +104,11 @@ info "Collabora Online configuré → https://${COLLABORA_DOMAIN}"
 # ---------------------------------------------------------------------------
 step "Installation Nextcloud Whiteboard"
 
-if occ app:list --output=plain 2>/dev/null | grep -qE '^whiteboard$|^\s*whiteboard\s'; then
-    warn "whiteboard déjà présent — activation"
-    occ app:enable whiteboard || true
-else
+if ! ${OCC_BIN} app:enable whiteboard 2>/dev/null; then
     echo "[setup] Téléchargement depuis le Nextcloud App Store..."
     occ app:install whiteboard
+else
+    info "whiteboard déjà présent — activé"
 fi
 
 occ config:app:set whiteboard collabBackendUrl --value "https://${WHITEBOARD_DOMAIN}"
@@ -275,12 +273,11 @@ step "Configuration du thème NXT"
 occ app:enable theming || true
 
 # Installer et activer Custom CSS
-if occ app:list --output=plain 2>/dev/null | grep -qE '^theming_customcss$|^\s*theming_customcss\s'; then
-    warn "theming_customcss déjà présent — activation"
-    occ app:enable theming_customcss || true
-else
+if ! ${OCC_BIN} app:enable theming_customcss 2>/dev/null; then
     echo "[setup] Installation de theming_customcss depuis l'App Store..."
     occ app:install theming_customcss
+else
+    info "theming_customcss déjà présent — activé"
 fi
 
 # Copier les assets vers /tmp pour éviter les problèmes d'encodage des noms de fichiers
