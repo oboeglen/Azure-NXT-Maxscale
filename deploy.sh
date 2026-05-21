@@ -524,14 +524,41 @@ ask_haproxy() {
 
 # --- show_recap ---
 show_load_estimate() {
-  local concurrent=$(( NC_NODES * 50 ))
-  local active=$(( NC_NODES * 300 ))
-  local total=$(( NC_NODES * 3000 ))
-  local req_s=$(( NC_NODES * 30 ))
-  local req_min=$(( req_s * 60 ))
+  # Modèle basé sur les benchmarks réels du README.
+  # Rendement décroissant à 88 % par nœud FPM (ressources partagées : DB, Redis, HAProxy).
+  # Référence mesurée : 6 FPM → 44 req/s PHP, P99 1 154 ms, 0 erreur / 1 900 requêtes.
+  local req_s_php req_s_light concurrent active total p99_php ram_total
+
+  # req/s PHP : somme géométrique de raison 0.88 à partir de 10 req/s pour 1 nœud
+  req_s_php=$(awk -v n="$NC_NODES" \
+    'BEGIN{s=0; for(i=0;i<n;i++) s+=10*0.88^i; printf "%.0f", s}')
+
+  # req/s léger (/status.php, statiques) ≈ 4.15× le débit PHP
+  req_s_light=$(( req_s_php * 415 / 100 ))
+
+  # Concurrent soutenable ≈ req/s PHP × 0.91 (ajusté sur données réelles)
+  concurrent=$(( req_s_php * 91 / 100 ))
+  [[ $concurrent -lt 1 ]] && concurrent=1
+
+  # Actifs = concurrent × 6 (fenêtre de session 5 min)
+  active=$(( concurrent * 6 ))
+
+  # Total = actifs × 10 (10 % des utilisateurs connectés au pic)
+  total=$(( active * 10 ))
+
+  # P99 PHP estimé : 3 381 ms × n^-0.6 (calé sur mesures réelles)
+  p99_php=$(awk -v n="$NC_NODES" 'BEGIN{printf "%.0f", 3381 * n^(-0.6)}')
+
+  # RAM : 3 Go/nœud FPM + overhead dynamique (1.5 Go/Galera, 0.125/Redis,
+  #        0.375/MinIO, 0.75/Collabora, 0.1/Whiteboard, 0.07 fixe)
+  ram_total=$(awk \
+    -v nc="$NC_NODES" -v db="$MARIADB_NODES" -v redis="$REDIS_NODES" \
+    -v minio="$MINIO_NODES" -v collab="$COLLAB_NODES" -v wb="$WB_NODES" \
+    'BEGIN{printf "%.0f",
+       nc*3 + db*1.5 + redis*0.125 + minio*0.375 + collab*0.75 + wb*0.1 + 0.07}')
 
   local write_tps=1500
-  (( MARIADB_NODES >= 5 )) && write_tps=2500
+  (( MARIADB_NODES >= 5 )) && write_tps=2500   # mesuré : 5 nœuds → ~2 500 TPS
   (( MARIADB_NODES >= 7 )) && write_tps=3500
 
   local redis_masters=$(( REDIS_NODES / 2 ))
@@ -541,15 +568,18 @@ show_load_estimate() {
   local minio_tol_nodes=$(( MINIO_NODES / 2 ))
 
   box "Estimation de charge" \
-    "Utilisateurs simultanés  : ~${concurrent}  (${NC_NODES} FPM × 50 workers)" \
-    "Sessions actives         : ~${active}  (fenêtre 5 min)" \
+    "Utilisateurs simultanés  : ~${concurrent}  (rendement 88 %/nœud, mesuré)" \
+    "Sessions actives         : ~${active}  (fenêtre de session 5 min)" \
     "Base totale confortable  : ~${total}  (10 % connectés au pic)" \
-    "Débit HTTP               : ~${req_s} req/s  (~${req_min} req/min)" \
+    "Débit PHP (login/API)    : ~${req_s_php} req/s  (réf. : 44 req/s à 6 nœuds)" \
+    "Débit léger (/status…)   : ~${req_s_light} req/s" \
+    "P99 PHP estimé           : ~${p99_php} ms" \
+    "RAM recommandée          : ~${ram_total} Go" \
     "Écritures MariaDB        : ~${write_tps} TPS  (Galera ${MARIADB_NODES} nœuds)" \
-    "Cache Redis              : ${redis_masters} masters  >500 000 ops/s" \
+    "Cache Redis              : ${redis_masters} masters  > 500 000 ops/s" \
     "Tolérance MinIO          : ${minio_tol_nodes} nœud(s) ou ${minio_tol_drives} disques perdables" \
     "" \
-    "Hypothèses : PHP_MEMORY_LIMIT=1G · 50 workers/FPM · 10 % pic"
+    "Données réelles : 0 erreur / 1 900 req · 150 concurrent · max 247 req/s"
 }
 
 show_recap() {
@@ -796,6 +826,8 @@ HAPROXY
       - nextcloud_data:/var/www/html/data
       - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
       - ./nextcloud-custom.config.php:/var/www/html/config/custom.config.php:ro
+      - ./img:/img:ro
+      - ./nxt-custom.css:/nxt-custom.css:ro
     environment:
       - REDIS_PASSWORD=\${REDIS_PASSWORD}
       - NEXTCLOUD_DOMAIN=\${NEXTCLOUD_DOMAIN}
