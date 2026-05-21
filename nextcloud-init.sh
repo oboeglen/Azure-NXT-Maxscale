@@ -115,6 +115,7 @@ fi
 
 occ config:app:set whiteboard collabBackendUrl --value "https://${WHITEBOARD_DOMAIN}"
 occ config:app:set whiteboard jwt_secret_key   --value "${WHITEBOARD_JWT_SECRET}"
+occ config:app:set whiteboard jwt_expiry       --value "86400"
 
 info "Whiteboard configuré → https://${WHITEBOARD_DOMAIN}"
 
