@@ -46,6 +46,7 @@
 - [Configuration Nextcloud](#configuration-nextcloud)
 - [Haute disponibilité](#haute-disponibilité)
 - [Stockage objet MinIO](#stockage-objet-minio)
+  - [Console web MinIO](#console-web-minio-optionnelle)
 - [Sécurité HAProxy](#sécurité-haproxy)
 - [Opérations courantes](#opérations-courantes)
 - [Déploiement manuel](#déploiement-manuel)
@@ -162,8 +163,9 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 | `collabora-node1..N` | `collabora/code:latest` | Édition bureautique collaborative en ligne |
 | `whiteboard-node1..N` | `ghcr.io/nextcloud-releases/whiteboard:stable` | Tableau blanc collaboratif temps réel |
 | `redis-whiteboard` | `redis:7.4-alpine` | État partagé du whiteboard (Redis Streams) |
+| `minio-console` *(optionnel)* | `ghcr.io/georgmangold/console` | Console web MinIO — accessible via `/s3-console` |
 
-**Ports exposés :** `80` (redirection HTTPS) · `443` (Nextcloud, Collabora, Whiteboard, stats HAProxy sur `/stats`)
+**Ports exposés :** `80` (redirection HTTPS) · `443` (Nextcloud, Collabora, Whiteboard, stats HAProxy sur `/stats`, console MinIO sur `/s3-console` si activée)
 
 ---
 
@@ -259,6 +261,21 @@ docker run --rm --network storage-net --entrypoint sh minio/mc -c "
   mc admin heal -r r/nextcloud
 "
 ```
+
+### Console web MinIO (optionnelle)
+
+Activée lors du déploiement par `deploy.sh` (même principe que les stats HAProxy sur `/stats`). Une fois activée, la console est accessible depuis le navigateur sans exposer de port supplémentaire.
+
+| | |
+|---|---|
+| **URL** | `https://<NEXTCLOUD_DOMAIN>/s3-console/login` |
+| **Login** | Clé d'accès MinIO (`MINIO_ACCESS_KEY`) |
+| **Mot de passe** | Clé secrète MinIO (`MINIO_SECRET_KEY`) |
+| **Image** | [`ghcr.io/georgmangold/console`](https://github.com/georgmangold/console) |
+
+HAProxy route `/s3-console/*` vers le container `minio-console:9090` en **strippant le préfixe** `/s3-console` avant de forwarder au serveur Go, ce qui évite les erreurs MIME sur les assets statiques du SPA React. La racine `/s3-console` et `/s3-console/` sont automatiquement redirigées vers `/s3-console/login`.
+
+> Pour activer la console sur un déploiement existant, relancer `deploy.sh` — la réponse est sauvegardée dans le fichier de configuration et réutilisée à chaque relance.
 
 ---
 
