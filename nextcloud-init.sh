@@ -293,21 +293,15 @@ PHPCLEAN
 # ---------------------------------------------------------------------------
 step "Configuration du thème NXT"
 
-# Attendre que le cluster Redis soit pleinement connecté avant de lancer
-# les commandes theming (qui flushe le cache Redis). Sans ce wait, le
-# cluster récemment initialisé peut encore dropper les connexions → "went away".
+# Attendre que le cluster Redis soit joignable avant les commandes theming.
+# Utilise fsockopen (sans bootstrap Nextcloud) pour éviter le bug $server unbound.
 info "Vérification de la connectivité Redis..."
 redis_ok=0
 for _attempt in $(seq 1 20); do
-    if php -r "
-        require_once '/var/www/html/lib/base.php';
-        try {
-            \$f = \OC::$server->getMemCacheFactory();
-            \$c = \$f->createDistributed('healthcheck');
-            \$c->set('ping', 1, 10);
-            echo 'ok';
-        } catch (\Exception \$e) { exit(1); }
-    " 2>/dev/null | grep -q 'ok'; then
+    if php -r '
+        $fp = @fsockopen("redis-node1", 6379, $errno, $errstr, 3);
+        if ($fp) { fclose($fp); echo "ok"; }
+    ' 2>/dev/null | grep -q 'ok'; then
         redis_ok=1
         break
     fi
