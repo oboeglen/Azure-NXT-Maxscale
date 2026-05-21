@@ -523,6 +523,35 @@ ask_haproxy() {
 }
 
 # --- show_recap ---
+show_load_estimate() {
+  local concurrent=$(( NC_NODES * 50 ))
+  local active=$(( NC_NODES * 300 ))
+  local total=$(( NC_NODES * 3000 ))
+  local req_s=$(( NC_NODES * 30 ))
+  local req_min=$(( req_s * 60 ))
+
+  local write_tps=1500
+  (( MARIADB_NODES >= 5 )) && write_tps=2500
+  (( MARIADB_NODES >= 7 )) && write_tps=3500
+
+  local redis_masters=$(( REDIS_NODES / 2 ))
+
+  local minio_total=$(( MINIO_NODES * MINIO_DISKS ))
+  local minio_tol_drives=$(( minio_total / 2 ))
+  local minio_tol_nodes=$(( MINIO_NODES / 2 ))
+
+  box "Estimation de charge" \
+    "Utilisateurs simultanés  : ~${concurrent}  (${NC_NODES} FPM × 50 workers)" \
+    "Sessions actives         : ~${active}  (fenêtre 5 min)" \
+    "Base totale confortable  : ~${total}  (10 % connectés au pic)" \
+    "Débit HTTP               : ~${req_s} req/s  (~${req_min} req/min)" \
+    "Écritures MariaDB        : ~${write_tps} TPS  (Galera ${MARIADB_NODES} nœuds)" \
+    "Cache Redis              : ${redis_masters} masters  >500 000 ops/s" \
+    "Tolérance MinIO          : ${minio_tol_nodes} nœud(s) ou ${minio_tol_drives} disques perdables" \
+    "" \
+    "Hypothèses : PHP_MEMORY_LIMIT=1G · 50 workers/FPM · 10 % pic"
+}
+
 show_recap() {
   echo ""
   box "Récapitulatif de votre configuration" \
@@ -534,6 +563,8 @@ show_recap() {
     "Redis Cluster  : ${REDIS_NODES} nœuds" \
     "MinIO         : ${MINIO_NODES} nœuds × ${MINIO_DISKS} disques (mode: ${MINIO_MODE})" \
     "Stats HAProxy  : ${HAPROXY_STATS}"
+
+  show_load_estimate
 
   echo ""
   prompt_yn "Confirmer et lancer la génération ?" "Y" || die "Annulé par l'utilisateur"
