@@ -405,10 +405,16 @@ docker compose logs -f nextcloud-setup
 |-----------|--------|
 | Outil | [k6](https://k6.io) v0.55 |
 | Durée | 1 min ramp-up · 6 min charge soutenue · 1 min ramp-down |
-| VUs peak | **34** (→ ~500 DAU au ratio session 1:15) |
-| Utilisateurs test | 25 comptes PME (`pme_user_01..25`) + fichiers pré-uploadés |
+| VUs peak | **34** |
+| Comptes de test | 25 (`pme_user_01..25`) en rotation parmi les VUs |
 | Itérations complètes | 980 en 8m30s |
 | Requêtes HTTP totales | 3 911 — 7,68 req/s moyen |
+
+> **Pourquoi 34 VUs représentent ~500 utilisateurs quotidiens**
+>
+> Un VU (Virtual User) simule une **session concurrente** avec des temps de réflexion réalistes (10–30 s entre requêtes), ce qui reproduit le comportement d'un humain. 500 DAU (Daily Active Users) ne sont jamais tous connectés simultanément : en pratique, le pic de concurrence dans une PME représente 5–10 % des DAU, soit ~35–50 sessions actives au même moment. Le ratio ici est **1 VU : ~15 DAU**.
+>
+> Les **25 comptes** ne limitent pas la représentativité : la charge serveur (PHP-FPM, Galera, Redis, MinIO) est déterminée par le nombre de **requêtes concurrentes**, pas par le nombre de comptes distincts en base. Chaque VU pioche un compte au hasard dans le pool ; plusieurs VUs peuvent utiliser le même compte simultanément, ce qui est plus agressif sur les verrous de fichiers Nextcloud qu'en usage réel — les résultats sont donc conservateurs.
 
 **Scénarios simulés**
 
