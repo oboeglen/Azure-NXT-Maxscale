@@ -574,6 +574,22 @@ ask_haproxy() {
   fi
 }
 
+# --- ask_minio_console ---
+ask_minio_console() {
+  step "Console MinIO (accessible via https://DOMAINE/s3-console)"
+  echo ""
+  echo -e "  ${C_WHITE}Interface web pour gérer les buckets, utilisateurs et versioning MinIO.${C_RESET}"
+  echo -e "  ${C_GRAY}Authentification : identifiants MinIO (MINIO_ACCESS_KEY / MINIO_SECRET_KEY).${C_RESET}"
+  echo ""
+  if prompt_yn "Activer la console MinIO ?" "N"; then
+    MINIO_CONSOLE="yes"
+    info "Console MinIO activée — accessible via /s3-console"
+  else
+    MINIO_CONSOLE="no"
+    info "Console MinIO désactivée"
+  fi
+}
+
 # --- show_recap ---
 show_load_estimate() {
   # Modèle basé sur les benchmarks réels du README.
@@ -644,7 +660,8 @@ show_recap() {
     "MariaDB Galera : ${MARIADB_NODES} nœuds" \
     "Redis Cluster  : ${REDIS_NODES} nœuds" \
     "MinIO         : ${MINIO_NODES} nœuds × ${MINIO_DISKS} disques (mode: ${MINIO_MODE})" \
-    "Stats HAProxy  : ${HAPROXY_STATS}"
+    "Stats HAProxy  : ${HAPROXY_STATS}" \
+    "Console MinIO  : ${MINIO_CONSOLE}"
 
   show_load_estimate
 
@@ -691,6 +708,7 @@ save_answers() {
     printf 'MINIO_MODE="%s"\n'   "$MINIO_MODE"
     printf 'MINIO_BYPASS="%s"\n' "$MINIO_BYPASS"
     printf 'HAPROXY_STATS="%s"\n' "$HAPROXY_STATS"
+    printf 'MINIO_CONSOLE="%s"\n' "$MINIO_CONSOLE"
     printf 'CERTBOT_STAGING="%s"\n' "$CERTBOT_STAGING"
     declare -p MINIO_PATHS | sed 's/^declare -A/declare -gA/'
   } > "$ANSWERS_CACHE"
@@ -1338,6 +1356,36 @@ MINIONODE
         condition: service_healthy
 MINIOINIT
 
+  # ── minio-console (optionnel) ───────────────────────────────────────────
+  if [[ "$MINIO_CONSOLE" == "yes" ]]; then
+    cat >> "$dest" <<MCONSOLE
+
+  minio-console:
+    image: ghcr.io/georgmangold/console:latest
+    container_name: minio-console
+    restart: always
+    expose:
+      - "9090"
+    environment:
+      - CONSOLE_MINIO_SERVER=http://haproxy:9000
+      - CONSOLE_MINIO_REGION=us-east-1
+      - CONSOLE_SUBPATH=/s3-console
+      - CONSOLE_PORT=9090
+    networks:
+      - storage-net
+      - next-net
+    depends_on:
+      minio-node1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/s3-console/login >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+MCONSOLE
+  fi
+
   # ── Collabora nodes (dynamic) ───────────────────────────────────────────
   for i in $(seq 1 "$COLLAB_NODES"); do
     local collab_hc=""
@@ -1626,6 +1674,14 @@ patch_haproxy() {
   # Supprimer le bloc stats de frontend https si désactivé (entre les markers BEGIN/END_STATS)
   if [[ "$HAPROXY_STATS" == "no" ]]; then
     awk '/# BEGIN_STATS/{skip=1} /# END_STATS/{skip=0; next} !skip{print}' \
+      "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  fi
+
+  # Supprimer les blocs console MinIO si désactivée
+  if [[ "$MINIO_CONSOLE" != "yes" ]]; then
+    awk '/# BEGIN_MINIO_CONSOLE$/{skip=1} /# END_MINIO_CONSOLE$/{skip=0; next} !skip{print}' \
+      "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+    awk '/# BEGIN_MINIO_CONSOLE_BACKEND/{skip=1} /# END_MINIO_CONSOLE_BACKEND/{skip=0; next} !skip{print}' \
       "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
   fi
 
@@ -2074,6 +2130,10 @@ CREDS
   [[ "$HAPROXY_STATS" == "yes" ]] && \
     stats_line="Stats HAProxy  : https://${NC_DOMAIN}/stats  (admin / ${GEN_HAPROXY_STATS_PASS})"
 
+  local console_line="Console MinIO  : désactivée"
+  [[ "$MINIO_CONSOLE" == "yes" ]] && \
+    console_line="Console MinIO  : https://${NC_DOMAIN}/s3-console  (login: MINIO_ACCESS_KEY / MINIO_SECRET_KEY)"
+
   # Largeur dynamique : s'adapte à la ligne la plus longue (mot de passe, domaine, etc.)
   local I=0 _lw
   for _line in \
@@ -2083,6 +2143,7 @@ CREDS
       "Collabora  : https://${COLLAB_DOMAIN}" \
       "Whiteboard : https://${WB_DOMAIN}" \
       "$stats_line" \
+      "$console_line" \
       "Nextcloud ${NC_NODES}×FPM + ${NC_NODES}×nginx  │  MariaDB ${MARIADB_NODES} nœuds  │  Redis ${REDIS_NODES} nœuds" \
       "MinIO ${MINIO_NODES}×${MINIO_DISKS}  │  Collabora ${COLLAB_NODES} nœuds  │  Whiteboard ${WB_NODES} nœuds" \
       "Credentials : ${creds_file}" \
@@ -2109,6 +2170,7 @@ CREDS
   _sl "Collabora  : https://${COLLAB_DOMAIN}"
   _sl "Whiteboard : https://${WB_DOMAIN}"
   _sl "$stats_line"
+  _sl "$console_line"
   echo "$_SEP"
   _sl "INFRASTRUCTURE"
   _sl "Nextcloud ${NC_NODES}×FPM + ${NC_NODES}×nginx  │  MariaDB ${MARIADB_NODES} nœuds  │  Redis ${REDIS_NODES} nœuds"
@@ -2162,6 +2224,7 @@ main() {
     ask_nodes
     ask_minio
     ask_haproxy
+    ask_minio_console
     ask_cert_mode
   fi
   show_recap
