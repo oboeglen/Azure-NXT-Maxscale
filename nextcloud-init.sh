@@ -190,7 +190,6 @@ step "Paramètres système"
 occ config:system:set default_language    --value 'fr'
 occ config:system:set default_locale      --value 'fr_FR'
 occ config:system:set default_phone_region --value 'FR'
-occ config:system:set loglevel            --type integer --value 2
 occ config:system:set maintenance_window_start --type integer --value 1
 
 # Vider le dossier skeleton — aucun fichier exemple créé pour les nouveaux comptes
@@ -202,6 +201,9 @@ occ config:system:set allow_local_remote_servers --type boolean --value true
 
 occ config:system:set upgrade.disable-web      --type boolean --value true
 occ config:system:set simpleSignUpLink.shown   --type boolean --value false
+
+# Masquer les liens Aide et Confidentialité dans le menu utilisateur
+occ config:system:set knowledgebaseenabled --type boolean --value false
 
 # Rotation des logs à 100 Mo (évite de remplir le disque)
 occ config:system:set log_rotate_size --type integer --value 104857600
@@ -240,7 +242,8 @@ for app in \
   support \
   survey_client \
   related_resources \
-  recommendations; do
+  recommendations \
+  updatenotification; do
   ${OCC_BIN} app:disable "$app" 2>/dev/null \
     && info "$app désactivé" \
     || warn "$app : non trouvé ou déjà désactivé"
@@ -270,6 +273,7 @@ cp "/img/Arrière plan.webp"            /tmp/nxt-background.webp
 cp "/img/Favicon.png"                  /tmp/nxt-favicon.png
 
 # Appliquer le thème (couleur primaire + slogan + images)
+occ theming:config name       "NXT Maxscale"
 occ theming:config color      "#3a3a3c"
 occ theming:config slogan     "Infrastructure Nextcloud HA"
 occ theming:config logo        /tmp/nxt-logo.png
