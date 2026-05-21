@@ -293,22 +293,33 @@ PHPCLEAN
 # ---------------------------------------------------------------------------
 step "Configuration du thème NXT"
 
-# Attendre que le cluster Redis soit joignable avant les commandes theming.
-# Utilise fsockopen (sans bootstrap Nextcloud) pour éviter le bug $server unbound.
-info "Vérification de la connectivité Redis..."
+# Attendre que le cluster Redis soit pleinement opérationnel (cluster_state:ok).
+# fsockopen ne suffit pas — le port peut être ouvert mais le cluster en LOADING.
+info "Attente cluster Redis (cluster_state:ok)..."
 redis_ok=0
-for _attempt in $(seq 1 20); do
-    if php -r '
-        $fp = @fsockopen("redis-node1", 6379, $errno, $errstr, 3);
-        if ($fp) { fclose($fp); echo "ok"; }
-    ' 2>/dev/null | grep -q 'ok'; then
+for _attempt in $(seq 1 30); do
+    # Interroge CLUSTER INFO via socket raw (pas de PHP Redis, pas de bootstrap NC)
+    _state=$(php -r '
+        $fp = @fsockopen("redis-node1", 6379, $e, $m, 5);
+        if (!$fp) { exit(1); }
+        $pass = getenv("REDIS_PASSWORD");
+        fwrite($fp, "*2\r\n$4\r\nAUTH\r\n$" . strlen($pass) . "\r\n" . $pass . "\r\n");
+        fgets($fp, 128);
+        fwrite($fp, "*2\r\n$7\r\nCLUSTER\r\n$4\r\nINFO\r\n");
+        $buf = ""; $lines = 0;
+        while (!feof($fp) && $lines < 30) { $buf .= fgets($fp, 256); $lines++; }
+        fclose($fp);
+        echo strpos($buf, "cluster_state:ok") !== false ? "ok" : "loading";
+    ' 2>/dev/null)
+    if [ "${_state}" = "ok" ]; then
         redis_ok=1
+        info "Redis cluster opérationnel (tentative ${_attempt})"
         break
     fi
-    warn "Redis pas encore prêt (tentative ${_attempt}/20), attente 5s..."
+    warn "Redis cluster pas encore ok (tentative ${_attempt}/30, état: ${_state:-unreachable}), attente 5s..."
     sleep 5
 done
-[ $redis_ok -eq 0 ] && warn "Redis non confirmé — theming continuera quand même"
+[ $redis_ok -eq 0 ] && warn "Redis cluster non confirmé après 150s — theming continuera"
 
 # S'assurer que l'app theming est active (activée par défaut)
 occ app:enable theming || true
@@ -327,17 +338,19 @@ cp "/img/Logo barre de navigation.png" /tmp/nxt-logoheader.png
 cp "/img/Arrière plan.webp"            /tmp/nxt-background.webp
 cp "/img/Favicon.png"                  /tmp/nxt-favicon.png
 
-# Appliquer le thème (couleur primaire + slogan + images)
-occ theming:config name       "NXT Maxscale"
-occ theming:config color      "#3a3a3c"
-occ theming:config slogan     "Infrastructure Nextcloud HA"
-occ theming:config logo        /tmp/nxt-logo.png
-occ theming:config logoheader  /tmp/nxt-logoheader.png
-occ theming:config background  /tmp/nxt-background.webp
-occ theming:config favicon     /tmp/nxt-favicon.png
+# Appliquer le thème — non-bloquant : si Redis est instable au moment du theming
+# le setup continue quand même (le thème sera incomplet mais NC fonctionnera).
+theming() { ${OCC_BIN} theming:config "$@" 2>&1 && return 0; warn "theming:config $* ignoré (Redis instable)"; return 0; }
+theming name       "NXT Maxscale"
+theming color      "#3a3a3c"
+theming slogan     "Infrastructure Nextcloud HA"
+theming logo        /tmp/nxt-logo.png
+theming logoheader  /tmp/nxt-logoheader.png
+theming background  /tmp/nxt-background.webp
+theming favicon     /tmp/nxt-favicon.png
 
 # Désactiver la personnalisation du thème par les utilisateurs
-occ config:app:set theming disable-user-theming --value "yes"
+${OCC_BIN} config:app:set theming disable-user-theming --value "yes" 2>/dev/null || true
 
 # Appliquer le CSS personnalisé (login page + éléments globaux)
 occ config:app:set theming_customcss customcss --value "$(cat /nxt-custom.css)"
