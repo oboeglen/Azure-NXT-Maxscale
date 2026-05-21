@@ -182,18 +182,23 @@ progress_bar() {
 
 show_banner() {
   clear
-  echo -e "${C_BCYAN}"
-  cat <<'BANNER'
-  ╔══════════════════════════════════════════════════════════════╗
-  ║    █████╗ ███████╗██╗   ██╗██████╗ ███████╗                 ║
-  ║   ██╔══██╗╚══███╔╝██║   ██║██╔══██╗██╔════╝                 ║
-  ║   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗                   ║
-  ║   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝                   ║
-  ║   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗                 ║
-  ║        NXT Maxscale — Déployeur automatique v1.0             ║
-  ╚══════════════════════════════════════════════════════════════╝
-BANNER
-  echo -e "${C_RESET}"
+  local inner=62 border
+  border=$(printf '═%.0s' $(seq 1 $inner))
+  echo ""
+  printf "  ${C_BCYAN}╔%s╗${C_RESET}\n" "$border"
+  for line in \
+    "    █████╗ ███████╗██╗   ██╗██████╗ ███████╗" \
+    "   ██╔══██╗╚══███╔╝██║   ██║██╔══██╗██╔════╝" \
+    "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
+    "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
+    "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
+    "        NXT Maxscale — Déployeur automatique v1.0"; do
+    printf "  ${C_BCYAN}║${C_RESET}"
+    _rpad "$line" "$inner"
+    printf "${C_BCYAN}║${C_RESET}\n"
+  done
+  printf "  ${C_BCYAN}╚%s╝${C_RESET}\n" "$border"
+  echo ""
 }
 
 prompt_input() {
