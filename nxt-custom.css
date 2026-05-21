@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════
    NXT Login Theme — Page de connexion Nextcloud
-   Design calqué sur login.php du NXT Dashboard :
-   fond sombre #0c1220, grille, blobs, bordure cônique animée.
+   Palette graphite MAXSCALE : fond #0c0c0e, charcoal #3a3a3c,
+   argent #c7c7cc — grille, blobs, bordure cônique chrome animée.
 
    → Coller dans : Admin → Apparence → CSS personnalisé
      (ou /themes/nxt/css/login.css si thème serveur)
@@ -26,39 +26,39 @@
   /* ── a) Variables Nextcloud surchargées pour le thème sombre ── */
 
   /* Fond body — NC lit --color-background-plain dans guest.css */
-  --color-background-plain:            #0c1220;
-  --color-background-plain-text:       #e2e8f0;
+  --color-background-plain:            #0c0c0e;
+  --color-background-plain-text:       #e5e5ea;
   --image-background:                  none;          /* désactive le dégradé NC */
 
   /* Fonds généraux */
-  --color-main-background:             #0f1829;       /* .guest-box et .body-login-container */
-  --color-main-background-blur:        rgba(15, 24, 41, .97);
-  --color-background-hover:            rgba(37, 99, 235, .08);
-  --color-background-dark:             rgba(255, 255, 255, .06);
-  --color-background-darker:           rgba(255, 255, 255, .10);
+  --color-main-background:             #171718;       /* .guest-box et .body-login-container */
+  --color-main-background-blur:        rgba(23, 23, 24, .97);
+  --color-background-hover:            rgba(58, 58, 60, .12);
+  --color-background-dark:             rgba(255, 255, 255, .05);
+  --color-background-darker:           rgba(255, 255, 255, .09);
 
   /* Texte */
-  --color-main-text:                   #e2e8f0;
-  --color-text-maxcontrast:            #94a3b8;
-  --color-text-maxcontrast-background-blur: #94a3b8;
+  --color-main-text:                   #e5e5ea;
+  --color-text-maxcontrast:            #98989d;
+  --color-text-maxcontrast-background-blur: #98989d;
 
   /* Couleur primaire — utilisée par .button-vue--vue-primary, input:focus… */
-  --color-primary-element:             #2563eb;
-  --color-primary-element-hover:       #1d4ed8;
+  --color-primary-element:             #3a3a3c;
+  --color-primary-element-hover:       #2d2d2f;
   --color-primary-element-text:        #ffffff;
   --color-primary-element-text-dark:   rgba(255, 255, 255, .85);
-  --color-primary-element-light:       rgba(37, 99, 235, .10);
-  --color-primary-element-light-hover: rgba(37, 99, 235, .16);
-  --color-primary-element-light-text:  #60a5fa;
+  --color-primary-element-light:       rgba(58, 58, 60, .12);
+  --color-primary-element-light-hover: rgba(58, 58, 60, .20);
+  --color-primary-element-light-text:  #c7c7cc;
 
   /* Bordures */
-  --color-border:                      rgba(37, 99, 235, .20);
-  --color-border-dark:                 rgba(37, 99, 235, .30);
-  --color-border-maxcontrast:          rgba(37, 99, 235, .55);
+  --color-border:                      rgba(100, 100, 104, .22);
+  --color-border-dark:                 rgba(100, 100, 104, .35);
+  --color-border-maxcontrast:          rgba(152, 152, 157, .55);
   --color-border-error:                rgba(239, 68, 68, .55);
 
   /* Ombres */
-  --color-box-shadow:                  rgba(0, 0, 0, .55);
+  --color-box-shadow:                  rgba(0, 0, 0, .70);
 
   /* Erreurs / succès / alertes */
   --color-error:                       rgba(239, 68, 68, .10);
@@ -79,23 +79,23 @@
   /* Backdrop : désactivé */
   --filter-background-blur:            none;
 
-  /* ── b) Variables NXT propres ── */
-  --nxt-bg:         #0c1220;
-  --nxt-card-bg:    #0f1829;
-  --nxt-autofill:   #131e35;
+  /* ── b) Variables NXT propres — palette graphite MAXSCALE ── */
+  --nxt-bg:         #0c0c0e;
+  --nxt-card-bg:    #171718;
+  --nxt-autofill:   #1e1e20;
 
-  --nxt-900:        #1e3a8a;
-  --nxt-700:        #1d4ed8;
-  --nxt-600:        #2563eb;
-  --nxt-500:        #3b82f6;
-  --nxt-400:        #60a5fa;
-  --nxt-300:        #93c5fd;
-  --nxt-200:        #bfdbfe;
+  --nxt-900:        #1c1c1e;   /* charcoal profond */
+  --nxt-700:        #2d2d2f;   /* charcoal sombre */
+  --nxt-600:        #3a3a3c;   /* MAXSCALE — couleur principale */
+  --nxt-500:        #545456;   /* gris moyen */
+  --nxt-400:        #6d6d70;   /* gris accent */
+  --nxt-300:        #98989d;   /* argent */
+  --nxt-200:        #c7c7cc;   /* argent clair */
 
-  --nxt-text:       #e2e8f0;
-  --nxt-muted:      #94a3b8;
-  --nxt-subtle:     #64748b;
-  --nxt-dim:        #334155;
+  --nxt-text:       #e5e5ea;
+  --nxt-muted:      #98989d;
+  --nxt-subtle:     #636366;
+  --nxt-dim:        #3a3a3c;
 
   --nxt-err:        #ef4444;
   --nxt-err-text:   #fca5a5;
@@ -131,8 +131,8 @@
   z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(37, 99, 235, .05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(37, 99, 235, .05) 1px, transparent 1px);
+    linear-gradient(rgba(58, 58, 60, .04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(58, 58, 60, .04) 1px, transparent 1px);
   background-size: 64px 64px;
 }
 
@@ -145,9 +145,9 @@
   pointer-events: none;
   will-change: opacity;
   background:
-    radial-gradient(ellipse 700px 700px at -15% -22%, rgba(29, 78, 216, .18) 0%, transparent 65%),
-    radial-gradient(ellipse 450px 450px at 110% 108%, rgba(59, 130, 246, .14) 0%, transparent 65%),
-    radial-gradient(ellipse 380px 380px at 52%  50%,  rgba(3, 105, 161, .11) 0%, transparent 65%);
+    radial-gradient(ellipse 700px 700px at -15% -22%, rgba(40, 40, 42, .22) 0%, transparent 65%),
+    radial-gradient(ellipse 450px 450px at 110% 108%, rgba(65, 65, 68, .18) 0%, transparent 65%),
+    radial-gradient(ellipse 380px 380px at 52%  50%,  rgba(50, 50, 52, .14) 0%, transparent 65%);
   animation: nxt-blob-pulse 8s ease-in-out infinite;
 }
 
@@ -201,7 +201,7 @@
   border: 2px solid transparent !important;
   box-shadow:
     0 8px 60px var(--color-box-shadow),
-    0 0 40px rgba(37, 99, 235, .12) !important;
+    0 0 40px rgba(100, 100, 104, .12) !important;
   backdrop-filter: var(--filter-background-blur) !important;
   -webkit-backdrop-filter: var(--filter-background-blur) !important;
   animation:
@@ -277,8 +277,8 @@
 #body-login .input-field__main-wrapper:focus-within {
   border-color: var(--color-primary-element) !important;
   box-shadow:
-    0 0 0 3px rgba(37, 99, 235, .18),
-    0 0 16px rgba(37, 99, 235, .10) !important;
+    0 0 0 3px rgba(100, 100, 104, .18),
+    0 0 16px rgba(100, 100, 104, .10) !important;
   background: rgba(255, 255, 255, .08) !important;
 }
 
@@ -390,7 +390,7 @@
   align-self: center !important;
   background: transparent !important;
   border-radius: var(--border-radius-element) !important;
-  --color-background-hover: rgba(37, 99, 235, .08) !important;
+  --color-background-hover: rgba(58, 58, 60, .10) !important;
   --color-background-dark: transparent !important;
 }
 
@@ -427,23 +427,23 @@
   font-family: var(--font-face) !important;
   padding: 9px 20px !important;
   box-shadow:
-    0 3px 14px rgba(37, 99, 235, .40),
-    0 0 18px rgba(37, 99, 235, .10) !important;
+    0 3px 14px rgba(100, 100, 104, .45),
+    0 0 18px rgba(100, 100, 104, .10) !important;
   transition: background .2s, box-shadow .2s, transform .15s !important;
   cursor: pointer !important;
 }
 
 #body-login .button-vue--vue-primary.button-vue--wide:hover {
-  background: linear-gradient(135deg, #1e40af, var(--nxt-600)) !important;
+  background: linear-gradient(135deg, #1c1c1e, var(--nxt-600)) !important;
   box-shadow:
-    0 5px 22px rgba(37, 99, 235, .55),
-    0 0 28px rgba(37, 99, 235, .18) !important;
+    0 5px 22px rgba(100, 100, 104, .55),
+    0 0 28px rgba(100, 100, 104, .18) !important;
   transform: translateY(-1px) !important;
 }
 
 #body-login .button-vue--vue-primary.button-vue--wide:active {
   transform: translateY(0) scale(.98) !important;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, .35) !important;
+  box-shadow: 0 2px 8px rgba(100, 100, 104, .35) !important;
 }
 
 /* État loading pendant la soumission du formulaire */
@@ -539,8 +539,8 @@
 
 /* Info */
 #body-login .notecard.info {
-  background: rgba(37, 99, 235, .08) !important;
-  border: 1px solid rgba(37, 99, 235, .22) !important;
+  background: rgba(58, 58, 60, .10) !important;
+  border: 1px solid rgba(100, 100, 104, .22) !important;
   border-inline-start: 3px solid var(--nxt-600) !important;
   color: var(--nxt-300) !important;
 }
@@ -614,18 +614,18 @@
 #body-login .guest-content img,
 #body-login .guest-content .logo-icon,
 #body-login .guest-content svg {
-  filter: drop-shadow(0 0 10px rgba(96, 165, 250, .45)) !important;
+  filter: drop-shadow(0 0 10px rgba(199, 199, 204, .45)) !important;
   animation: nxt-logo-glow 3.5s ease-in-out infinite !important;
 }
 
 @keyframes nxt-logo-glow {
-  0%, 100% { filter: drop-shadow(0 0 8px  rgba(96, 165, 250, .35)); }
-  50%       { filter: drop-shadow(0 0 22px rgba(96, 165, 250, .70)); }
+  0%, 100% { filter: drop-shadow(0 0 8px  rgba(199, 199, 204, .35)); }
+  50%       { filter: drop-shadow(0 0 22px rgba(199, 199, 204, .70)); }
 }
 
 /* ── Sélection de texte — couleur de marque ── */
 #body-login ::selection {
-  background: rgba(37, 99, 235, .35);
+  background: rgba(100, 100, 104, .35);
   color: var(--color-main-text);
 }
 
@@ -640,8 +640,8 @@
 ────────────────────────────────────────────────────────────────────── */
 #body-login ::-webkit-scrollbar             { width: 5px; height: 5px; }
 #body-login ::-webkit-scrollbar-track       { background: transparent; }
-#body-login ::-webkit-scrollbar-thumb       { background: rgba(37, 99, 235, .28); border-radius: 3px; }
-#body-login ::-webkit-scrollbar-thumb:hover { background: rgba(37, 99, 235, .50); }
+#body-login ::-webkit-scrollbar-thumb       { background: rgba(100, 100, 104, .28); border-radius: 3px; }
+#body-login ::-webkit-scrollbar-thumb:hover { background: rgba(100, 100, 104, .50); }
 
 /* ──────────────────────────────────────────────────────────────────────
    12. PAGE 2FA — Sélection du second facteur
@@ -711,7 +711,7 @@
 #body-login .two-factor-provider:active {
   background: var(--color-primary-element-light) !important;
   border-color: var(--color-border-dark) !important;
-  box-shadow: 0 0 20px rgba(37, 99, 235, .18) !important;
+  box-shadow: 0 0 20px rgba(100, 100, 104, .18) !important;
   transform: translateX(3px) !important;
 }
 
@@ -828,7 +828,7 @@
   box-sizing: border-box !important;
   margin: 0 0 4px !important;
   /* Glow doux au repos */
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, .12) !important;
+  box-shadow: 0 0 0 1px rgba(100, 100, 104, .12) !important;
   transition: border-color .25s, box-shadow .25s, background .25s !important;
 }
 
@@ -847,8 +847,8 @@
 #body-login .two-factor-form input[type="text"]:focus {
   border-color: var(--color-primary-element) !important;
   box-shadow:
-    0 0 0 3px rgba(37, 99, 235, .22),
-    0 0 24px rgba(37, 99, 235, .15) !important;
+    0 0 0 3px rgba(100, 100, 104, .22),
+    0 0 24px rgba(100, 100, 104, .15) !important;
   background: rgba(255, 255, 255, .09) !important;
   outline: none !important;
 }
@@ -869,8 +869,8 @@
   width: 100% !important;
   padding: 10px 20px !important;
   box-shadow:
-    0 3px 14px rgba(37, 99, 235, .40),
-    0 0 18px rgba(37, 99, 235, .10) !important;
+    0 3px 14px rgba(100, 100, 104, .45),
+    0 0 18px rgba(100, 100, 104, .10) !important;
   transition: background .2s, box-shadow .2s, transform .15s !important;
   cursor: pointer !important;
   margin: 8px 0 0 !important;
@@ -880,10 +880,10 @@
 #body-login input.two-factor-submit:hover,
 #body-login .two-factor-form input[type="submit"]:hover,
 #body-login .two-factor-form button[type="submit"]:hover {
-  background: linear-gradient(135deg, #1e40af, var(--nxt-600)) !important;
+  background: linear-gradient(135deg, #1c1c1e, var(--nxt-600)) !important;
   box-shadow:
-    0 5px 22px rgba(37, 99, 235, .55),
-    0 0 28px rgba(37, 99, 235, .18) !important;
+    0 5px 22px rgba(100, 100, 104, .55),
+    0 0 28px rgba(100, 100, 104, .18) !important;
   transform: translateY(-1px) !important;
 }
 
@@ -1085,7 +1085,7 @@
   #body-login .guest-box,
   #body-login .body-login-container {
     animation: none !important;
-    border: 2px solid rgba(37, 99, 235, .40) !important;
+    border: 2px solid rgba(100, 100, 104, .45) !important;
     background:
       linear-gradient(var(--nxt-card-bg), var(--nxt-card-bg)) padding-box,
       linear-gradient(135deg, var(--nxt-900), var(--nxt-600), var(--nxt-400)) border-box !important;
@@ -1095,7 +1095,7 @@
   #body-login .guest-content .logo-icon,
   #body-login .guest-content svg {
     animation: none !important;
-    filter: drop-shadow(0 0 10px rgba(96, 165, 250, .40)) !important;
+    filter: drop-shadow(0 0 10px rgba(199, 199, 204, .40)) !important;
   }
 
   #body-login .guest-content,
