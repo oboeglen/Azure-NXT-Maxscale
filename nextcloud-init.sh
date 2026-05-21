@@ -223,7 +223,7 @@ cp "/img/Arrière plan.webp"            /tmp/nxt-background.webp
 cp "/img/Favicon.png"                  /tmp/nxt-favicon.png
 
 # Appliquer le thème (couleur primaire + slogan + images)
-occ theming:config color      "#2563eb"
+occ theming:config color      "#3a3a3c"
 occ theming:config slogan     "Infrastructure Nextcloud HA"
 occ theming:config logo        /tmp/nxt-logo.png
 occ theming:config logoheader  /tmp/nxt-logoheader.png
