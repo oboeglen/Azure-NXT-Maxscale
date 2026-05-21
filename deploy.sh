@@ -321,6 +321,24 @@ install_deps() {
     info "Docker Compose $(docker compose version --short) déjà installé"
   fi
 
+  # Rotation des logs Docker — 100 Mo × 3 fichiers par container (~300 Mo max)
+  local daemon_json="/etc/docker/daemon.json"
+  if [[ ! -f "$daemon_json" ]] || ! grep -q "max-size" "$daemon_json" 2>/dev/null; then
+    cat > "$daemon_json" <<'DAEMON'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m",
+    "max-file": "3"
+  }
+}
+DAEMON
+    systemctl reload docker 2>/dev/null || true
+    info "Rotation des logs Docker configurée (100 Mo × 3 fichiers)"
+  else
+    info "Rotation des logs Docker déjà configurée"
+  fi
+
   # Vérifier accès docker pour l'utilisateur non-root
   local real_user="${SUDO_USER:-}"
   if [[ -n "$real_user" ]] && ! groups "$real_user" | grep -q docker; then
@@ -942,6 +960,12 @@ NCCRON
             --post-hook 'cat /etc/letsencrypt/live/stack/fullchain.pem /etc/letsencrypt/live/stack/privkey.pem > /certs/stack.pem && chmod 600 /certs/stack.pem';
           sleep 12h & wait $$!;
         done"
+    healthcheck:
+      test: ["CMD-SHELL", "openssl x509 -checkend 2592000 -noout -in /etc/letsencrypt/live/stack/fullchain.pem 2>/dev/null"]
+      interval: 12h
+      timeout: 10s
+      retries: 1
+      start_period: 5m
     depends_on:
       - nginx-acme
 ACME
@@ -1082,8 +1106,9 @@ NGNX
     local db_cmd="" db_init_vol="" db_extra_env="" db_depends=""
 
     if (( i == 1 )); then
-      db_cmd="    command: --wsrep-new-cluster"
-      db_init_vol="      - ./mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql:ro"
+      db_cmd="    entrypoint: [\"/bin/bash\", \"/galera-bootstrap.sh\"]"
+      db_init_vol="      - ./mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./galera-bootstrap.sh:/galera-bootstrap.sh:ro"
       db_extra_env="      - MARIADB_USER=\${MARIADB_USER}
       - MARIADB_PASSWORD=\${MARIADB_PASSWORD}
       - MARIADB_DATABASE=\${MARIADB_DATABASE}"
@@ -1227,7 +1252,7 @@ ${redis_wait_block}
       - next-net
     depends_on:
 ${redis_deps_block}
-    restart: "no"
+    restart: on-failure:5
 RCINIT
 
   # ── MinIO nodes (dynamic) ──────────────────────────────────────────────
@@ -1286,6 +1311,34 @@ ${bypass_env}
 ${rfs_hc}
 MINIONODE
   done
+
+  # ── minio-init — versioning + expire-delete-marker ─────────────────────
+  cat >> "$dest" <<MINIOINIT
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    restart: "no"
+    entrypoint: >
+      /bin/sh -c "
+        until mc alias set local http://minio-node1:9000 \${MINIO_ACCESS_KEY} \${MINIO_SECRET_KEY} --quiet 2>/dev/null; do
+          echo 'Attente MinIO...'; sleep 5;
+        done;
+        mc version enable local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null
+          && echo 'Versioning MinIO activé sur \${NEXTCLOUD_S3_BUCKET:-nextcloud}'
+          || echo 'Versioning déjà actif';
+        mc ilm rule add --expire-delete-marker local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} 2>/dev/null || true;
+        echo 'minio-init terminé'"
+    environment:
+      - MINIO_ACCESS_KEY=\${MINIO_ACCESS_KEY}
+      - MINIO_SECRET_KEY=\${MINIO_SECRET_KEY}
+      - NEXTCLOUD_S3_BUCKET=\${NEXTCLOUD_S3_BUCKET:-nextcloud}
+    networks:
+      - storage-net
+    depends_on:
+      minio-node1:
+        condition: service_healthy
+MINIOINIT
 
   # ── Collabora nodes (dynamic) ───────────────────────────────────────────
   for i in $(seq 1 "$COLLAB_NODES"); do

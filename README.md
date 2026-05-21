@@ -147,17 +147,18 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 |---------|-------|------|
 | `haproxy` | `haproxy:2.8-alpine` | Point d'entrée unique — reverse proxy, SSL, load balancing |
 | `nginx-acme` | `nginx:1.27-alpine` | Validation des challenges ACME (Let's Encrypt) |
-| `certbot` | `certbot/certbot` | Renouvellement SSL automatique toutes les 12h |
+| `certbot` | `certbot/certbot` | Renouvellement SSL automatique toutes les 12h + healthcheck expiry 30 j |
 | `nginx-next-01..N` | `nginx:1.27-alpine` | Fichiers statiques + proxy FastCGI vers PHP-FPM |
 | `app-next-01..N` | `nextcloud:X.Y.Z-fpm` | Application Nextcloud (PHP-FPM) |
 | `nextcloud-perms` | `nextcloud:X.Y.Z-fpm` | Correction des permissions volumes (one-shot) |
-| `nextcloud-setup` | `nextcloud:X.Y.Z-fpm` | Auto-configuration post-installation (one-shot) |
+| `nextcloud-setup` | `nextcloud:X.Y.Z-fpm` | Auto-configuration post-installation (one-shot, protégé par sentinel) |
 | `nextcloud-cron` | `nextcloud:X.Y.Z-fpm` | Tâches de fond — `cron.php` toutes les 5 min |
-| `mariadb-node1..N` | `maxscale-mariadb-galera:11.4` | Base de données répliquée (Galera) |
+| `mariadb-node1..N` | `maxscale-mariadb-galera:11.4` | Base de données répliquée (Galera, bootstrap via `galera-bootstrap.sh`) |
 | `galera-autoheal` | `willfarrell/autoheal` | Redémarrage automatique des nœuds Galera hors-sync |
 | `redis-node1..N` | `redis:7.4-alpine` | Cache distribué (Redis Cluster) |
-| `redis-cluster-init` | `redis:7.4-alpine` | Initialisation du cluster Redis (one-shot) |
+| `redis-cluster-init` | `redis:7.4-alpine` | Initialisation du cluster Redis (retry on-failure:5) |
 | `minio-node1..N` | `minio/minio:latest` | Stockage objet S3 distribué (erasure coding) |
+| `minio-init` | `minio/mc:latest` | Activation versioning bucket au 1er démarrage (one-shot) |
 | `collabora-node1..N` | `collabora/code:latest` | Édition bureautique collaborative en ligne |
 | `whiteboard-node1..N` | `ghcr.io/nextcloud-releases/whiteboard:stable` | Tableau blanc collaboratif temps réel |
 | `redis-whiteboard` | `redis:7.4-alpine` | État partagé du whiteboard (Redis Streams) |
@@ -208,6 +209,21 @@ Tout est appliqué automatiquement par `nextcloud-setup` au premier démarrage.
 | MinIO | ✅ Automatique | Lecture continue, écritures rétablies dès que le nœud revient |
 | Collabora | ✅ Automatique | Session d'édition perdue, reconnexion automatique |
 | Whiteboard | ✅ Automatique | Reconnexion WebSocket automatique (état persisté dans Redis) |
+
+### Redémarrage complet du cluster Galera
+
+Le `galera-bootstrap.sh` détecte automatiquement le nœud à bootstrapper :
+
+- **Premier démarrage** — pas de `grastate.dat` → bootstrap depuis node1
+- **Arrêt propre** — `safe_to_bootstrap: 1` → bootstrap depuis le dernier nœud à s'être arrêté
+- **Crash / redémarrage à chaud** — `safe_to_bootstrap: 0` → node1 rejoint le cluster existant sans créer un nouveau (évite le split-brain)
+
+Pour forcer un bootstrap manuel après un arrêt brutal de tous les nœuds :
+```bash
+# Identifier le nœud le plus avancé (seqno le plus élevé)
+for i in 1 2 3; do echo "node$i:"; docker run --rm -v maxscale_mariadb_n${i}_data:/data alpine grep -E "seqno|safe" /data/grastate.dat; done
+# Corriger le safe_to_bootstrap sur ce nœud, puis redémarrer
+```
 
 ---
 

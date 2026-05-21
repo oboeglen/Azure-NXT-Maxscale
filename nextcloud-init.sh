@@ -29,6 +29,17 @@ occ() {
 }
 
 # ---------------------------------------------------------------------------
+# Sentinel — évite la ré-exécution complète si le container redémarre après
+# un setup réussi. Supprimer le fichier pour forcer une ré-exécution.
+# ---------------------------------------------------------------------------
+SENTINEL="/var/www/html/data/.setup-done"
+if [ -f "${SENTINEL}" ]; then
+    info "Setup déjà effectué le $(cat ${SENTINEL}) — arrêt."
+    info "Supprimez ${SENTINEL} pour forcer une ré-exécution."
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
 # 1. Attente que Nextcloud soit opérationnel
 # ---------------------------------------------------------------------------
 step "Vérification de Nextcloud"
@@ -338,6 +349,10 @@ fi
 # ---------------------------------------------------------------------------
 # Résumé
 # ---------------------------------------------------------------------------
+# Marquer le setup comme terminé pour éviter les ré-exécutions
+date '+%Y-%m-%d %H:%M:%S' > "${SENTINEL}"
+info "Sentinel créé : ${SENTINEL}"
+
 step "Setup Nextcloud terminé avec succès !"
 echo "[setup]  Redis Cluster  : redis-node1..6:6379 (3 masters, 3 replicas)"
 echo "[setup]  Collabora      : https://${COLLABORA_DOMAIN}"
