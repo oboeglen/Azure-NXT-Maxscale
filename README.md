@@ -331,7 +331,7 @@ docker compose logs -f nextcloud-setup
 
 ## Performances & dimensionnement
 
-> Benchmarks réalisés sur l'instance de référence (`nxt.azure-informatique.cloud`) — 3 nœuds FPM, Galera 3 nœuds, Redis 6 nœuds, MinIO 4×2 drives — depuis un client externe avec 20 connexions simultanées.
+> Benchmarks réalisés sur l'instance de référence (`nxt.azure-informatique.cloud`) — **6 nœuds FPM, Galera 5 nœuds, Redis 6 nœuds, MinIO 4×2 drives, 3 Collabora, 3 Whiteboard** — depuis un client externe.
 
 ### Résultats mesurés
 
@@ -350,26 +350,27 @@ docker compose logs -f nextcloud-setup
 
 ### Simulation par nombre de nœuds FPM
 
-> Modèle basé sur les mesures réelles. Rendement décroissant de **88 % par nœud** (ressources partagées : DB, Redis, HAProxy). La base de données Galera 3 nœuds devient le goulot d'étranglement à partir de **7 nœuds FPM** (~1 500 TPS en écriture fixes).
+> Modèle basé sur les mesures réelles (**6 nœuds FPM** / **5 Galera** / **6 Redis**). Rendement décroissant de **88 % par nœud** (ressources partagées : DB, Redis, HAProxy). Galera 5 nœuds sature vers **14 nœuds FPM** (~2 500 TPS en écriture).
 
 | Nœuds FPM | req/s PHP | req/s léger | Concurrent | Actifs | Total users | P99 PHP | P99 léger | RAM min |
 |:---------:|:---------:|:-----------:|:----------:|:------:|:-----------:|:-------:|:---------:|:-------:|
-| 1 | ~20 | ~82 | ~18 | ~110 | ~1 100 | 2 356 ms | 765 ms | 11 Go |
-| 2 | ~37 | ~154 | ~34 | ~206 | ~2 060 | 1 501 ms | 488 ms | 14 Go |
-| **3** ⭐ | **~53** | **~218** | **~48** | **~291** | **~2 910** | **1 154 ms** | **375 ms** | **17 Go** |
-| 5 | ~78 | ~324 | ~72 | ~432 | ~4 320 | 827 ms | 269 ms | 23 Go |
-| 7 | ~98 | ~405 | ~90 | ~542 | ~5 420 | 665 ms | 216 ms | 29 Go |
-| 9 | ~107 | ~443 | ~98 | ~592 | ~5 920 | 565 ms | 183 ms | 35 Go |
-| 12 | ~112 | ~461 | ~102 | ~616 | ~6 160 | 468 ms | 152 ms | 44 Go |
+| 1 | ~10 | ~41 | ~9 | ~55 | ~550 | 3 381 ms | 1 098 ms | 16 Go |
+| 2 | ~18 | ~77 | ~17 | ~103 | ~1 030 | 2 230 ms | 724 ms | 19 Go |
+| 3 | ~26 | ~109 | ~24 | ~145 | ~1 450 | 1 749 ms | 568 ms | 22 Go |
+| **6** ⭐ | **~44** | **~183** | **~40** | **~245** | **~2 450** | **1 154 ms** | **375 ms** | **31 Go** |
+| 9 | ~56 | ~234 | ~52 | ~313 | ~3 130 | 904 ms | 294 ms | 40 Go |
+| 12 | ~65 | ~269 | ~59 | ~359 | ~3 590 | 761 ms | 247 ms | 49 Go |
+| 15 | ~70 | ~291 | ~64 | ~389 | ~3 890 | 665 ms | 216 ms | 58 Go |
+| 20 | ~73 | ~303 | ~67 | ~405 | ~4 050 | 560 ms | 182 ms | 73 Go |
 
 > ⭐ Configuration actuelle testée en conditions réelles  
 > **Actifs** = concurrent × 6 (sessions ouvertes sur fenêtre 5 min)  
 > **Total users** = actifs × 10 (hypothèse 10 % connectés au pic)  
-> **RAM min** = 3 Go/nœud FPM + 8 Go overhead (MariaDB, Redis, MinIO, HAProxy)
+> **RAM min** = 3 Go/nœud FPM + 13 Go overhead fixe (5 Galera, 6 Redis, 4 MinIO, 3 Collabora, 3 Whiteboard, HAProxy)
 
 #### Point de saturation DB
 
-Au-delà de **7 nœuds FPM**, chaque nœud supplémentaire n'apporte que ~5 req/s supplémentaires au lieu de ~20. Pour dépasser 6 000 utilisateurs, le prochain palier est **5 nœuds Galera** (configure `MARIADB_NODES=5` dans `deploy.sh`).
+Avec **5 nœuds Galera**, le goulot d'étranglement en écriture (~2 500 TPS) n'est atteint qu'à partir de **14 nœuds FPM**. Au-delà de ce seuil, chaque nœud FPM supplémentaire n'apporte que ~3 req/s. Le prochain palier significatif serait **7 nœuds Galera** pour dépasser 4 000 utilisateurs.
 
 ---
 
@@ -377,15 +378,15 @@ Au-delà de **7 nœuds FPM**, chaque nœud supplémentaire n'apporte que ~5 req/
 
 | Composant | RAM typique | CPU (idle) | CPU (charge) | Réseau |
 |---|---|---|---|---|
-| HAProxy | ~50 Mo | < 1 % | 5–15 % | Tout le trafic |
-| nginx (par nœud) | ~30 Mo | < 1 % | 2–5 % | Statique + proxy |
-| Nextcloud FPM (par nœud) | 500 Mo – 1 Go | 5 % | 30–60 % | Interne FPM |
-| MariaDB Galera (par nœud) | 1–2 Go | 5 % | 20–40 % | Galera replication |
-| Redis (par nœud) | 50–200 Mo | < 1 % | 2–5 % | Cluster gossip |
-| MinIO (par nœud) | 256–512 Mo | < 1 % | 10–30 % | Erasure coding |
+| HAProxy | ~50 Mo | < 1 % | 5–15 % | Tout le trafic entrant/sortant |
+| nginx (par nœud) | ~30 Mo | < 1 % | 2–5 % | Statique + proxy FastCGI |
+| Nextcloud FPM (par nœud) | 500 Mo – 1 Go | 5 % | 30–60 % | Interne FPM :9000 |
+| MariaDB Galera (par nœud) | 1–2 Go | 5 % | 20–40 % | Galera IST/SST replication |
+| Redis (par nœud) | 50–200 Mo | < 1 % | 2–5 % | Cluster gossip + keyspace |
+| MinIO (par nœud) | 256–512 Mo | < 1 % | 10–30 % | Erasure coding inter-nœuds |
 | Collabora CODE (par nœud) | 500 Mo – 1 Go | 2 % | 40–80 % | WOPI + WebSocket |
-| Whiteboard (par nœud) | ~100 Mo | < 1 % | 5–10 % | WebSocket |
-| galera-autoheal | ~20 Mo | < 1 % | < 1 % | Docker socket |
+| Whiteboard (par nœud) | ~100 Mo | < 1 % | 5–10 % | WebSocket temps réel |
+| galera-autoheal | ~20 Mo | < 1 % | < 1 % | Docker socket local |
 
 ---
 
@@ -393,13 +394,15 @@ Au-delà de **7 nœuds FPM**, chaque nœud supplémentaire n'apporte que ~5 req/
 
 | Profil | Nœuds FPM | Nœuds DB | Nœuds Redis | RAM serveur | Users estimés |
 |---|---|---|---|---|---|
-| 🧪 **Test / dev** | 1 | 1 (sans Galera) | 0 (APCu seul) | 8 Go | < 50 |
-| 🏢 **PME — petite équipe** | 2–3 | 3 | 6 | 16–24 Go | 500 – 3 000 |
-| 🏭 **Entreprise moyenne** | 5 | 3–5 | 6 | 32–48 Go | 3 000 – 6 000 |
-| 🏦 **Grande organisation** | 7–9 | 5 | 6–8 | 64–96 Go | 5 000 – 10 000 |
-| ⚠️ **Au-delà** | 12+ | 5+ | 8+ | 128 Go+ | Clustering applicatif requis |
+| 🧪 **Test / dev** | 1–2 | 1 (sans Galera) | 0 (APCu seul) | 8–16 Go | < 100 |
+| 🏢 **Petite équipe** | 3 | 3 | 6 | 22–28 Go | ~1 500 |
+| 🏭 **PME** | 6 ⭐ | 5 | 6 | 32–40 Go | ~2 500 |
+| 🏦 **Entreprise** | 9–12 | 5–7 | 6–8 | 48–64 Go | 3 000 – 3 600 |
+| 🏛️ **Grande organisation** | 15–20 | 7 | 8 | 64–80 Go | ~4 000 |
+| ⚠️ **Au-delà** | 20+ | 7+ | 8+ | 96 Go+ | Disques physiques dédiés MinIO requis |
 
-> Pour les profils **Entreprise / Grande organisation**, prévoir des disques physiques dédiés pour MinIO (`MINIO_DISKS=4+`) et un nœud de monitoring séparé (Prometheus + Grafana).
+> ⭐ Configuration actuelle  
+> Pour tous les profils **Entreprise et au-delà**, prévoir des disques physiques dédiés pour MinIO (`MINIO_DISKS=4+`) et augmenter `innodb_buffer_pool_size` dans les configs Galera.
 
 ---
 
