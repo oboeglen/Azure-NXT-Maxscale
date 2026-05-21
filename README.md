@@ -167,7 +167,7 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 
 **Ports exposés :** `80` (redirection HTTPS) · `443` (Nextcloud, Collabora, Whiteboard)
 
-> ⚠️ **Options déconseillées en production :** les stats HAProxy (`/stats`) et la console MinIO (`/s3-console`) sont des outils de diagnostic activables lors du déploiement. Ils exposent des informations sensibles sur l'infrastructure (métriques internes, accès direct aux buckets S3) sur l'URL publique de Nextcloud. À réserver à un environnement de test ou à désactiver après usage.
+> ⚠️ **Options déconseillées en production :** les stats HAProxy (`/stats`) et la console MinIO (`/s3-console`) sont des outils de diagnostic activables lors du déploiement. Les deux pages requièrent des identifiants (mot de passe stats pour `/stats`, clés MinIO pour `/s3-console`), mais elles restent exposées sur l'URL publique de Nextcloud et révèlent des informations sensibles sur l'infrastructure. À réserver à un environnement de test ou à désactiver après usage.
 
 ---
 
@@ -266,7 +266,7 @@ docker run --rm --network storage-net --entrypoint sh minio/mc -c "
 
 ### Console web MinIO (optionnelle)
 
-> ⚠️ **Déconseillée en production.** La console est exposée sur l'URL publique de Nextcloud (`/s3-console`) sans restriction d'IP ni couche réseau supplémentaire. Elle donne accès direct à tous les buckets MinIO avec les identifiants administrateur. À utiliser uniquement en environnement de test ou de diagnostic, et à désactiver ensuite.
+> ⚠️ **Déconseillée en production.** La console est protégée par les identifiants MinIO (`MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`), mais elle est exposée sur l'URL publique de Nextcloud sans restriction d'IP ni couche réseau supplémentaire. Elle donne accès direct à tous les buckets MinIO. À utiliser uniquement en environnement de test ou de diagnostic, et à désactiver ensuite.
 
 Activée lors du déploiement par `deploy.sh` (même principe que les stats HAProxy sur `/stats`). Une fois activée, la console est accessible depuis le navigateur sans exposer de port supplémentaire.
 
@@ -287,7 +287,7 @@ HAProxy route `/s3-console/*` vers le container `minio-console:9090` en **stripp
 
 ### Stats HAProxy (optionnelles)
 
-> ⚠️ **Déconseillées en production.** Les stats (`/stats`) sont protégées par mot de passe mais restent exposées sur l'URL publique de Nextcloud. Elles révèlent la topologie interne de l'infrastructure (noms des containers, états des backends, métriques réseau). À réserver à un environnement de test ou à désactiver après usage.
+> ⚠️ **Déconseillées en production.** Les stats (`/stats`) sont protégées par un mot de passe dédié (`HAPROXY_STATS_PASSWORD`), mais restent exposées sur l'URL publique de Nextcloud. Elles révèlent la topologie interne de l'infrastructure (noms des containers, états des backends, métriques réseau). À réserver à un environnement de test ou à désactiver après usage.
 
 Activées lors du déploiement par `deploy.sh`. Accessibles à `https://<NEXTCLOUD_DOMAIN>/stats` avec les identifiants définis à l'installation (`HAPROXY_STATS_PASSWORD`).
 
