@@ -78,7 +78,7 @@ check_requirements() {
   ram_gb=$(( ram_kb / 1024 / 1024 ))
   if (( ram_kb < 14680064 )); then
     warn "RAM : ${ram_gb} Go détectés (minimum recommandé : 16 Go)"
-    prompt_yn "Continuer quand même ?" "N" || die "Annulé — ajoutez de la RAM puis relancez."
+    prompt_yn "Continuer quand même ?" "Y" || die "Annulé — ajoutez de la RAM puis relancez."
   else
     info "RAM : ${ram_gb} Go ✓"
   fi
@@ -849,6 +849,21 @@ NCCRON
       - nginx-acme
 ACME
 
+  # ── nextcloud-perms (one-shot, fixes config/data volume ownership) ────────
+  cat >> "$dest" <<NCPERMS
+
+  nextcloud-perms:
+    image: nextcloud:${NC_VERSION}
+    container_name: nextcloud-perms
+    restart: "no"
+    user: root
+    command: ["chown", "-R", "www-data:www-data", "/var/www/html/config", "/var/www/html/data", "/var/www/html/custom_apps"]
+    volumes:
+      - nextcloud_config:/var/www/html/config
+      - nextcloud_data:/var/www/html/data
+      - nextcloud_apps:/var/www/html/custom_apps
+NCPERMS
+
   # ── Nextcloud app nodes (dynamic) ───────────────────────────────────────
   local i
   for i in $(seq 1 "$NC_NODES"); do
@@ -858,6 +873,8 @@ ACME
     if (( i == 1 )); then
       start_period="300s"
       depends_block="    depends_on:
+      nextcloud-perms:
+        condition: service_completed_successfully
       mariadb-node1:
         condition: service_healthy
       redis-node1:
