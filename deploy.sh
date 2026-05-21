@@ -1324,11 +1324,9 @@ MINIONODE
         until mc alias set local http://minio-node1:9000 \${MINIO_ACCESS_KEY} \${MINIO_SECRET_KEY} --quiet 2>/dev/null; do
           echo 'Attente MinIO...'; sleep 5;
         done;
-        mc version enable local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null
-          && echo 'Versioning MinIO activé sur \${NEXTCLOUD_S3_BUCKET:-nextcloud}'
-          || echo 'Versioning déjà actif';
+        mc version enable local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null && echo 'Versioning MinIO actif' || echo 'Versioning deja actif';
         mc ilm rule add --expire-delete-marker local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} 2>/dev/null || true;
-        echo 'minio-init terminé'"
+        echo 'minio-init termine'"
     environment:
       - MINIO_ACCESS_KEY=\${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=\${MINIO_SECRET_KEY}
