@@ -6,7 +6,7 @@
 
 **Infrastructure Nextcloud haute disponibilité — déployable en une commande**
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale/releases/tag/v2.0.0)
+[![Version](https://img.shields.io/badge/version-2.0-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale/releases/tag/v2.0)
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9)](https://nextcloud.com)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -16,72 +16,91 @@
 
 ---
 
-## Déploiement en une commande
+## Table des matières
+
+- [Déploiement rapide](#déploiement-rapide)
+- [Ce que fait deploy.sh](#ce-que-fait-deploysh)
+- [Architecture](#architecture)
+- [Prérequis](#prérequis)
+- [Services déployés](#services-déployés)
+- [Configuration Nextcloud](#configuration-nextcloud)
+- [Haute disponibilité](#haute-disponibilité)
+- [Stockage objet MinIO](#stockage-objet-minio)
+- [Sécurité HAProxy](#sécurité-haproxy)
+- [Opérations courantes](#opérations-courantes)
+- [Déploiement manuel](#déploiement-manuel)
+- [Performances & dimensionnement](#performances--dimensionnement)
+
+---
+
+## Déploiement rapide
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/oboeglen/Azure-NXT-Maxscale/main/deploy.sh \
   -o /tmp/deploy.sh && sudo bash /tmp/deploy.sh
 ```
 
-Le script détecte votre OS, installe Docker si absent, pose les questions essentielles et déploie l'infrastructure complète. La configuration est sauvegardée et réutilisable si vous relancez.
+Le script détecte votre OS, installe Docker si nécessaire, pose les questions essentielles et déploie l'infrastructure complète. La configuration est sauvegardée et réutilisable à chaque relance.
 
 ---
 
 ## Ce que fait `deploy.sh`
 
 | Étape | Action |
-|-------|--------|
+|:-----:|--------|
 | ① | Vérification RAM (≥ 16 Go), disque (≥ 50 Go), Docker ≥ 20 |
-| ② | Détection OS et installation automatique de Docker |
-| ③ | Clone du repo depuis GitHub |
+| ② | Détection OS et installation automatique de Docker + Compose |
+| ③ | Clone du dépôt depuis GitHub |
 | ④ | Questions interactives — domaines, nœuds, disques MinIO, certificats |
-| ⑤ | Génération de tous les mots de passe (aucun `#` dans Redis) |
-| ⑥ | Génération du `.env`, `docker-compose.yml`, configs Galera |
+| ⑤ | Génération sécurisée de tous les secrets (aucun caractère `#`) |
+| ⑥ | Génération du `.env`, `docker-compose.yml` et configs Galera |
 | ⑦ | Vérification DNS + certificats SSL Let's Encrypt (HTTP-01 / TLS-ALPN-01) |
-| ⑧ | Pull des images Docker en parallèle |
-| ⑨ | Déploiement avec suivi en temps réel (timeout adaptatif) |
-| ⑩ | Vérification de tous les services + test d'accès + affichage des identifiants |
+| ⑧ | Pull des images Docker en parallèle avec barre de progression |
+| ⑨ | Déploiement avec suivi en temps réel et timeout adaptatif |
+| ⑩ | Vérification de santé de tous les services + affichage des identifiants |
 
 **Contraintes appliquées automatiquement**
 
-- MariaDB : nœuds en nombre impair (quorum Galera)
-- Redis Cluster : nombre pair ≥ 6 (masters + replicas)
-- MinIO : tolérance aux pannes calculée et expliquée selon votre choix
-- Nextcloud attend que Galera soit SYNCED avant de démarrer (vérification WSREP via PDO PHP)
+| Composant | Contrainte | Raison |
+|-----------|------------|--------|
+| MariaDB Galera | Nombre de nœuds **impair** | Quorum Galera (évite le split-brain) |
+| Redis Cluster | Nombre **pair ≥ 6** | Masters + réplicas (3+3 minimum) |
+| MinIO | Tolérance calculée et affichée | Erasure coding EC:N/2 |
+| Nextcloud | Attend que Galera soit SYNCED | Vérification WSREP via PDO PHP |
 
 ---
 
 ## Architecture
 
 ```
-Internet ──► HAProxy (80/443)
+Internet ──► HAProxy (80 / 443)
               │
               ├── next-net (172.10.0.0/24)
-              │     ├── nginx-next-01..N    — nginx (reverse proxy FPM, fichiers statiques)
-              │     ├── app-next-01..N      — Nextcloud FPM (PHP-FPM, 1 par nginx)
-              │     ├── nextcloud-cron      — Tâches de fond (cron.php / 5 min)
-              │     ├── redis-node1..N      — Redis Cluster (pair ≥ 6)
-              │     └── nginx-acme          — Challenge Let's Encrypt
+              │     ├── nginx-next-01..N     nginx — reverse proxy + fichiers statiques
+              │     ├── app-next-01..N       Nextcloud FPM (PHP-FPM :9000)
+              │     ├── nextcloud-cron       Tâches de fond (cron.php toutes les 5 min)
+              │     ├── redis-node1..N       Redis Cluster (≥ 6 nœuds)
+              │     └── nginx-acme           Challenge ACME Let's Encrypt
               │
               ├── galera-net (172.30.0.0/24)
-              │     └── mariadb-node1/...   — MariaDB Galera (impair)
+              │     └── mariadb-node1..N     MariaDB Galera (nœuds impairs)
               │
-              ├── storage-net (172.20.0.0/24) + minionet (172.50.0.0/24)
-              │     └── minio-node1..N      — MinIO S3 (N nœuds × D drives)
+              ├── storage-net + minionet (172.20.0.0/24 · 172.50.0.0/24)
+              │     └── minio-node1..N       Stockage objet S3 (erasure coding)
               │
               ├── collabora-net (172.40.0.0/24)
-              │     └── collabora-node1/... — Collabora Online CODE
+              │     └── collabora-node1..N   Collabora Online CODE
               │
               └── whiteboard-net (172.100.0.0/24)
-                    ├── whiteboard-node1/... — Tableau blanc collaboratif
-                    └── redis-whiteboard     — Redis dédié (Streams)
+                    ├── whiteboard-node1..N  Tableau blanc collaboratif
+                    └── redis-whiteboard     Redis dédié (Streams)
 ```
 
-> Seul HAProxy expose des ports vers l'extérieur (80, 443). Tous les fichiers sont stockés dans MinIO. La chute d'un nœud est **transparente** pour l'utilisateur.
+> Seul HAProxy expose des ports vers l'extérieur (80 et 443). Tous les fichiers utilisateur sont stockés dans MinIO. La chute d'un nœud est **transparente** pour l'utilisateur final.
 
-**Flux d'une requête Nextcloud :**
+**Flux d'une requête :**
 ```
-Client → HAProxy (SSL) → nginx-next-0X (statique) → app-next-0X (PHP-FPM :9000)
+Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 ```
 
 ---
@@ -90,13 +109,13 @@ Client → HAProxy (SSL) → nginx-next-0X (statique) → app-next-0X (PHP-FPM :
 
 | Composant | Requis |
 |-----------|--------|
-| OS | Debian 11/12/13 · Ubuntu 22.04/24.04 · RHEL / Rocky / AlmaLinux 8/9 |
-| Architecture | x86_64 |
+| Système d'exploitation | Debian 11/12/13 · Ubuntu 22.04/24.04 · RHEL / Rocky / AlmaLinux 8/9 |
+| Architecture | x86\_64 |
 | CPU | 8 cœurs minimum |
-| RAM | 16 Go minimum |
-| Disque | 500 Go SSD (selon usage) |
-| DNS | 3 sous-domaines pointant vers le serveur **avant** le lancement |
-| Ports | 80 et 443 libres pour la génération des certificats |
+| RAM | 16 Go minimum (32 Go recommandés en production) |
+| Disque | 500 Go SSD (selon l'usage et le nombre de nœuds) |
+| DNS | 3 sous-domaines pointant vers ce serveur **avant** le lancement |
+| Ports | 80 et 443 libres pour la validation des certificats |
 
 > Docker et Docker Compose sont installés automatiquement s'ils sont absents.
 
@@ -106,88 +125,100 @@ Client → HAProxy (SSL) → nginx-next-0X (statique) → app-next-0X (PHP-FPM :
 
 | Service | Image | Rôle |
 |---------|-------|------|
-| `haproxy` | `haproxy:2.8-alpine` | Reverse proxy, SSL, load balancer |
-| `nginx-acme` | `nginx:1.27-alpine` | Challenge ACME Let's Encrypt |
-| `certbot` | `certbot/certbot` | Renouvellement SSL automatique (12h) |
-| `nginx-next-01..N` | `nginx:1.27-alpine` | Serving statique + proxy FastCGI vers FPM |
+| `haproxy` | `haproxy:2.8-alpine` | Point d'entrée unique — reverse proxy, SSL, load balancing |
+| `nginx-acme` | `nginx:1.27-alpine` | Validation des challenges ACME (Let's Encrypt) |
+| `certbot` | `certbot/certbot` | Renouvellement SSL automatique toutes les 12h |
+| `nginx-next-01..N` | `nginx:1.27-alpine` | Fichiers statiques + proxy FastCGI vers PHP-FPM |
 | `app-next-01..N` | `nextcloud:X.Y.Z-fpm` | Application Nextcloud (PHP-FPM) |
-| `nextcloud-setup` | `nextcloud:X.Y.Z-fpm` | Auto-configuration post-install (one-shot) |
+| `nextcloud-perms` | `nextcloud:X.Y.Z-fpm` | Correction des permissions volumes (one-shot) |
+| `nextcloud-setup` | `nextcloud:X.Y.Z-fpm` | Auto-configuration post-installation (one-shot) |
 | `nextcloud-cron` | `nextcloud:X.Y.Z-fpm` | Tâches de fond — `cron.php` toutes les 5 min |
 | `mariadb-node1..N` | `maxscale-mariadb-galera:11.4` | Base de données répliquée (Galera) |
+| `galera-autoheal` | `willfarrell/autoheal` | Redémarrage automatique des nœuds Galera hors-sync |
 | `redis-node1..N` | `redis:7.4-alpine` | Cache distribué (Redis Cluster) |
 | `redis-cluster-init` | `redis:7.4-alpine` | Initialisation du cluster Redis (one-shot) |
 | `minio-node1..N` | `minio/minio:latest` | Stockage objet S3 distribué (erasure coding) |
-| `collabora-node1..N` | `collabora/code:latest` | Édition bureautique en ligne |
-| `whiteboard-node1..N` | `ghcr.io/nextcloud-releases/whiteboard:stable` | Tableau blanc collaboratif |
-| `redis-whiteboard` | `redis:7.4-alpine` | État partagé whiteboard (Redis Streams) |
-| `galera-autoheal` | `willfarrell/autoheal` | Redémarrage automatique des nœuds Galera unhealthy |
+| `collabora-node1..N` | `collabora/code:latest` | Édition bureautique collaborative en ligne |
+| `whiteboard-node1..N` | `ghcr.io/nextcloud-releases/whiteboard:stable` | Tableau blanc collaboratif temps réel |
+| `redis-whiteboard` | `redis:7.4-alpine` | État partagé du whiteboard (Redis Streams) |
 
-**Ports exposés :** `80` (→ HTTPS) · `443` (Nextcloud, Collabora, Whiteboard, stats HAProxy sur `/stats`)
+**Ports exposés :** `80` (redirection HTTPS) · `443` (Nextcloud, Collabora, Whiteboard, stats HAProxy sur `/stats`)
 
 ---
 
-## Configuration Nextcloud post-installation
+## Configuration Nextcloud
 
 Tout est appliqué automatiquement par `nextcloud-setup` au premier démarrage.
 
-**Intégrations**
-- Redis Cluster, Collabora Online, Whiteboard, stockage S3 MinIO
-- `trusted_proxies` + `forwarded_for_headers` — IPs clients réelles tracées derrière HAProxy
+### Intégrations
 
-**Sécurité & UX**
-- Mises à jour via CLI uniquement — `upgrade.disable-web = true`
-- Lien d'inscription masqué sur la page de login
-- Dossier skeleton vide — aucun fichier exemple pour les nouveaux comptes
-- `allow_local_remote_servers` et `overwriteprotocol` définis dans `nextcloud-custom.config.php` (monté en `:ro` dans tous les conteneurs Nextcloud) — corrige `.well-known/caldav` et force HTTPS permanent
+- **Redis Cluster** — cache distribué, sessions et verrouillage de fichiers
+- **Collabora Online** — édition bureautique (Writer, Calc, Impress)
+- **Whiteboard** — tableau blanc collaboratif temps réel
+- **MinIO S3** — stockage objet pour tous les fichiers utilisateur
+- `trusted_proxies` + `forwarded_for_headers` — IPs clients réelles remontées derrière HAProxy
 
-**Performance**
-- Cron système — `nextcloud-cron` exécute `cron.php` toutes les 5 minutes
-- Previews limitées à 2 048 px, formats légers uniquement (vidéo/Office désactivés)
+### Sécurité & UX
+
+- Mises à jour désactivées via l'interface web (`upgrade.disable-web = true`)
+- Lien d'inscription masqué sur la page de connexion
+- Dossier skeleton vide — aucun fichier exemple créé pour les nouveaux comptes
+- `allow_local_remote_servers` et `overwriteprotocol` définis dans `nextcloud-custom.config.php`, monté en `:ro` dans tous les conteneurs — corrige `.well-known/caldav` et force HTTPS permanent
+
+### Performance
+
+- Cron système via `nextcloud-cron` — `cron.php` toutes les 5 minutes
+- Previews limitées à 2 048 px, formats légers uniquement (vidéo et Office désactivés)
 - Rotation automatique des logs à 100 Mo
-- `db:convert-filecache-bigint` en maintenance
+- `db:convert-filecache-bigint` appliqué en maintenance initiale
 
-**Applications désactivées à l'installation**
+### Applications désactivées à l'installation
 
-`AppAPI` · `First run wizard` · `Nextcloud Announcements` · `Privacy` · `Support` · `Usage Survey` · `Related Resources` · `Recommendations`
-
-**Whiteboard** — limite upload WebSocket : 25 Mo
+> `AppAPI` · `First Run Wizard` · `Nextcloud Announcements` · `Privacy` · `Support` · `Usage Survey` · `Related Resources` · `Recommendations`
 
 ---
 
 ## Haute disponibilité
 
-| Composant | Tolérance | Effet d'une panne |
-|-----------|-----------|-------------------|
-| Nextcloud | ✅ Automatique | Aucun — HAProxy redispatch instantané |
-| MariaDB | ✅ Automatique | Aucun — Galera quorum maintenu (`galera-autoheal` redémarre les nœuds hors-sync) |
-| Redis | ✅ Automatique | Aucun — cluster tolère 1 panne par slot |
-| MinIO | ✅ Automatique | Lecture continue, écritures rétablies après resync |
-| Collabora | ✅ Automatique | Session perdue, reconnexion automatique |
-| Whiteboard | ✅ Automatique | Reconnexion WebSocket auto (état Redis partagé) |
+| Composant | Tolérance | Comportement lors d'une panne |
+|-----------|:---------:|-------------------------------|
+| Nextcloud FPM | ✅ Automatique | Aucun impact — HAProxy redistribue en < 10 s |
+| MariaDB Galera | ✅ Automatique | Aucun impact — quorum maintenu, `galera-autoheal` relance les nœuds hors-sync |
+| Redis Cluster | ✅ Automatique | Aucun impact — cluster tolère 1 panne par slot de hash |
+| MinIO | ✅ Automatique | Lecture continue, écritures rétablies dès que le nœud revient |
+| Collabora | ✅ Automatique | Session d'édition perdue, reconnexion automatique |
+| Whiteboard | ✅ Automatique | Reconnexion WebSocket automatique (état persisté dans Redis) |
 
 ---
 
-## Stockage objet MinIO (S3)
+## Stockage objet MinIO
 
-MinIO fonctionne en erasure coding distribué — **N nœuds × D drives**.
+MinIO fonctionne en **erasure coding distribué** — N nœuds × D drives par nœud.
 
-| Mode | Tolérance |
-|------|-----------|
-| 4 nœuds × 2 drives | Perte de 1 nœud entier tolérée en écriture |
-| 4 nœuds × 4 drives | Perte de 2 nœuds tolérée en lecture |
+| Configuration | Tolérance en lecture | Tolérance en écriture |
+|---|---|---|
+| 4 nœuds × 2 drives (8 drives total) | Perte de 4 drives | Perte de 3 drives |
+| 4 nœuds × 4 drives (16 drives total) | Perte de 8 drives | Perte de 7 drives |
 
-**Test mono-serveur** — tous les chemins sur le même disque (`/data/minio/...`), option automatique dans `deploy.sh`.
+**Mode test (mono-serveur)** — tous les chemins sur le même disque physique (`/data/minio/...`). Option proposée automatiquement par `deploy.sh`. À utiliser uniquement en développement.
 
-**Production** — chaque `DATA{D}` doit pointer vers un disque physique distinct pour que l'erasure coding soit effectif.
+**Mode production** — chaque `DATA{N}` doit pointer vers un **disque physique distinct** pour que l'erasure coding soit réellement effectif.
+
+### Inspection du cluster
+
+```bash
+source /opt/nxt-maxscale/.env
+docker run --rm --network storage-net --entrypoint sh minio/mc -c "
+  mc alias set r http://minio-node1:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} --quiet
+  mc admin info r
+"
+```
 
 ### Réparation après panne d'un nœud
 
 ```bash
 source /opt/nxt-maxscale/.env
-STORAGE_NET=$(docker inspect minio-node1 \
-  --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' | awk '{print $1}')
-
-docker run --rm --network "$STORAGE_NET" --entrypoint sh minio/mc -c "
+docker run --rm --network storage-net --entrypoint sh minio/mc -c "
   mc alias set r http://minio-node1:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} --quiet
   mc admin heal -r r/nextcloud
 "
@@ -198,26 +229,28 @@ docker run --rm --network "$STORAGE_NET" --entrypoint sh minio/mc -c "
 ## Sécurité HAProxy
 
 ### TLS
-- TLS 1.2 minimum, TLS 1.3 préféré
+
+- TLS 1.2 minimum, **TLS 1.3 préféré**
 - Suites modernes uniquement — ECDHE + AES-GCM + CHACHA20
-- `no-tls-tickets` — parfaite confidentialité persistante (PFS)
+- `no-tls-tickets` — confidentialité persistante (Perfect Forward Secrecy)
 
 ### En-têtes HTTP
 
 | En-tête | Valeur |
 |---------|--------|
-| `Strict-Transport-Security` | 2 ans · includeSubDomains · preload |
-| `X-Content-Type-Options` | nosniff |
-| `X-XSS-Protection` | 1; mode=block |
-| `Referrer-Policy` | strict-origin-when-cross-origin |
-| `X-Frame-Options` | SAMEORIGIN (Nextcloud uniquement) |
-| `Permissions-Policy` | camera=(self) · microphone=(self) · geolocation=(self) · payment=() |
+| `Strict-Transport-Security` | 2 ans · `includeSubDomains` · `preload` |
+| `X-Content-Type-Options` | `nosniff` |
+| `X-XSS-Protection` | `1; mode=block` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `X-Frame-Options` | `SAMEORIGIN` (Nextcloud uniquement) |
+| `Permissions-Policy` | `camera=(self)` · `microphone=(self)` · `geolocation=(self)` · `payment=()` |
 | `Server`, `X-Powered-By` | Supprimés |
 
-> `camera`, `microphone` et `geolocation` sont autorisés sur `(self)` pour Nextcloud Talk et les apps de géolocalisation.
+> `camera`, `microphone` et `geolocation` sont autorisés sur `(self)` pour Nextcloud Talk et les applications de géolocalisation.
 
 ### Filtrage des requêtes
-- **Slowloris** — timeout HTTP-request 10 s
+
+- **Anti-Slowloris** — abandon de requête si non reçue en entier en 10 s
 - **Méthodes dangereuses** bloquées — `TRACE`, `DEBUG`, `CONNECT`
 - **Méthodes WebDAV** restreintes aux chemins API (`/remote.php`, `/public.php`, `/ocs`) — `OPTIONS` libre pour les preflight CORS
 - **User-agents scanners** bloqués — sqlmap, nikto, nmap, masscan, zgrab
@@ -225,54 +258,58 @@ docker run --rm --network "$STORAGE_NET" --entrypoint sh minio/mc -c "
 
 ---
 
-## Gestion du cluster MariaDB Galera
+## Opérations courantes
 
-### Bootstrap initial ou après panne totale
+### Vérifier l'état du cluster Galera
 
 ```bash
-# Démarrer le nœud bootstrap en premier
+source /opt/nxt-maxscale/.env
+docker exec mariadb-node1 mariadb -uroot -p"${MARIADB_ROOT_PASSWORD}" \
+  -e "SHOW GLOBAL STATUS LIKE 'wsrep_%';" 2>/dev/null \
+  | grep -E 'cluster_size|cluster_status|ready|connected|state_comment|flow_control_paused'
+```
+
+### Bootstrap Galera après panne totale
+
+```bash
+# 1. Démarrer le nœud bootstrap
 docker compose up -d mariadb-node1
 
-# Une fois node1 healthy, démarrer les autres (SST parallèle)
-docker compose up -d mariadb-node2 mariadb-node3
+# 2. Une fois node1 healthy, démarrer les autres en parallèle (IST/SST automatique)
+docker compose up -d mariadb-node2 mariadb-node3 # ... jusqu'à mariadb-nodeN
 ```
 
-### Désactiver le mode bootstrap après synchronisation
+> Après synchronisation complète, éditer `mariadb/galera-node1.cnf` et remplacer `gcomm://` par `gcomm://mariadb-node1,mariadb-node2,...,mariadb-nodeN`, puis relancer node1.
 
-Éditer `mariadb/galera-node1.cnf` :
+### Renouvellement SSL
 
-```ini
-wsrep_cluster_address = gcomm://mariadb-node1,mariadb-node2,mariadb-node3
-```
-
-Puis : `docker compose up -d mariadb-node1`
-
-### Vérifier l'état du cluster
-
-```bash
-docker exec mariadb-node1 mariadb -uroot -p"${MARIADB_ROOT_PASSWORD}" \
-  -e "SHOW GLOBAL STATUS LIKE 'wsrep_cluster%';"
-```
-
----
-
-## Renouvellement SSL
-
-Automatique via `certbot` toutes les 12h. Pour forcer manuellement :
+Le certificat est renouvelé automatiquement par `certbot` toutes les 12h. Pour forcer manuellement :
 
 ```bash
 docker compose exec certbot certbot renew --webroot -w /var/www/certbot
 docker compose restart haproxy
 ```
 
+### Relancer la configuration post-installation
+
+```bash
+docker compose rm -f nextcloud-setup && docker compose up -d nextcloud-setup
+```
+
+### Vérifier les logs Nextcloud
+
+```bash
+docker exec -u www-data app-next-01 php /var/www/html/occ log:tail --lines=50
+```
+
 ---
 
-## Déploiement manuel (sans deploy.sh)
+## Déploiement manuel
 
 <details>
-<summary>Voir les étapes</summary>
+<summary>Voir les étapes détaillées</summary>
 
-### 1. Cloner le repo
+### 1. Cloner le dépôt
 
 ```bash
 git clone https://github.com/oboeglen/Azure-NXT-Maxscale.git
@@ -331,57 +368,52 @@ docker compose logs -f nextcloud-setup
 
 ## Performances & dimensionnement
 
-> Benchmarks réalisés sur une instance de référence — **6 nœuds FPM, Galera 5 nœuds, Redis 6 nœuds, MinIO 4×2 drives, 3 Collabora, 3 Whiteboard** — depuis un client externe.
+> Benchmarks réalisés sur une instance de référence — **6 nœuds FPM, 5 Galera, 6 Redis, MinIO 4×2 drives, 3 Collabora, 3 Whiteboard** — depuis un client externe.
 
 ### Résultats mesurés
 
-| Endpoint | Concurrence | Débit | Moy | P95 | P99 | Max | Erreurs |
-|---|---|---|---|---|---|---|---|
-| `/status.php` (léger) | 20 | **120 req/s** | 156 ms | 365 ms | 388 ms | 389 ms | 0 / 200 |
-| `/login` (PHP complet) | 20 | **44 req/s** | 432 ms | 697 ms | 862 ms | 885 ms | 0 / 200 |
-| `/status.php` stress | 50 | **247 req/s** | 192 ms | 299 ms | 375 ms | 403 ms | 0 / 500 |
-| `/status.php` stress | 100 | **242 req/s** | 369 ms | 494 ms | 522 ms | 548 ms | 0 / 500 |
-| `/login` stress | 50 | **60 req/s** | 783 ms | 1 061 ms | 1 154 ms | 1 333 ms | 0 / 300 |
-| Stress maximum | 150 | **231 req/s** | 580 ms | 959 ms | 1 059 ms | 1 242 ms | 0 / 600 |
+| Endpoint | Concurrence | Débit | Moyenne | P95 | P99 | Erreurs |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| `/status.php` | 20 | **120 req/s** | 156 ms | 365 ms | 388 ms | 0 / 200 |
+| `/login` | 20 | **44 req/s** | 432 ms | 697 ms | 862 ms | 0 / 200 |
+| `/status.php` stress | 50 | **247 req/s** | 192 ms | 299 ms | 375 ms | 0 / 500 |
+| `/status.php` stress | 100 | **242 req/s** | 369 ms | 494 ms | 522 ms | 0 / 500 |
+| `/login` stress | 50 | **60 req/s** | 783 ms | 1 061 ms | 1 154 ms | 0 / 300 |
+| Stress maximum | 150 | **231 req/s** | 580 ms | 959 ms | 1 059 ms | 0 / 600 |
 
-**0 erreur réseau** sur 1 900 requêtes totales. Le système tient à 150 connexions simultanées sans défaillance.
+**0 erreur réseau** sur 1 900 requêtes. Le système tient à 150 connexions simultanées sans défaillance.
 
 ---
 
 ### Simulation par nombre de nœuds FPM
 
-> Modèle basé sur les mesures réelles (**6 nœuds FPM** / **5 Galera** / **6 Redis**). Rendement décroissant de **88 % par nœud** (ressources partagées : DB, Redis, HAProxy). Galera 5 nœuds sature vers **14 nœuds FPM** (~2 500 TPS en écriture).
+> Modèle basé sur les mesures réelles. Rendement décroissant de **88 % par nœud** dû aux ressources partagées (DB, Redis, HAProxy). Avec 5 nœuds Galera (~2 500 TPS en écriture), le goulot DB n'est atteint qu'à partir de **14 nœuds FPM**.
 
-| Nœuds FPM | req/s PHP | req/s léger | Concurrent | Actifs | Total users | P99 PHP | P99 léger | RAM min |
-|:---------:|:---------:|:-----------:|:----------:|:------:|:-----------:|:-------:|:---------:|:-------:|
-| 1 | ~10 | ~41 | ~9 | ~55 | ~550 | 3 381 ms | 1 098 ms | 16 Go |
-| 2 | ~18 | ~77 | ~17 | ~103 | ~1 030 | 2 230 ms | 724 ms | 19 Go |
-| 3 | ~26 | ~109 | ~24 | ~145 | ~1 450 | 1 749 ms | 568 ms | 22 Go |
-| **6** ⭐ | **~44** | **~183** | **~40** | **~245** | **~2 450** | **1 154 ms** | **375 ms** | **31 Go** |
-| 9 | ~56 | ~234 | ~52 | ~313 | ~3 130 | 904 ms | 294 ms | 40 Go |
-| 12 | ~65 | ~269 | ~59 | ~359 | ~3 590 | 761 ms | 247 ms | 49 Go |
-| 15 | ~70 | ~291 | ~64 | ~389 | ~3 890 | 665 ms | 216 ms | 58 Go |
-| 20 | ~73 | ~303 | ~67 | ~405 | ~4 050 | 560 ms | 182 ms | 73 Go |
+| Nœuds FPM | req/s PHP | req/s léger | Concurrent | Actifs | Total users | P99 PHP | RAM min |
+|:---------:|:---------:|:-----------:|:----------:|:------:|:-----------:|:-------:|:-------:|
+| 1 | ~10 | ~41 | ~9 | ~55 | ~550 | 3 381 ms | 16 Go |
+| 2 | ~18 | ~77 | ~17 | ~103 | ~1 030 | 2 230 ms | 19 Go |
+| 3 | ~26 | ~109 | ~24 | ~145 | ~1 450 | 1 749 ms | 22 Go |
+| **6** ★ | **~44** | **~183** | **~40** | **~245** | **~2 450** | **1 154 ms** | **31 Go** |
+| 9 | ~56 | ~234 | ~52 | ~313 | ~3 130 | 904 ms | 40 Go |
+| 12 | ~65 | ~269 | ~59 | ~359 | ~3 590 | 761 ms | 49 Go |
+| 15 | ~70 | ~291 | ~64 | ~389 | ~3 890 | 665 ms | 58 Go |
+| 20 | ~73 | ~303 | ~67 | ~405 | ~4 050 | 560 ms | 73 Go |
 
-> ⭐ Configuration actuelle testée en conditions réelles  
-> **Actifs** = concurrent × 6 (sessions ouvertes sur fenêtre 5 min)  
-> **Total users** = actifs × 10 (hypothèse 10 % connectés au pic)  
-> **RAM min** = 3 Go/nœud FPM + 13 Go overhead fixe (5 Galera, 6 Redis, 4 MinIO, 3 Collabora, 3 Whiteboard, HAProxy)
-
-#### Point de saturation DB
-
-Avec **5 nœuds Galera**, le goulot d'étranglement en écriture (~2 500 TPS) n'est atteint qu'à partir de **14 nœuds FPM**. Au-delà de ce seuil, chaque nœud FPM supplémentaire n'apporte que ~3 req/s. Le prochain palier significatif serait **7 nœuds Galera** pour dépasser 4 000 utilisateurs.
+> **★** Configuration de référence mesurée en conditions réelles  
+> **Actifs** = concurrent × 6 (fenêtre de session de 5 min) · **Total users** = actifs × 10 (10 % connectés au pic)  
+> **RAM min** = 3 Go/nœud FPM + 13 Go overhead (5 Galera · 6 Redis · 4 MinIO · 3 Collabora · 3 Whiteboard · HAProxy)
 
 ---
 
 ### Consommation des ressources par composant
 
-| Composant | RAM typique | CPU (idle) | CPU (charge) | Réseau |
-|---|---|---|---|---|
+| Composant | RAM typique | CPU idle | CPU charge | Réseau |
+|-----------|:-----------:|:--------:|:----------:|--------|
 | HAProxy | ~50 Mo | < 1 % | 5–15 % | Tout le trafic entrant/sortant |
-| nginx (par nœud) | ~30 Mo | < 1 % | 2–5 % | Statique + proxy FastCGI |
-| Nextcloud FPM (par nœud) | 500 Mo – 1 Go | 5 % | 30–60 % | Interne FPM :9000 |
-| MariaDB Galera (par nœud) | 1–2 Go | 5 % | 20–40 % | Galera IST/SST replication |
+| nginx (par nœud) | ~30 Mo | < 1 % | 2–5 % | Fichiers statiques + proxy FastCGI |
+| Nextcloud FPM (par nœud) | 500 Mo – 1 Go | 5 % | 30–60 % | Interne :9000 |
+| MariaDB Galera (par nœud) | 1–2 Go | 5 % | 20–40 % | IST/SST replication |
 | Redis (par nœud) | 50–200 Mo | < 1 % | 2–5 % | Cluster gossip + keyspace |
 | MinIO (par nœud) | 256–512 Mo | < 1 % | 10–30 % | Erasure coding inter-nœuds |
 | Collabora CODE (par nœud) | 500 Mo – 1 Go | 2 % | 40–80 % | WOPI + WebSocket |
@@ -392,18 +424,16 @@ Avec **5 nœuds Galera**, le goulot d'étranglement en écriture (~2 500 TPS) n'
 
 ### Recommandations par profil d'usage
 
-| Profil | Nœuds FPM | Nœuds DB | Nœuds Redis | RAM serveur | Users estimés |
-|---|---|---|---|---|---|
-| 🧪 **Test / dev** | 1–2 | 1 (sans Galera) | 0 (APCu seul) | 8–16 Go | < 100 |
-| 🏢 **Petite équipe** | 3 | 3 | 6 | 22–28 Go | ~1 500 |
-| 🏭 **PME** | 6 ⭐ | 5 | 6 | 32–40 Go | ~2 500 |
-| 🏦 **Entreprise** | 9–12 | 5–7 | 6–8 | 48–64 Go | 3 000 – 3 600 |
-| 🏛️ **Grande organisation** | 15–20 | 7 | 8 | 64–80 Go | ~4 000 |
-
-> ⭐ Configuration de référence utilisée pour les benchmarks
+| Profil | FPM | DB Galera | Redis | RAM serveur | Utilisateurs |
+|--------|:---:|:---------:|:-----:|:-----------:|:------------:|
+| 🧪 Test / dev | 1–2 | 1 | 0 (APCu) | 8–16 Go | < 100 |
+| 🏢 Petite équipe | 3 | 3 | 6 | 22–28 Go | ~1 500 |
+| 🏭 PME ★ | 6 | 5 | 6 | 32–40 Go | ~2 500 |
+| 🏦 Entreprise | 9–12 | 5–7 | 6–8 | 48–64 Go | 3 000–3 600 |
+| 🏛️ Grande organisation | 15–20 | 7 | 8 | 64–80 Go | ~4 000 |
 
 ---
 
 ## Support
 
-**Projet :** [github.com/oboeglen/Azure-NXT-Maxscale](https://github.com/oboeglen/Azure-NXT-Maxscale)
+**Dépôt :** [github.com/oboeglen/Azure-NXT-Maxscale](https://github.com/oboeglen/Azure-NXT-Maxscale)
