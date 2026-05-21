@@ -119,6 +119,52 @@ occ config:app:set whiteboard jwt_expiry       --value "86400"
 
 info "Whiteboard configuré → https://${WHITEBOARD_DOMAIN}"
 
+# Patch WhiteboardContentService — bug MinIO objectstore (fichier initialisé avec 1 octet)
+# Avec le backend S3/MinIO, les nouveaux fichiers .whiteboard reçoivent 1 octet au lieu
+# de vide. La vérification === '' est en strict equality et ne le détecte pas →
+# json_decode() lève une JsonException. On ajoute trim() === '' et un try/catch.
+# Upstream : https://github.com/nextcloud/whiteboard/issues/XXX
+WB_SERVICE="/var/www/html/apps/whiteboard/lib/Service/WhiteboardContentService.php"
+if [ -f "${WB_SERVICE}" ]; then
+    php <<'PHPEOF'
+<?php
+$file = '/var/www/html/apps/whiteboard/lib/Service/WhiteboardContentService.php';
+$content = file_get_contents($file);
+
+$old = "\tpublic function getContent(File \$file): array {\n"
+     . "\t\t\$fileContent = \$file->getContent();\n"
+     . "\t\tif (\$fileContent === '') {\n"
+     . "\t\t\t\$fileContent = '{\"elements\":[],\"scrollToContent\":true}';\n"
+     . "\t\t}\n"
+     . "\n"
+     . "\t\treturn json_decode(\$fileContent, true, 512, JSON_THROW_ON_ERROR);\n"
+     . "\t}";
+
+$new = "\tpublic function getContent(File \$file): array {\n"
+     . "\t\t\$fileContent = \$file->getContent();\n"
+     . "\t\tif (\$fileContent === '' || trim(\$fileContent) === '') {\n"
+     . "\t\t\t\$fileContent = '{\"elements\":[],\"scrollToContent\":true}';\n"
+     . "\t\t}\n"
+     . "\n"
+     . "\t\ttry {\n"
+     . "\t\t\treturn json_decode(\$fileContent, true, 512, JSON_THROW_ON_ERROR);\n"
+     . "\t\t} catch (\\JsonException \$e) {\n"
+     . "\t\t\treturn ['elements' => [], 'files' => [], 'scrollToContent' => true];\n"
+     . "\t\t}\n"
+     . "\t}";
+
+if (strpos($content, $old) !== false) {
+    copy($file, $file . '.bak');
+    file_put_contents($file, str_replace($old, $new, $content));
+    echo "[setup] Patch WhiteboardContentService appliqué (bug MinIO 1-octet)\n";
+} else {
+    echo "[setup] WhiteboardContentService: pattern non trouvé — déjà patché ou version différente\n";
+}
+PHPEOF
+else
+    warn "WhiteboardContentService.php introuvable — patch ignoré"
+fi
+
 # ---------------------------------------------------------------------------
 # 6. Stockage objet S3 — MinIO via HAProxy (port 9000 interne)
 # IMPORTANT : à configurer avant la création de données utilisateur
