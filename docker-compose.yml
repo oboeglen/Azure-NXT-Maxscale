@@ -171,8 +171,23 @@ services:
       - nginx-acme
 
   # ===========================================================================
+  # nextcloud-perms — Corrige les permissions du volume config (one-shot)
+  # Exécuté avant app-next-01 pour s'assurer que www-data peut écrire config.php
+  # ===========================================================================
+  nextcloud-perms:
+    image: nextcloud:33.0.3-fpm
+    container_name: nextcloud-perms
+    restart: "no"
+    user: root
+    command: ["chown", "-R", "www-data:www-data", "/var/www/html/config", "/var/www/html/data", "/var/www/html/custom_apps"]
+    volumes:
+      - nextcloud_config:/var/www/html/config
+      - nextcloud_data:/var/www/html/data
+      - nextcloud_apps:/var/www/html/custom_apps
+
+  # ===========================================================================
   # Nextcloud — Application (3 nœuds, partage des mêmes volumes)
-  # L'objectstore S3 (RustFS) est configuré via variables d'environnement
+  # L'objectstore S3 (MinIO) est configuré via variables d'environnement
   # ===========================================================================
   app-next-01:
     image: nextcloud:33.0.3-fpm
@@ -209,6 +224,8 @@ services:
     networks:
       - next-net
     depends_on:
+      nextcloud-perms:
+        condition: service_completed_successfully
       mariadb-node1:
         condition: service_healthy
       redis-node1:
@@ -248,8 +265,8 @@ services:
       - OBJECTSTORE_S3_HOST=haproxy
       - OBJECTSTORE_S3_PORT=9000
       - OBJECTSTORE_S3_BUCKET=${NEXTCLOUD_S3_BUCKET:-nextcloud}
-      - OBJECTSTORE_S3_KEY=${RUSTFS_ACCESS_KEY}
-      - OBJECTSTORE_S3_SECRET=${RUSTFS_SECRET_KEY}
+      - OBJECTSTORE_S3_KEY=${MINIO_ACCESS_KEY}
+      - OBJECTSTORE_S3_SECRET=${MINIO_SECRET_KEY}
       - OBJECTSTORE_S3_USEPATH_STYLE=true
       - OBJECTSTORE_S3_SSL=false
       - OBJECTSTORE_S3_AUTOCREATE=true
@@ -290,8 +307,8 @@ services:
       - OBJECTSTORE_S3_HOST=haproxy
       - OBJECTSTORE_S3_PORT=9000
       - OBJECTSTORE_S3_BUCKET=${NEXTCLOUD_S3_BUCKET:-nextcloud}
-      - OBJECTSTORE_S3_KEY=${RUSTFS_ACCESS_KEY}
-      - OBJECTSTORE_S3_SECRET=${RUSTFS_SECRET_KEY}
+      - OBJECTSTORE_S3_KEY=${MINIO_ACCESS_KEY}
+      - OBJECTSTORE_S3_SECRET=${MINIO_SECRET_KEY}
       - OBJECTSTORE_S3_USEPATH_STYLE=true
       - OBJECTSTORE_S3_SSL=false
       - OBJECTSTORE_S3_AUTOCREATE=true
