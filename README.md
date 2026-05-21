@@ -331,7 +331,7 @@ docker compose logs -f nextcloud-setup
 
 ## Performances & dimensionnement
 
-> Benchmarks réalisés sur l'instance de référence (`nxt.azure-informatique.cloud`) — **6 nœuds FPM, Galera 5 nœuds, Redis 6 nœuds, MinIO 4×2 drives, 3 Collabora, 3 Whiteboard** — depuis un client externe.
+> Benchmarks réalisés sur une instance de référence — **6 nœuds FPM, Galera 5 nœuds, Redis 6 nœuds, MinIO 4×2 drives, 3 Collabora, 3 Whiteboard** — depuis un client externe.
 
 ### Résultats mesurés
 
@@ -399,7 +399,6 @@ Avec **5 nœuds Galera**, le goulot d'étranglement en écriture (~2 500 TPS) n'
 | 🏭 **PME** | 6 ⭐ | 5 | 6 | 32–40 Go | ~2 500 |
 | 🏦 **Entreprise** | 9–12 | 5–7 | 6–8 | 48–64 Go | 3 000 – 3 600 |
 | 🏛️ **Grande organisation** | 15–20 | 7 | 8 | 64–80 Go | ~4 000 |
-| ⚠️ **Au-delà** | 20+ | 7+ | 8+ | 96 Go+ | Disques physiques dédiés MinIO requis |
 
 > ⭐ Configuration actuelle  
 > Pour tous les profils **Entreprise et au-delà**, prévoir des disques physiques dédiés pour MinIO (`MINIO_DISKS=4+`) et augmenter `innodb_buffer_pool_size` dans les configs Galera.
