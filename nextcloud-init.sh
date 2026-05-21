@@ -73,8 +73,8 @@ occ config:system:set redis cluster seeds 0 --value "redis-node1:6379"
 occ config:system:set redis cluster seeds 1 --value "redis-node3:6379"
 occ config:system:set redis cluster seeds 2 --value "redis-node5:6379"
 occ config:system:set redis cluster password       --value "${REDIS_PASSWORD}"
-occ config:system:set redis cluster timeout        --type float   --value 1.5
-occ config:system:set redis cluster read_timeout   --type float   --value 1.5
+occ config:system:set redis cluster timeout        --type float   --value 5.0
+occ config:system:set redis cluster read_timeout   --type float   --value 5.0
 
 info "Redis Cluster configuré (seeds : redis-node1, redis-node3, redis-node5)."
 
@@ -292,6 +292,29 @@ PHPCLEAN
 # 9. Thème NXT — Logos, fond d'écran, favicon, CSS personnalisé
 # ---------------------------------------------------------------------------
 step "Configuration du thème NXT"
+
+# Attendre que le cluster Redis soit pleinement connecté avant de lancer
+# les commandes theming (qui flushe le cache Redis). Sans ce wait, le
+# cluster récemment initialisé peut encore dropper les connexions → "went away".
+info "Vérification de la connectivité Redis..."
+redis_ok=0
+for _attempt in $(seq 1 20); do
+    if php -r "
+        require_once '/var/www/html/lib/base.php';
+        try {
+            \$f = \OC::$server->getMemCacheFactory();
+            \$c = \$f->createDistributed('healthcheck');
+            \$c->set('ping', 1, 10);
+            echo 'ok';
+        } catch (\Exception \$e) { exit(1); }
+    " 2>/dev/null | grep -q 'ok'; then
+        redis_ok=1
+        break
+    fi
+    warn "Redis pas encore prêt (tentative ${_attempt}/20), attente 5s..."
+    sleep 5
+done
+[ $redis_ok -eq 0 ] && warn "Redis non confirmé — theming continuera quand même"
 
 # S'assurer que l'app theming est active (activée par défaut)
 occ app:enable theming || true
