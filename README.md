@@ -329,6 +329,80 @@ docker compose logs -f nextcloud-setup
 
 ---
 
+## Performances & dimensionnement
+
+> Benchmarks réalisés sur l'instance de référence (`nxt.azure-informatique.cloud`) — 3 nœuds FPM, Galera 3 nœuds, Redis 6 nœuds, MinIO 4×2 drives — depuis un client externe avec 20 connexions simultanées.
+
+### Résultats mesurés
+
+| Endpoint | Concurrence | Débit | Moy | P95 | P99 | Max | Erreurs |
+|---|---|---|---|---|---|---|---|
+| `/status.php` (léger) | 20 | **120 req/s** | 156 ms | 365 ms | 388 ms | 389 ms | 0 / 200 |
+| `/login` (PHP complet) | 20 | **44 req/s** | 432 ms | 697 ms | 862 ms | 885 ms | 0 / 200 |
+| `/status.php` stress | 50 | **247 req/s** | 192 ms | 299 ms | 375 ms | 403 ms | 0 / 500 |
+| `/status.php` stress | 100 | **242 req/s** | 369 ms | 494 ms | 522 ms | 548 ms | 0 / 500 |
+| `/login` stress | 50 | **60 req/s** | 783 ms | 1 061 ms | 1 154 ms | 1 333 ms | 0 / 300 |
+| Stress maximum | 150 | **231 req/s** | 580 ms | 959 ms | 1 059 ms | 1 242 ms | 0 / 600 |
+
+**0 erreur réseau** sur 1 900 requêtes totales. Le système tient à 150 connexions simultanées sans défaillance.
+
+---
+
+### Simulation par nombre de nœuds FPM
+
+> Modèle basé sur les mesures réelles. Rendement décroissant de **88 % par nœud** (ressources partagées : DB, Redis, HAProxy). La base de données Galera 3 nœuds devient le goulot d'étranglement à partir de **7 nœuds FPM** (~1 500 TPS en écriture fixes).
+
+| Nœuds FPM | req/s PHP | req/s léger | Concurrent | Actifs | Total users | P99 PHP | P99 léger | RAM min |
+|:---------:|:---------:|:-----------:|:----------:|:------:|:-----------:|:-------:|:---------:|:-------:|
+| 1 | ~20 | ~82 | ~18 | ~110 | ~1 100 | 2 356 ms | 765 ms | 11 Go |
+| 2 | ~37 | ~154 | ~34 | ~206 | ~2 060 | 1 501 ms | 488 ms | 14 Go |
+| **3** ⭐ | **~53** | **~218** | **~48** | **~291** | **~2 910** | **1 154 ms** | **375 ms** | **17 Go** |
+| 5 | ~78 | ~324 | ~72 | ~432 | ~4 320 | 827 ms | 269 ms | 23 Go |
+| 7 | ~98 | ~405 | ~90 | ~542 | ~5 420 | 665 ms | 216 ms | 29 Go |
+| 9 | ~107 | ~443 | ~98 | ~592 | ~5 920 | 565 ms | 183 ms | 35 Go |
+| 12 | ~112 | ~461 | ~102 | ~616 | ~6 160 | 468 ms | 152 ms | 44 Go |
+
+> ⭐ Configuration actuelle testée en conditions réelles  
+> **Actifs** = concurrent × 6 (sessions ouvertes sur fenêtre 5 min)  
+> **Total users** = actifs × 10 (hypothèse 10 % connectés au pic)  
+> **RAM min** = 3 Go/nœud FPM + 8 Go overhead (MariaDB, Redis, MinIO, HAProxy)
+
+#### Point de saturation DB
+
+Au-delà de **7 nœuds FPM**, chaque nœud supplémentaire n'apporte que ~5 req/s supplémentaires au lieu de ~20. Pour dépasser 6 000 utilisateurs, le prochain palier est **5 nœuds Galera** (configure `MARIADB_NODES=5` dans `deploy.sh`).
+
+---
+
+### Consommation des ressources par composant
+
+| Composant | RAM typique | CPU (idle) | CPU (charge) | Réseau |
+|---|---|---|---|---|
+| HAProxy | ~50 Mo | < 1 % | 5–15 % | Tout le trafic |
+| nginx (par nœud) | ~30 Mo | < 1 % | 2–5 % | Statique + proxy |
+| Nextcloud FPM (par nœud) | 500 Mo – 1 Go | 5 % | 30–60 % | Interne FPM |
+| MariaDB Galera (par nœud) | 1–2 Go | 5 % | 20–40 % | Galera replication |
+| Redis (par nœud) | 50–200 Mo | < 1 % | 2–5 % | Cluster gossip |
+| MinIO (par nœud) | 256–512 Mo | < 1 % | 10–30 % | Erasure coding |
+| Collabora CODE (par nœud) | 500 Mo – 1 Go | 2 % | 40–80 % | WOPI + WebSocket |
+| Whiteboard (par nœud) | ~100 Mo | < 1 % | 5–10 % | WebSocket |
+| galera-autoheal | ~20 Mo | < 1 % | < 1 % | Docker socket |
+
+---
+
+### Recommandations par profil d'usage
+
+| Profil | Nœuds FPM | Nœuds DB | Nœuds Redis | RAM serveur | Users estimés |
+|---|---|---|---|---|---|
+| 🧪 **Test / dev** | 1 | 1 (sans Galera) | 0 (APCu seul) | 8 Go | < 50 |
+| 🏢 **PME — petite équipe** | 2–3 | 3 | 6 | 16–24 Go | 500 – 3 000 |
+| 🏭 **Entreprise moyenne** | 5 | 3–5 | 6 | 32–48 Go | 3 000 – 6 000 |
+| 🏦 **Grande organisation** | 7–9 | 5 | 6–8 | 64–96 Go | 5 000 – 10 000 |
+| ⚠️ **Au-delà** | 12+ | 5+ | 8+ | 128 Go+ | Clustering applicatif requis |
+
+> Pour les profils **Entreprise / Grande organisation**, prévoir des disques physiques dédiés pour MinIO (`MINIO_DISKS=4+`) et un nœud de monitoring séparé (Prometheus + Grafana).
+
+---
+
 ## Support
 
 **Projet :** [github.com/oboeglen/Azure-NXT-Maxscale](https://github.com/oboeglen/Azure-NXT-Maxscale)
