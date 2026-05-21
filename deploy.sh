@@ -31,33 +31,62 @@ error()   { echo -e " ${C_BRED}✗${C_RESET}  $*" >&2; }
 die()     { error "$*"; exit 1; }
 step()    { echo -e "\n${C_BCYAN}  ▸ $*${C_RESET}"; }
 
+# Largeur visuelle d'une chaîne : supprime les codes ANSI, compte les caractères (pas les octets)
+_vlen() {
+  local s
+  s=$(printf '%s' "$1" | sed 's/\x1b\[[0-9;]*[mK]//g')
+  echo ${#s}
+}
+
+# Remplit $1 avec des espaces jusqu'à la largeur visuelle $2
+_rpad() {
+  local s="$1" w="$2" vw n
+  vw=$(_vlen "$s")
+  printf '%s' "$s"
+  n=$(( w - vw ))
+  if (( n > 0 )); then printf '%*s' "$n" ''; fi
+}
+
 phase() {
   local n="$1" total="$2" name="$3"
-  # Box width = 58 chars total (╔ + 56×═ + ╗)
-  # Content: ║(1) + "  PHASE n/t — "(14) + %-42s(42) + ║(1) = 58 ✓
+  local INNER=56
   echo ""
-  echo -e "${C_BCYAN}╔══════════════════════════════════════════════════════════╗${C_RESET}"
-  printf "${C_BCYAN}║  PHASE %s/%s — %-42s║${C_RESET}\n" "$n" "$total" "$name"
-  echo -e "${C_BCYAN}╚══════════════════════════════════════════════════════════╝${C_RESET}"
+  printf "${C_BCYAN}╔"; printf '═%.0s' $(seq 1 $INNER); printf "╗${C_RESET}\n"
+  local prefix="  PHASE ${n}/${total} — "
+  local prefix_len; prefix_len=$(_vlen "$prefix")
+  printf "${C_BCYAN}║${C_RESET}%s" "$prefix"
+  _rpad "$name" $(( INNER - prefix_len ))
+  printf "${C_BCYAN}║${C_RESET}\n"
+  printf "${C_BCYAN}╚"; printf '═%.0s' $(seq 1 $INNER); printf "╝${C_RESET}\n"
 }
 
 box() {
   local title="$1"; shift
-  # TOTAL = 66 chars: ┌(1)+─(1)+space(1)+title+space(1)+─×dashes+┐(1) = 66
-  # Content: │(1)+space(2)+%-62s(62)+│(1) = 66
-  # Bottom:  └(1)+─×64+┘(1) = 66
-  local TOTAL=66
-  local inner=$(( TOTAL - 4 ))
-  local titlelen=${#title}
-  local dashes=$(( TOTAL - titlelen - 5 ))
+
+  # Largeur automatique : s'adapte à la ligne de contenu la plus longue
+  local max_content=0 line lw
+  for line in "$@"; do
+    lw=$(_vlen "$line")
+    (( lw > max_content )) && max_content=$lw
+  done
+
+  # Géométrie : total = │(1) + 2sp + inner + │(1) = inner + 4
+  local title_len; title_len=$(_vlen "$title")
+  local inner=$max_content
+  local total=$(( inner + 4 ))
+  local min_total=$(( title_len + 6 ))   # ┌─ T ─┐ : minimum 1 tiret
+  if (( total < min_total )); then total=$min_total; inner=$(( total - 4 )); fi
+
   printf "\n${C_CYAN}┌─ %s " "$title"
-  printf '─%.0s' $(seq 1 $dashes)
+  printf '─%.0s' $(seq 1 $(( total - title_len - 5 )))
   printf "┐${C_RESET}\n"
   for line in "$@"; do
-    printf "${C_CYAN}│${C_RESET}  %-${inner}s${C_CYAN}│${C_RESET}\n" "$line"
+    printf "${C_CYAN}│${C_RESET}  "
+    _rpad "$line" "$inner"
+    printf "${C_CYAN}│${C_RESET}\n"
   done
   printf "${C_CYAN}└"
-  printf '─%.0s' $(seq 1 $(( TOTAL - 2 )))
+  printf '─%.0s' $(seq 1 $(( total - 2 )))
   printf "┘${C_RESET}\n"
 }
 
