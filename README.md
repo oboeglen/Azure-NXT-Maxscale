@@ -26,6 +26,16 @@
 
 ---
 
+<div align="center">
+
+![Aperçu de l'interface](img/mosaic-preview.png)
+
+*De gauche à droite : connexion · tableau de bord · fichiers · Collabora Online · tableau blanc · administration système · gestion des comptes · stats HAProxy*
+
+</div>
+
+---
+
 ## Table des matières
 
 - [Déploiement rapide](#déploiement-rapide)
