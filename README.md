@@ -16,24 +16,6 @@
 
 ---
 
-<div align="center">
-
-![Page de connexion NXT](img/login-preview-v3.png)
-
-*Thème NXT — page de connexion avec fond sombre, bordure cônique animée et logo personnalisé*
-
-</div>
-
----
-
-<div align="center">
-
-![Aperçu de l'interface](img/mosaic-preview.png)
-
-*De gauche à droite : connexion · tableau de bord · fichiers · Collabora Online · tableau blanc · administration système · gestion des comptes · stats HAProxy*
-
-</div>
-
 ---
 
 ## Table des matières
