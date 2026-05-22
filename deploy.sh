@@ -1390,6 +1390,8 @@ MCONSOLE
       - LANG=fr_FR.UTF-8
       - LC_ALL=fr_FR.UTF-8
       - aliasgroup1=https://\${NEXTCLOUD_DOMAIN}:443
+    volumes:
+      - ./collabora-presets.xcu:/opt/collaboraoffice/presets/registrymodifications.xcu:ro
     cap_add:
       - MKNOD
       - SYS_ADMIN
