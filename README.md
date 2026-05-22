@@ -8,7 +8,7 @@
 
 [![Version](https://img.shields.io/badge/version-2.1-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9?logo=nextcloud&logoColor=white)](https://nextcloud.com)
-[![PHP](https://img.shields.io/badge/PHP-8.3--FPM-777BB4?logo=php&logoColor=white)](https://www.php.net)
+[![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?logo=php&logoColor=white)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/oboeglen/Azure-NXT-Maxscale?color=brightgreen)](https://github.com/oboeglen/Azure-NXT-Maxscale/commits/main)
 
