@@ -71,13 +71,16 @@ occ config:system:set filelocking.ttl       --type integer --value 3600
 # "redis.cluster seeds N" (1 arg avec point) crée $config['redis.cluster']['seeds'][N]
 # → getKeys() retourne 'redis.cluster' → $isCluster=true → RedisCluster correct
 occ config:system:set 'redis.cluster' seeds 0 --value "redis-node1:6379"
-occ config:system:set 'redis.cluster' seeds 1 --value "redis-node3:6379"
-occ config:system:set 'redis.cluster' seeds 2 --value "redis-node5:6379"
+occ config:system:set 'redis.cluster' seeds 1 --value "redis-node2:6379"
+occ config:system:set 'redis.cluster' seeds 2 --value "redis-node3:6379"
+occ config:system:set 'redis.cluster' seeds 3 --value "redis-node4:6379"
+occ config:system:set 'redis.cluster' seeds 4 --value "redis-node5:6379"
+occ config:system:set 'redis.cluster' seeds 5 --value "redis-node6:6379"
 occ config:system:set 'redis.cluster' password       --value "${REDIS_PASSWORD}"
 occ config:system:set 'redis.cluster' timeout        --type float   --value 5.0
 occ config:system:set 'redis.cluster' read_timeout   --type float   --value 5.0
 
-info "Redis Cluster configuré (seeds : redis-node1, redis-node3, redis-node5 (6 nœuds total))."
+info "Redis Cluster configuré (seeds : tous les nœuds redis-node1..6)."
 
 # ---------------------------------------------------------------------------
 # 3. Domaines de confiance
