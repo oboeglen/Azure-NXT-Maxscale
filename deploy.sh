@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.3
+# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.4
 # Usage : sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -11,6 +11,7 @@ IFS=$'\n\t'
 : "${_SOURCE_ONLY:=0}"
 
 INSTALL_DIR="/opt/nxt-maxscale"
+COMPOSE_PROJECT_NAME="maxscale"
 REPO_URL="https://github.com/oboeglen/Azure-NXT-Maxscale"
 ANSWERS_CACHE="/tmp/.nxt-maxscale-config.env"
 LOG_FILE="/var/log/nxt-maxscale-deploy.log"
@@ -192,7 +193,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Déployeur automatique v2.1.3"; do
+    "        NXT Maxscale — Déployeur automatique v2.1.4"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -822,7 +823,7 @@ gen_env() {
 # Généré automatiquement par deploy.sh — $(date '+%Y-%m-%d %H:%M:%S')
 # NE PAS MODIFIER MANUELLEMENT — regénérer avec deploy.sh
 
-COMPOSE_PROJECT_NAME=maxscale
+COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
 
 NEXTCLOUD_DOMAIN=${NC_DOMAIN}
 COLLABORA_DOMAIN=${COLLAB_DOMAIN}
@@ -1012,8 +1013,7 @@ NCCRON
       /bin/sh -c "
         trap exit TERM;
         while :; do
-          certbot renew --webroot -w /var/www/certbot --quiet
-            --post-hook 'cat /etc/letsencrypt/live/stack/fullchain.pem /etc/letsencrypt/live/stack/privkey.pem > /certs/stack.pem && chmod 600 /certs/stack.pem';
+          certbot renew --webroot -w /var/www/certbot --quiet --post-hook 'cat /etc/letsencrypt/live/stack/fullchain.pem /etc/letsencrypt/live/stack/privkey.pem > /certs/stack.pem && chmod 600 /certs/stack.pem';
           sleep 12h & wait $$!;
         done"
     healthcheck:
@@ -1728,7 +1728,7 @@ gen_certs() {
   phase 6 7 "Génération des certificats SSL"
 
   # Préfixe = nom du projet Docker Compose (doit correspondre aux volumes docker-compose.yml)
-  local prefix; prefix=$(basename "$INSTALL_DIR")
+  local prefix; prefix="$COMPOSE_PROJECT_NAME"
   # En staging, on utilise un volume séparé pour ne pas polluer le volume prod
   local le_vol="${prefix}_letsencrypt"
   [[ "$CERTBOT_STAGING" == "yes" ]] && le_vol="${prefix}_letsencrypt_staging"
@@ -1882,7 +1882,7 @@ fix_galera_bootstrap() {
   status=$(docker inspect --format='{{.State.Status}}' mariadb-node1 2>/dev/null || echo "absent")
   [[ "$status" == "running" ]] && return 0
 
-  local project_name; project_name=$(basename "$INSTALL_DIR")
+  local project_name; project_name="$COMPOSE_PROJECT_NAME"
   local vol1="${project_name}_mariadb_n1_data"
 
   # Pas de volume → premier démarrage propre, rien à faire

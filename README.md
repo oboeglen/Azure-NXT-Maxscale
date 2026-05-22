@@ -6,7 +6,7 @@
 
 **Infrastructure Nextcloud haute disponibilité — déployable en une commande**
 
-[![Version](https://img.shields.io/badge/version-2.1.3-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
+[![Version](https://img.shields.io/badge/version-2.1.4-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9?logo=nextcloud&logoColor=white)](https://nextcloud.com)
 [![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?logo=php&logoColor=white)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -636,7 +636,7 @@ Une fois l'infrastructure déployée, **restreindre les ports exposés** est la 
 |------|-----------|-------|
 | `80` | TCP | Redirection HTTP → HTTPS + challenge ACME Let's Encrypt |
 | `443` | TCP | HTTPS — point d'entrée principal (Nextcloud, Collabora, Whiteboard) |
-| `22` | TCP | SSH administration (restreindre à ton IP si possible) |
+| `22` | TCP | SSH administration (restreindre à votre IP si possible) |
 
 > Tous les autres ports (3306 MariaDB, 6379 Redis, 9000 MinIO, 9980 Collabora…) sont internes aux réseaux Docker et ne doivent **jamais** être exposés sur l'interface publique.
 
@@ -662,10 +662,10 @@ sudo ufw enable
 sudo ufw status verbose
 ```
 
-> **Si tu veux restreindre SSH à une IP fixe** (recommandé en production) :
+> **Pour restreindre SSH à une IP fixe** (recommandé en production) :
 > ```bash
 > sudo ufw delete allow 22/tcp
-> sudo ufw allow from <TON_IP> to any port 22
+> sudo ufw allow from <VOTRE_IP> to any port 22
 > ```
 
 ### Option 2 — Fail2ban (protection brute-force SSH)
