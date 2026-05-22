@@ -356,16 +356,39 @@ clone_repo() {
     warn "Le répertoire $INSTALL_DIR existe déjà"
     if prompt_yn "Mettre à jour le repo (git pull) ?" "Y"; then
       start_spinner "Mise à jour du repo..."
-      git -C "$INSTALL_DIR" fetch origin
+      GIT_TERMINAL_PROMPT=0 timeout 120 git -C "$INSTALL_DIR" fetch origin || {
+        stop_spinner
+        die "Impossible de joindre $REPO_URL — vérifiez la connectivité réseau"
+      }
       git -C "$INSTALL_DIR" reset --hard origin/main
       stop_spinner "Repo mis à jour"
     else
       info "Utilisation du repo existant"
     fi
   else
-    start_spinner "Clonage depuis $REPO_URL..."
-    git clone --depth=1 "$REPO_URL" "$INSTALL_DIR"
-    stop_spinner "Projet cloné dans $INSTALL_DIR"
+    # Détection du répertoire source local (script lancé depuis une copie du projet)
+    local SCRIPT_DIR
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local _sentinel_files=(haproxy.cfg nextcloud-init.sh galera-bootstrap.sh)
+    local _all_present=true
+    for _f in "${_sentinel_files[@]}"; do
+      [[ -f "$SCRIPT_DIR/$_f" ]] || { _all_present=false; break; }
+    done
+
+    if $_all_present && [[ "$SCRIPT_DIR" != "$INSTALL_DIR" ]]; then
+      step "Fichiers locaux détectés dans $SCRIPT_DIR — copie locale (pas de clonage Git)"
+      start_spinner "Copie des fichiers vers $INSTALL_DIR..."
+      mkdir -p "$INSTALL_DIR"
+      cp -a "$SCRIPT_DIR/." "$INSTALL_DIR/"
+      stop_spinner "Fichiers copiés dans $INSTALL_DIR"
+    else
+      start_spinner "Clonage depuis $REPO_URL..."
+      if ! GIT_TERMINAL_PROMPT=0 timeout 120 git clone --depth=1 "$REPO_URL" "$INSTALL_DIR"; then
+        stop_spinner
+        die "Clonage échoué — vérifiez :\n  • Connectivité : curl -sf https://github.com\n  • Repo public : $REPO_URL\n  • Alternative : copiez les fichiers dans $INSTALL_DIR et relancez"
+      fi
+      stop_spinner "Projet cloné dans $INSTALL_DIR"
+    fi
   fi
 
   cd "$INSTALL_DIR"
