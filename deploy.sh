@@ -1338,17 +1338,11 @@ MINIONODE
   minio-init:
     image: minio/mc:latest
     container_name: minio-init
-    restart: on-failure:3
+    restart: "no"
     entrypoint: >
       /bin/sh -c "
         until mc alias set local http://minio-node1:9000 \${MINIO_ACCESS_KEY} \${MINIO_SECRET_KEY} --quiet 2>/dev/null; do
           echo 'Attente MinIO...'; sleep 5;
-        done;
-        i=0;
-        until mc ls local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} >/dev/null 2>&1; do
-          i=\$\$((i+1));
-          [ \$\$i -ge 72 ] && echo 'Timeout bucket (6 min) - prochain redemarrage' && exit 1;
-          echo \"Attente bucket \${NEXTCLOUD_S3_BUCKET:-nextcloud} (\$\$i/72)...\"; sleep 5;
         done;
         mc version enable local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null && echo 'Versioning actif' || echo 'Erreur versioning';
         mc ilm rule add --expire-delete-marker local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} 2>/dev/null || true;
@@ -1362,6 +1356,8 @@ MINIONODE
     depends_on:
       minio-node1:
         condition: service_healthy
+      nextcloud-setup:
+        condition: service_completed_successfully
 MINIOINIT
 
   # ── minio-console (optionnel) ───────────────────────────────────────────
