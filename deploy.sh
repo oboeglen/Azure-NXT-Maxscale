@@ -1662,18 +1662,24 @@ patch_haproxy() {
     redis_servers+="  server redis-node${i} redis-node${i}:6379 check"$'\n'
   done
 
+  local fpm_servers=""
+  for i in $(seq 1 "$NC_NODES"); do
+    fpm_servers+="  server app-next-$(printf '%02d' "$i") app-next-$(printf '%02d' "$i"):9000 check"$'\n'
+  done
+
   # Apply patches sequentially using temp files
   local tmp tmp2
   tmp=$(mktemp)
   tmp2=$(mktemp)
   cp "$file" "$tmp"
 
-  _replace_servers "NEXTCLOUD"  "${nc_servers%$'\n'}"      "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "COLLABORA"  "${collab_servers%$'\n'}"  "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "WHITEBOARD" "${wb_servers%$'\n'}"      "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "GALERA"     "${galera_servers%$'\n'}"  "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "MINIO"      "${minio_servers%$'\n'}"   "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "REDIS"      "${redis_servers%$'\n'}"   "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "NEXTCLOUD"     "${nc_servers%$'\n'}"      "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "NEXTCLOUD_FPM" "${fpm_servers%$'\n'}"     "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "COLLABORA"     "${collab_servers%$'\n'}"  "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "WHITEBOARD"    "${wb_servers%$'\n'}"      "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "GALERA"        "${galera_servers%$'\n'}"  "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "MINIO"         "${minio_servers%$'\n'}"   "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "REDIS"         "${redis_servers%$'\n'}"   "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
 
   # Supprimer le bloc stats de frontend https si désactivé (entre les markers BEGIN/END_STATS)
   if [[ "$HAPROXY_STATS" == "no" ]]; then
