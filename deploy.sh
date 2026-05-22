@@ -616,12 +616,15 @@ show_load_estimate() {
   p99_php=$(awk -v n="$NC_NODES" 'BEGIN{printf "%.0f", 3381 * n^(-0.6)}')
 
   # RAM : 3 Go/nœud FPM + overhead dynamique (1.5 Go/Galera, 0.125/Redis,
-  #        0.375/MinIO, 0.75/Collabora, 0.1/Whiteboard, 0.07 fixe)
+  #        0.375/MinIO, 0.75/Collabora, 0.1/Whiteboard)
+  #        + 0.7 Go fixe (HAProxy 0.05 + nginx-acme 0.03 + certbot 0.03
+  #                       + nextcloud-cron 0.5 + galera-autoheal 0.02 + OS 0.07)
+  # Vérifié : 6 FPM + 5 Galera + 6 Redis + 4 MinIO + 3 Collab + 3 WB = 31 Go (README)
   ram_total=$(awk \
     -v nc="$NC_NODES" -v db="$MARIADB_NODES" -v redis="$REDIS_NODES" \
     -v minio="$MINIO_NODES" -v collab="$COLLAB_NODES" -v wb="$WB_NODES" \
     'BEGIN{printf "%.0f",
-       nc*3 + db*1.5 + redis*0.125 + minio*0.375 + collab*0.75 + wb*0.1 + 0.07}')
+       nc*3 + db*1.5 + redis*0.125 + minio*0.375 + collab*0.75 + wb*0.1 + 0.7}')
 
   local write_tps=1500
   (( MARIADB_NODES >= 5 )) && write_tps=2500   # mesuré : 5 nœuds → ~2 500 TPS
@@ -630,7 +633,9 @@ show_load_estimate() {
   local redis_masters=$(( REDIS_NODES / 2 ))
 
   local minio_total=$(( MINIO_NODES * MINIO_DISKS ))
-  local minio_tol_drives=$(( minio_total / 2 ))
+  # Tolérance écriture (quorum N/2+1 drives) = minio_total/2 - 1
+  # Ex. 4 nœuds × 2 drives = 8 → écriture tolère 3 drives perdus (README : "Perte de 3 drives")
+  local minio_tol_drives=$(( minio_total / 2 - 1 ))
   local minio_tol_nodes=$(( MINIO_NODES / 2 ))
 
   box "Estimation de charge" \
@@ -642,7 +647,7 @@ show_load_estimate() {
     "RAM recommandée          : ~${ram_total} Go" \
     "Écritures MariaDB        : ~${write_tps} TPS  (Galera ${MARIADB_NODES} nœuds)" \
     "Cache Redis              : ${redis_masters} masters  > 500 000 ops/s" \
-    "Tolérance MinIO          : ${minio_tol_nodes} nœud(s) ou ${minio_tol_drives} disques perdables" \
+    "Tolérance MinIO          : ${minio_tol_nodes} nœud(s) ou ${minio_tol_drives} disques perdables (écriture)" \
     "" \
     "Données réelles : 0 erreur / 1 900 req · 150 concurrent · max 247 req/s"
 }
@@ -1341,9 +1346,9 @@ MINIONODE
         done;
         i=0;
         until mc ls local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} >/dev/null 2>&1; do
-          i=\$((i+1));
-          [ \$i -ge 30 ] && echo 'Timeout bucket - versioning ignoré' && exit 0;
-          echo \"Attente bucket \${NEXTCLOUD_S3_BUCKET:-nextcloud} (\${i}/30)...\"; sleep 5;
+          i=\$\$((i+1));
+          [ \$\$i -ge 30 ] && echo 'Timeout bucket - versioning ignoré' && exit 0;
+          echo \"Attente bucket \${NEXTCLOUD_S3_BUCKET:-nextcloud} (\$\$i/30)...\"; sleep 5;
         done;
         mc version enable local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null && echo 'Versioning actif' || echo 'Erreur versioning';
         mc ilm rule add --expire-delete-marker local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} 2>/dev/null || true;
