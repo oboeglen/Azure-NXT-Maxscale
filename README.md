@@ -7,8 +7,23 @@
 **Infrastructure Nextcloud haute disponibilité — déployable en une commande**
 
 [![Version](https://img.shields.io/badge/version-2.1-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
-[![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9)](https://nextcloud.com)
+[![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9?logo=nextcloud&logoColor=white)](https://nextcloud.com)
+[![PHP](https://img.shields.io/badge/PHP-8.3--FPM-777BB4?logo=php&logoColor=white)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/oboeglen/Azure-NXT-Maxscale?color=brightgreen)](https://github.com/oboeglen/Azure-NXT-Maxscale/commits/main)
+
+[![Docker](https://img.shields.io/badge/Docker-compose-2CA5E0?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![HAProxy](https://img.shields.io/badge/HAProxy-2.8-3E69AF?logo=haproxy&logoColor=white)](https://www.haproxy.org)
+[![MariaDB](https://img.shields.io/badge/MariaDB-Galera-003545?logo=mariadb&logoColor=white)](https://mariadb.com/kb/en/galera-cluster/)
+[![Redis](https://img.shields.io/badge/Redis-Cluster-DC382D?logo=redis&logoColor=white)](https://redis.io/docs/management/scaling/)
+[![MinIO](https://img.shields.io/badge/MinIO-S3-C72E49?logo=minio&logoColor=white)](https://min.io)
+[![Collabora](https://img.shields.io/badge/Collabora-CODE-0D72BB?logo=libreoffice&logoColor=white)](https://www.collaboraonline.com)
+
+[![HTTPS](https://img.shields.io/badge/HTTPS-enforced-brightgreen?logo=letsencrypt&logoColor=white)](https://letsencrypt.org)
+[![TLS](https://img.shields.io/badge/TLS-1.2%2B%20%E2%80%94%201.3%20preferred-brightgreen?logo=openssl&logoColor=white)](https://www.openssl.org)
+[![HSTS](https://img.shields.io/badge/HSTS-preload%20%E2%80%94%202%20ans-brightgreen)](https://hstspreload.org)
+[![CSP](https://img.shields.io/badge/CSP-WebSocket%20%2B%20nonce-brightgreen)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP)
+[![Security Headers](https://img.shields.io/badge/Security%20Headers-X--Frame%20%7C%20XCTO%20%7C%20HSTS-brightgreen)](https://securityheaders.com)
 
 *Debian · Ubuntu · RHEL · Rocky Linux · AlmaLinux — x86\_64*
 
