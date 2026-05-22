@@ -897,6 +897,7 @@ HAPROXY
       - nextcloud_config:/var/www/html/config
       - nextcloud_data:/var/www/html/data
       - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
+      - ./opcache-preload.php:/opcache-preload.php:ro
       - ./nextcloud-custom.config.php:/var/www/html/config/custom.config.php:ro
       - ./img:/img:ro
       - ./nxt-custom.css:/nxt-custom.css:ro
@@ -927,6 +928,7 @@ NCSETUP
     entrypoint: /cron.sh
     volumes:
       - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
+      - ./opcache-preload.php:/opcache-preload.php:ro
       - nextcloud_html:/var/www/html
       - nextcloud_apps:/var/www/html/custom_apps
       - nextcloud_config:/var/www/html/config
@@ -943,6 +945,12 @@ NCSETUP
     depends_on:
       app-next-01:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f cron.sh > /dev/null || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 NCCRON
 
   # ── nginx-acme + certbot (fixed) ────────────────────────────────────────
@@ -1053,6 +1061,7 @@ ${entrypoint_override}
       - "9000"
     volumes:
       - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
+      - ./opcache-preload.php:/opcache-preload.php:ro
       - nextcloud_html:/var/www/html
       - nextcloud_apps:/var/www/html/custom_apps
       - nextcloud_config:/var/www/html/config
@@ -1388,7 +1397,7 @@ MCONSOLE
       - "9980"
     environment:
       - dictionaries=fr_FR en_US
-      - extra_params=--o:ssl.enable=false --o:ssl.termination=true --o:net.listen=any --o:server_name=\${COLLABORA_DOMAIN} --o:mount_jail_tree=false --o:home_mode.enable=true
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=true --o:net.listen=any --o:server_name=\${COLLABORA_DOMAIN} --o:mount_jail_tree=false --o:home_mode.enable=true --o:net.max_file_size=104857600
       - DONT_GEN_SSL_CERT=true
       - aliasgroup1=https://\${NEXTCLOUD_DOMAIN}:443
     cap_add:
