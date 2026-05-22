@@ -1972,7 +1972,7 @@ run_deploy() {
         if docker run --rm \
             --network storage-net \
             --entrypoint sh minio/mc:latest -c \
-            "mc alias set r http://minio-node1:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} --quiet 2>/dev/null \
+            "mc alias set r http://minio-node1:9000 ${GEN_MINIO_KEY} ${GEN_MINIO_SECRET} --quiet 2>/dev/null \
              && mc version enable r/${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null \
              && mc ilm rule add --expire-delete-marker r/${NEXTCLOUD_S3_BUCKET:-nextcloud} 2>/dev/null || true" \
             &>/dev/null; then
