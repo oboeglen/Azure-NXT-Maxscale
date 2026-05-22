@@ -6,7 +6,7 @@
 
 **Infrastructure Nextcloud haute disponibilité — déployable en une commande**
 
-[![Version](https://img.shields.io/badge/version-2.1.2-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
+[![Version](https://img.shields.io/badge/version-2.1.3-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9?logo=nextcloud&logoColor=white)](https://nextcloud.com)
 [![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?logo=php&logoColor=white)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -76,6 +76,7 @@
 - [🛠️ Opérations courantes](#️-opérations-courantes)
 - [🚢 Déploiement manuel](#-déploiement-manuel)
 - [📊 Performances & dimensionnement](#-performances--dimensionnement)
+- [🛡️ Recommandations sécurité réseau](#️-recommandations-sécurité-réseau)
 
 ---
 
@@ -622,6 +623,74 @@ docker compose logs -f nextcloud-setup
 | 🏭 PME ★ | 6 | 5 | 6 | 32–40 Go | ~2 500 |
 | 🏦 Entreprise | 9–12 | 5–7 | 6–8 | 48–64 Go | 3 000–3 600 |
 | 🏛️ Grande organisation | 15–20 | 7 | 8 | 64–80 Go | ~4 000 |
+
+---
+
+## 🛡️ Recommandations sécurité réseau
+
+Une fois l'infrastructure déployée, **restreindre les ports exposés** est la première mesure à appliquer. Par défaut, toutes les interfaces sont ouvertes — seuls trois ports sont nécessaires pour les utilisateurs finaux.
+
+### Ports à autoriser
+
+| Port | Protocole | Usage |
+|------|-----------|-------|
+| `80` | TCP | Redirection HTTP → HTTPS + challenge ACME Let's Encrypt |
+| `443` | TCP | HTTPS — point d'entrée principal (Nextcloud, Collabora, Whiteboard) |
+| `22` | TCP | SSH administration (restreindre à ton IP si possible) |
+
+> Tous les autres ports (3306 MariaDB, 6379 Redis, 9000 MinIO, 9980 Collabora…) sont internes aux réseaux Docker et ne doivent **jamais** être exposés sur l'interface publique.
+
+Les deux approches complémentaires recommandées : un **firewall UFW** pour filtrer le trafic entrant, et **fail2ban** pour bloquer les tentatives d'intrusion SSH.
+
+### Option 1 — Firewall UFW (recommandé)
+
+```bash
+# Installer UFW si absent
+sudo apt install ufw -y
+
+# Politique par défaut : tout bloquer en entrée
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+
+# Autoriser uniquement les ports nécessaires
+sudo ufw allow 22/tcp    # SSH
+sudo ufw allow 80/tcp    # HTTP (ACME + redirection)
+sudo ufw allow 443/tcp   # HTTPS
+
+# Activer (la connexion SSH active reste ouverte)
+sudo ufw enable
+sudo ufw status verbose
+```
+
+> **Si tu veux restreindre SSH à une IP fixe** (recommandé en production) :
+> ```bash
+> sudo ufw delete allow 22/tcp
+> sudo ufw allow from <TON_IP> to any port 22
+> ```
+
+### Option 2 — Fail2ban (protection brute-force SSH)
+
+Fail2ban surveille les logs SSH et bannit automatiquement les IPs après plusieurs tentatives échouées. Complémentaire au firewall UFW.
+
+```bash
+sudo apt install fail2ban -y
+
+# Configuration recommandée
+sudo tee /etc/fail2ban/jail.d/sshd.local << 'EOF'
+[sshd]
+enabled  = true
+port     = ssh
+maxretry = 5
+findtime = 600
+bantime  = 3600
+EOF
+
+sudo systemctl enable fail2ban
+sudo systemctl restart fail2ban
+
+# Vérifier les IPs bannies
+sudo fail2ban-client status sshd
+```
 
 ---
 
