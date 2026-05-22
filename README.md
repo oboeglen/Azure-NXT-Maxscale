@@ -6,7 +6,7 @@
 
 **Infrastructure Nextcloud haute disponibilité — déployable en une commande**
 
-[![Version](https://img.shields.io/badge/version-2.0-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale/releases/tag/v2.0)
+[![Version](https://img.shields.io/badge/version-2.1-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9)](https://nextcloud.com)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -155,11 +155,11 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 | `nextcloud-setup` | `nextcloud:X.Y.Z-fpm` | Auto-configuration post-installation (one-shot, protégé par sentinel) |
 | `nextcloud-cron` | `nextcloud:X.Y.Z-fpm` | Tâches de fond — `cron.php` toutes les 5 min |
 | `mariadb-node1..N` | `maxscale-mariadb-galera:11.4` | Base de données répliquée (Galera, bootstrap via `galera-bootstrap.sh`) |
-| `galera-autoheal` | `willfarrell/autoheal` | Redémarrage automatique des nœuds Galera hors-sync |
+| `galera-autoheal` | `willfarrell/autoheal` | Redémarrage automatique des nœuds Galera hors-sync — healthcheck `pgrep autoheal` |
 | `redis-node1..N` | `redis:7.4-alpine` | Cache distribué (Redis Cluster) |
 | `redis-cluster-init` | `redis:7.4-alpine` | Initialisation du cluster Redis (retry on-failure:5) |
 | `minio-node1..N` | `minio/minio:latest` | Stockage objet S3 distribué (erasure coding) |
-| `collabora-node1..N` | `collabora/code:latest` | Édition bureautique collaborative en ligne |
+| `collabora-node1..N` | `collabora/code:latest` | Édition bureautique collaborative en ligne — healthcheck `/hosting/discovery` sur tous les nœuds |
 | `whiteboard-node1..N` | `ghcr.io/nextcloud-releases/whiteboard:stable` | Tableau blanc collaboratif temps réel |
 | `redis-whiteboard` | `redis:7.4-alpine` | État partagé du whiteboard (Redis Streams) |
 | `minio-console` *(optionnel)* | `ghcr.io/georgmangold/console` | Console web MinIO — accessible via `/s3-console` |
@@ -193,7 +193,8 @@ Tout est appliqué automatiquement par `nextcloud-setup` au premier démarrage.
 
 ### Performance
 
-- Cron système via `nextcloud-cron` — `cron.php` toutes les 5 minutes
+- Cron système via `nextcloud-cron` — `cron.php` toutes les 5 minutes — healthcheck `pgrep cron.sh`
+- OPcache activé avec `validate_timestamps=0` (rechargement PHP requis pour prendre en compte les mises à jour de fichiers)
 - Previews limitées à 2 048 px, formats légers uniquement (vidéo et Office désactivés)
 - Rotation automatique des logs à 100 Mo
 - `db:convert-filecache-bigint` appliqué en maintenance initiale
@@ -318,7 +319,52 @@ Activées lors du déploiement par `deploy.sh`. Accessibles à `https://<NEXTCLO
 - **Méthodes dangereuses** bloquées — `TRACE`, `DEBUG`, `CONNECT`
 - **Méthodes WebDAV** restreintes aux chemins API (`/remote.php`, `/public.php`, `/ocs`) — `OPTIONS` libre pour les preflight CORS
 - **User-agents scanners** bloqués — sqlmap, nikto, nmap, masscan, zgrab
+- **Paths de scan courants** bloqués (403) — `/wp-admin`, `/wp-login`, `/.git`, `/.env`, `/phpmyadmin`, `/xmlrpc.php`, `/cgi-bin`…
+- **Console admin Collabora** bloquée (403) — `/browser/dist/admin` inaccessible depuis l'extérieur
+- **Logs health checks silencés** — `/status.php`, `/robots.txt`, `/favicon.ico` n'apparaissent pas dans les logs HAProxy (~80 % de réduction du bruit)
 - **CSP étendue** — WebSocket autorisé vers Collabora et Whiteboard (`wss://`)
+
+### Supervision (page `/stats`)
+
+La page de statistiques HAProxy affiche l'état en temps réel de **tous** les backends :
+
+| Bloc | Contenu |
+|------|---------|
+| `nextcloud` | Nœuds nginx-next-01..N (HTTP :80) |
+| `nextcloud-fpm` | Nœuds app-next-01..N (FPM TCP :9000) — monitoring uniquement |
+| `coolwsd` | Nœuds Collabora (WOPI :9980) |
+| `whiteboard` | Nœuds Whiteboard (WS :3002) |
+| `galera` | Nœuds MariaDB (:3306) |
+| `minio` | Nœuds MinIO S3 (:9000) |
+| `redis-cluster` | Nœuds Redis (:6379) |
+
+---
+
+## Collabora CODE
+
+### Mode home_mode
+
+Collabora est déployé en **`home_mode`** (`--o:home_mode.enable=true`), ce qui désactive l'écran de démarrage et le popup de feedback utilisateur. En contrepartie, chaque nœud est plafonné à :
+
+- **20 connexions simultanées**
+- **10 documents ouverts simultanément**
+
+Avec N nœuds Collabora (répartis par HAProxy en `leastconn` sticky sur `WOPISrc`) :
+
+| Nœuds | Connexions max | Documents max |
+|:-----:|:--------------:|:-------------:|
+| 1 | 20 | 10 |
+| 2 | 40 | 20 |
+| 3 | 60 | 30 |
+| 5 | 100 | 50 |
+
+> Pour un usage entreprise nécessitant plus de capacité sans plafond, remplacer `--o:home_mode.enable=true` par une solution de branding Collabora Enterprise.
+
+### Sécurité
+
+- **Console d'administration** (`/browser/dist/admin/admin.html`) bloquée par HAProxy → HTTP 403
+- **Limite de taille de document** — 100 Mo maximum par document ouvert (`--o:net.max_file_size=104857600`), configurable dans `extra_params`
+- **SSL terminé par HAProxy** — Collabora reçoit du HTTP en interne (`ssl.enable=false`, `ssl.termination=true`)
 
 ---
 
