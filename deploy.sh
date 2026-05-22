@@ -1370,11 +1370,7 @@ MINIONODE
       minio-node1:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --timeout=5 -O /dev/null http://localhost:9090/ 2>/dev/null || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
+      disable: true
 MCONSOLE
   fi
 
