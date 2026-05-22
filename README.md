@@ -42,25 +42,44 @@
 
 ---
 
-## Table des matières
+---
 
-- [Déploiement rapide](#déploiement-rapide)
-- [Ce que fait deploy.sh](#ce-que-fait-deploysh)
-- [Architecture](#architecture)
-- [Prérequis](#prérequis)
-- [Services déployés](#services-déployés)
-- [Configuration Nextcloud](#configuration-nextcloud)
-- [Haute disponibilité](#haute-disponibilité)
-- [Stockage objet MinIO](#stockage-objet-minio)
-  - [Console web MinIO](#console-web-minio-optionnelle)
-- [Sécurité HAProxy](#sécurité-haproxy)
-- [Opérations courantes](#opérations-courantes)
-- [Déploiement manuel](#déploiement-manuel)
-- [Performances & dimensionnement](#performances--dimensionnement)
+<div align="center">
+
+<img src="https://cdn.simpleicons.org/haproxy/3E69AF" width="36" title="HAProxy"/>&nbsp;&nbsp;
+<img src="https://cdn.simpleicons.org/nginx/009639" width="36" title="Nginx"/>&nbsp;&nbsp;
+<img src="https://cdn.simpleicons.org/nextcloud/0082C9" width="36" title="Nextcloud"/>&nbsp;&nbsp;
+<img src="https://cdn.simpleicons.org/php/777BB4" width="36" title="PHP 8.4"/>&nbsp;&nbsp;
+<img src="https://cdn.simpleicons.org/mariadb/003545" width="36" title="MariaDB Galera"/>&nbsp;&nbsp;
+<img src="https://cdn.simpleicons.org/redis/DC382D" width="36" title="Redis Cluster"/>&nbsp;&nbsp;
+<img src="https://cdn.simpleicons.org/minio/C72E49" width="36" title="MinIO"/>&nbsp;&nbsp;
+<img src="https://cdn.simpleicons.org/libreoffice/18A303" width="36" title="Collabora CODE"/>&nbsp;&nbsp;
+<img src="https://cdn.simpleicons.org/docker/2CA5E0" width="36" title="Docker"/>&nbsp;&nbsp;
+<img src="https://cdn.simpleicons.org/letsencrypt/003A70" width="36" title="Let's Encrypt"/>
+
+</div>
 
 ---
 
-## Déploiement rapide
+## Table des matières
+
+- [🚀 Déploiement rapide](#-déploiement-rapide)
+- [⚙️ Ce que fait deploy.sh](#️-ce-que-fait-deploysh)
+- [🏗️ Architecture](#️-architecture)
+- [📋 Prérequis](#-prérequis)
+- [🧩 Services déployés](#-services-déployés)
+- [🔧 Configuration Nextcloud](#-configuration-nextcloud)
+- [🔄 Haute disponibilité](#-haute-disponibilité)
+- [💾 Stockage objet MinIO](#-stockage-objet-minio)
+- [🔒 Sécurité HAProxy](#-sécurité-haproxy)
+- [📝 Collabora CODE](#-collabora-code)
+- [🛠️ Opérations courantes](#️-opérations-courantes)
+- [🚢 Déploiement manuel](#-déploiement-manuel)
+- [📊 Performances & dimensionnement](#-performances--dimensionnement)
+
+---
+
+## 🚀 Déploiement rapide
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/oboeglen/Azure-NXT-Maxscale/main/deploy.sh \
@@ -71,7 +90,7 @@ Le script détecte votre OS, installe Docker si nécessaire, pose les questions 
 
 ---
 
-## Ce que fait `deploy.sh`
+## ⚙️ Ce que fait `deploy.sh`
 
 | Étape | Action |
 |:-----:|--------|
@@ -97,32 +116,28 @@ Le script détecte votre OS, installe Docker si nécessaire, pose les questions 
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
-```
-Internet ──► HAProxy (80 / 443)
-              │
-              ├── next-net (172.10.0.0/24)
-              │     ├── nginx-next-01..N     nginx — reverse proxy + fichiers statiques
-              │     ├── app-next-01..N       Nextcloud FPM (PHP-FPM :9000)
-              │     ├── nextcloud-cron       Tâches de fond (cron.php toutes les 5 min)
-              │     ├── redis-node1..N       Redis Cluster (≥ 6 nœuds)
-              │     └── nginx-acme           Challenge ACME Let's Encrypt
-              │
-              ├── galera-net (172.30.0.0/24)
-              │     └── mariadb-node1..N     MariaDB Galera (nœuds impairs)
-              │
-              ├── storage-net + minionet (172.20.0.0/24 · 172.50.0.0/24)
-              │     └── minio-node1..N       Stockage objet S3 (erasure coding)
-              │
-              ├── collabora-net (172.40.0.0/24)
-              │     └── collabora-node1..N   Collabora Online CODE
-              │
-              └── whiteboard-net (172.100.0.0/24)
-                    ├── whiteboard-node1..N  Tableau blanc collaboratif
-                    └── redis-whiteboard     Redis dédié (Streams)
+```mermaid
+flowchart TD
+    Internet(["🌐 Internet"]) -->|"HTTP 80 / HTTPS 443"| HAProxy
+
+    HAProxy["⚖️ HAProxy\nSSL · Load Balancer · Stats"]
+
+    HAProxy -->|next-net| nginx["🔀 nginx-next-01..N\nfichiers statiques · FastCGI"]
+    HAProxy -->|collabora-net| collab["📝 collabora-node1..N\nCollabora CODE · WOPI"]
+    HAProxy -->|whiteboard-net| wb["🎨 whiteboard-node1..N\nTableau blanc · WebSocket"]
+
+    nginx --> fpm["⚙️ app-next-01..N\nNextcloud PHP-FPM 8.4"]
+
+    fpm --> galera[("🗄️ MariaDB Galera\ngalera-net · nœuds impairs")]
+    fpm --> redis["🔴 Redis Cluster\n≥ 6 nœuds · next-net"]
+    fpm --> minio[("📦 MinIO S3\nErasure coding · storage-net")]
+
+    wb --> redis_wb["🔴 redis-whiteboard\nStreams · whiteboard-net"]
 ```
 
+> [!NOTE]
 > Seul HAProxy expose des ports vers l'extérieur (80 et 443). Tous les fichiers utilisateur sont stockés dans MinIO. La chute d'un nœud est **transparente** pour l'utilisateur final.
 
 **Flux d'une requête :**
@@ -132,7 +147,7 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 
 ---
 
-## Prérequis
+## 📋 Prérequis
 
 | Composant | Requis |
 |-----------|--------|
@@ -144,11 +159,12 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 | DNS | 3 sous-domaines pointant vers ce serveur **avant** le lancement |
 | Ports | 80 et 443 libres pour la validation des certificats |
 
+> [!TIP]
 > Docker et Docker Compose sont installés automatiquement s'ils sont absents.
 
 ---
 
-## Services déployés
+## 🧩 Services déployés
 
 | Service | Image | Rôle |
 |---------|-------|------|
@@ -174,11 +190,12 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 
 **Ports exposés :** `80` (redirection HTTPS) · `443` (Nextcloud, Collabora, Whiteboard)
 
-> ⚠️ **Options déconseillées en production :** les stats HAProxy (`/stats`) et la console MinIO (`/s3-console`) sont des outils de diagnostic activables lors du déploiement. Les deux pages requièrent des identifiants (mot de passe stats pour `/stats`, clés MinIO pour `/s3-console`), mais elles restent exposées sur l'URL publique de Nextcloud et révèlent des informations sensibles sur l'infrastructure. À réserver à un environnement de test ou à désactiver après usage.
+> [!CAUTION]
+> Les stats HAProxy (`/stats`) et la console MinIO (`/s3-console`) sont des outils de diagnostic activables lors du déploiement. Les deux pages requièrent des identifiants, mais elles restent exposées sur l'URL publique de Nextcloud et révèlent des informations sensibles sur l'infrastructure. À réserver à un environnement de test ou à désactiver après usage.
 
 ---
 
-## Configuration Nextcloud
+## 🔧 Configuration Nextcloud
 
 Tout est appliqué automatiquement par `nextcloud-setup` au premier démarrage.
 
@@ -211,16 +228,16 @@ Tout est appliqué automatiquement par `nextcloud-setup` au premier démarrage.
 
 ---
 
-## Haute disponibilité
+## 🔄 Haute disponibilité
 
 | Composant | Tolérance | Comportement lors d'une panne |
 |-----------|:---------:|-------------------------------|
-| Nextcloud FPM | ✅ Automatique | Aucun impact — HAProxy redistribue en < 10 s |
-| MariaDB Galera | ✅ Automatique | Aucun impact — quorum maintenu, `galera-autoheal` relance les nœuds hors-sync |
-| Redis Cluster | ✅ Automatique | Aucun impact — cluster tolère 1 panne par slot de hash |
-| MinIO | ✅ Automatique | Lecture continue, écritures rétablies dès que le nœud revient |
-| Collabora | ✅ Automatique | Session d'édition perdue, reconnexion automatique |
-| Whiteboard | ✅ Automatique | Reconnexion WebSocket automatique (état persisté dans Redis) |
+| 🔀 Nextcloud FPM | ✅ Automatique | Aucun impact — HAProxy redistribue en < 10 s |
+| 🗄️ MariaDB Galera | ✅ Automatique | Aucun impact — quorum maintenu, `galera-autoheal` relance les nœuds hors-sync |
+| 🔴 Redis Cluster | ✅ Automatique | Aucun impact — cluster tolère 1 panne par slot de hash |
+| 📦 MinIO | ✅ Automatique | Lecture continue, écritures rétablies dès que le nœud revient |
+| 📝 Collabora | ✅ Automatique | Session d'édition perdue, reconnexion automatique |
+| 🎨 Whiteboard | ✅ Automatique | Reconnexion WebSocket automatique (état persisté dans Redis) |
 
 ### Redémarrage complet du cluster Galera
 
@@ -239,7 +256,7 @@ for i in 1 2 3; do echo "node$i:"; docker run --rm -v maxscale_mariadb_n${i}_dat
 
 ---
 
-## Stockage objet MinIO
+## 💾 Stockage objet MinIO
 
 MinIO fonctionne en **erasure coding distribué** — N nœuds × D drives par nœud.
 
@@ -274,7 +291,8 @@ docker run --rm --network storage-net --entrypoint sh minio/mc -c "
 
 ### Console web MinIO (optionnelle)
 
-> ⚠️ **Déconseillée en production.** La console est protégée par les identifiants MinIO (`MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`), mais elle est exposée sur l'URL publique de Nextcloud sans restriction d'IP ni couche réseau supplémentaire. Elle donne accès direct à tous les buckets MinIO. À utiliser uniquement en environnement de test ou de diagnostic, et à désactiver ensuite.
+> [!WARNING]
+> La console est protégée par les identifiants MinIO (`MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`), mais elle est exposée sur l'URL publique de Nextcloud sans restriction d'IP ni couche réseau supplémentaire. Elle donne accès direct à tous les buckets MinIO. À utiliser uniquement en environnement de test ou de diagnostic, et à désactiver ensuite.
 
 Activée lors du déploiement par `deploy.sh` (même principe que les stats HAProxy sur `/stats`). Une fois activée, la console est accessible depuis le navigateur sans exposer de port supplémentaire.
 
@@ -287,15 +305,17 @@ Activée lors du déploiement par `deploy.sh` (même principe que les stats HAPr
 
 HAProxy route `/s3-console/*` vers le container `minio-console:9090` en **strippant le préfixe** `/s3-console` avant de forwarder au serveur Go, ce qui évite les erreurs MIME sur les assets statiques du SPA React. La racine `/s3-console` et `/s3-console/` sont automatiquement redirigées vers `/s3-console/login`.
 
+> [!TIP]
 > Pour activer ou désactiver la console sur un déploiement existant, relancer `deploy.sh` — la réponse est sauvegardée dans le fichier de configuration et réutilisée à chaque relance.
 
 ---
 
-## Sécurité HAProxy
+## 🔒 Sécurité HAProxy
 
 ### Stats HAProxy (optionnelles)
 
-> ⚠️ **Déconseillées en production.** Les stats (`/stats`) sont protégées par un mot de passe dédié (`HAPROXY_STATS_PASSWORD`), mais restent exposées sur l'URL publique de Nextcloud. Elles révèlent la topologie interne de l'infrastructure (noms des containers, états des backends, métriques réseau). À réserver à un environnement de test ou à désactiver après usage.
+> [!WARNING]
+> Les stats (`/stats`) sont protégées par un mot de passe dédié (`HAPROXY_STATS_PASSWORD`), mais restent exposées sur l'URL publique de Nextcloud. Elles révèlent la topologie interne de l'infrastructure (noms des containers, états des backends, métriques réseau). À réserver à un environnement de test ou à désactiver après usage.
 
 Activées lors du déploiement par `deploy.sh`. Accessibles à `https://<NEXTCLOUD_DOMAIN>/stats` avec les identifiants définis à l'installation (`HAPROXY_STATS_PASSWORD`).
 
@@ -346,7 +366,7 @@ La page de statistiques HAProxy affiche l'état en temps réel de **tous** les b
 
 ---
 
-## Collabora CODE
+## 📝 Collabora CODE
 
 ### Mode home_mode
 
@@ -374,7 +394,7 @@ Avec N nœuds Collabora (répartis par HAProxy en `leastconn` sticky sur `WOPISr
 
 ---
 
-## Opérations courantes
+## 🛠️ Opérations courantes
 
 ### Vérifier l'état du cluster Galera
 
@@ -420,7 +440,7 @@ docker exec -u www-data app-next-01 php /var/www/html/occ log:tail --lines=50
 
 ---
 
-## Déploiement manuel
+## 🚢 Déploiement manuel
 
 <details>
 <summary>Voir les étapes détaillées</summary>
@@ -482,7 +502,7 @@ docker compose logs -f nextcloud-setup
 
 ---
 
-## Performances & dimensionnement
+## 📊 Performances & dimensionnement
 
 > Benchmarks réalisés sur une instance de référence — **6 nœuds FPM, 5 Galera, 6 Redis, MinIO 4×2 drives, 3 Collabora, 3 Whiteboard** — depuis un client externe.
 
