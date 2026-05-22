@@ -16,6 +16,15 @@
 
 ---
 
+<div align="center">
+<table>
+<tr>
+<td align="center"><img src="img/login-preview.png" width="480" alt="Page de connexion NXT Maxscale"/><br/><sub>Page de connexion</sub></td>
+<td align="center"><img src="img/dashboard-preview.png" width="480" alt="Tableau de bord NXT Maxscale"/><br/><sub>Tableau de bord</sub></td>
+</tr>
+</table>
+</div>
+
 ---
 
 ## Table des matières
