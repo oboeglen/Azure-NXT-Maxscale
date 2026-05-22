@@ -1332,33 +1332,6 @@ ${rfs_hc}
 MINIONODE
   done
 
-  # ── minio-init — versioning + expire-delete-marker ─────────────────────
-  cat >> "$dest" <<MINIOINIT
-
-  minio-init:
-    image: minio/mc:latest
-    container_name: minio-init
-    restart: "no"
-    entrypoint: >
-      /bin/sh -c "
-        until mc alias set local http://minio-node1:9000 \${MINIO_ACCESS_KEY} \${MINIO_SECRET_KEY} --quiet 2>/dev/null; do
-          echo 'Attente MinIO...'; sleep 5;
-        done;
-        mc version enable local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null && echo 'Versioning actif' || echo 'Erreur versioning';
-        mc ilm rule add --expire-delete-marker local/\${NEXTCLOUD_S3_BUCKET:-nextcloud} 2>/dev/null || true;
-        echo 'minio-init termine'"
-    environment:
-      - MINIO_ACCESS_KEY=\${MINIO_ACCESS_KEY}
-      - MINIO_SECRET_KEY=\${MINIO_SECRET_KEY}
-      - NEXTCLOUD_S3_BUCKET=\${NEXTCLOUD_S3_BUCKET:-nextcloud}
-    networks:
-      - storage-net
-    depends_on:
-      minio-node1:
-        condition: service_healthy
-      nextcloud-setup:
-        condition: service_completed_successfully
-MINIOINIT
 
   # ── minio-console (optionnel) ───────────────────────────────────────────
   if [[ "$MINIO_CONSOLE" == "yes" ]]; then
@@ -1899,6 +1872,7 @@ run_deploy() {
     "nextcloud:${NC_VERSION}"
     "redis:7.4-alpine"
     "minio/minio:latest"
+    "minio/mc:latest"
     "collabora/code:latest"
     "ghcr.io/nextcloud-releases/whiteboard:stable"
   )
@@ -1993,6 +1967,19 @@ run_deploy() {
       exit_code=$(docker inspect --format='{{.State.ExitCode}}' nextcloud-setup 2>/dev/null || echo "1")
       if [[ "$exit_code" == "0" ]]; then
         info "nextcloud-setup terminé avec succès ✓"
+        # Activer le versioning MinIO — le bucket existe forcément à ce stade
+        start_spinner "Activation du versioning MinIO..."
+        if docker run --rm \
+            --network storage-net \
+            --entrypoint sh minio/mc:latest -c \
+            "mc alias set r http://minio-node1:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} --quiet 2>/dev/null \
+             && mc version enable r/${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null \
+             && mc ilm rule add --expire-delete-marker r/${NEXTCLOUD_S3_BUCKET:-nextcloud} 2>/dev/null || true" \
+            &>/dev/null; then
+          stop_spinner "Versioning MinIO activé ✓"
+        else
+          stop_spinner "Versioning MinIO : échec (activable depuis /s3-console)"
+        fi
       else
         warn "nextcloud-setup terminé avec erreur (code $exit_code)"
         docker logs nextcloud-setup --tail 20

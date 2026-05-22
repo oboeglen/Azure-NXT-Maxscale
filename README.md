@@ -159,11 +159,12 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 | `redis-node1..N` | `redis:7.4-alpine` | Cache distribué (Redis Cluster) |
 | `redis-cluster-init` | `redis:7.4-alpine` | Initialisation du cluster Redis (retry on-failure:5) |
 | `minio-node1..N` | `minio/minio:latest` | Stockage objet S3 distribué (erasure coding) |
-| `minio-init` | `minio/mc:latest` | Activation versioning bucket au 1er démarrage (one-shot) |
 | `collabora-node1..N` | `collabora/code:latest` | Édition bureautique collaborative en ligne |
 | `whiteboard-node1..N` | `ghcr.io/nextcloud-releases/whiteboard:stable` | Tableau blanc collaboratif temps réel |
 | `redis-whiteboard` | `redis:7.4-alpine` | État partagé du whiteboard (Redis Streams) |
 | `minio-console` *(optionnel)* | `ghcr.io/georgmangold/console` | Console web MinIO — accessible via `/s3-console` |
+
+> Le versioning du bucket MinIO est activé automatiquement par `deploy.sh` à la fin de l'installation Nextcloud, via `minio/mc:latest` (image tirée au déploiement mais sans container persistant).
 
 **Ports exposés :** `80` (redirection HTTPS) · `443` (Nextcloud, Collabora, Whiteboard)
 
