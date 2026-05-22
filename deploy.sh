@@ -1197,6 +1197,12 @@ DBNODE
       - AUTOHEAL_DEFAULT_STOP_TIMEOUT=30
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f autoheal > /dev/null || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 AUTOHEAL
 
   # ── Redis Cluster nodes (dynamic) ───────────────────────────────────────
@@ -1365,15 +1371,12 @@ MCONSOLE
 
   # ── Collabora nodes (dynamic) ───────────────────────────────────────────
   for i in $(seq 1 "$COLLAB_NODES"); do
-    local collab_hc=""
-    if (( i == 1 )); then
-      collab_hc="    healthcheck:
-      test: [\"CMD-SHELL\", \"curl -sf http://localhost:9980/ >/dev/null 2>&1 || exit 1\"]
+    local collab_hc="    healthcheck:
+      test: [\"CMD-SHELL\", \"curl -sf http://localhost:9980/hosting/discovery >/dev/null 2>&1 || exit 1\"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s"
-    fi
+      start_period: 60s"
 
     cat >> "$dest" <<COLLNODE
 
@@ -1566,11 +1569,25 @@ patch_nextcloud_init() {
 
   [[ -f "$file" ]] || die "nextcloud-init.sh introuvable : $file"
 
-  # Update the summary line
-  local masters=$(( REDIS_NODES / 2 ))
-  sed -i "s/redis-node1, redis-node3, redis-node5/redis-node1, redis-node3, redis-node5 (${REDIS_NODES} nœuds total)/" "$file" 2>/dev/null || true
+  # Rebuild seed lines dynamically for all REDIS_NODES nodes
+  local seed_lines="" i
+  for i in $(seq 0 $(( REDIS_NODES - 1 ))); do
+    seed_lines+="occ config:system:set 'redis.cluster' seeds ${i} --value \"redis-node$(( i + 1 )):6379\"\n"
+  done
 
-  info "nextcloud-init.sh prêt : seeds redis-node1/3/5 — ${REDIS_NODES} nœuds (${masters} masters + ${masters} replicas)"
+  # Replace the full seed block (from seeds 0 to last seed before password line)
+  python3 - "$file" <<PYEOF
+import sys, re
+path = sys.argv[1]
+txt = open(path).read()
+block = r"(occ config:system:set 'redis\.cluster' seeds \d+ --value \"redis-node\d+:6379\"\n)+"
+new_seeds = """${seed_lines}"""
+txt2 = re.sub(block, new_seeds, txt)
+open(path, 'w').write(txt2)
+PYEOF
+
+  local masters=$(( REDIS_NODES / 2 ))
+  info "nextcloud-init.sh prêt : ${REDIS_NODES} seeds (redis-node1..${REDIS_NODES}) — ${masters} masters + ${masters} replicas"
 }
 
 create_minio_dirs() {
