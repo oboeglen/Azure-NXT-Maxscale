@@ -638,6 +638,10 @@ show_load_estimate() {
   local minio_tol_drives=$(( minio_total / 2 - 1 ))
   local minio_tol_nodes=$(( MINIO_NODES / 2 ))
 
+  # Collabora home_mode : 20 connexions / 10 documents max par nœud
+  local collab_max_conn=$(( COLLAB_NODES * 20 ))
+  local collab_max_docs=$(( COLLAB_NODES * 10 ))
+
   box "Estimation de charge" \
     "Sessions simultanées     : ~${concurrent} VUs  (réf. : 34 VUs mesurés à 6 nœuds)" \
     "Utilisateurs quotidiens  : ~${total} DAU  (ratio 1 VU : 15 DAU mesuré)" \
@@ -648,6 +652,7 @@ show_load_estimate() {
     "Écritures MariaDB        : ~${write_tps} TPS  (Galera ${MARIADB_NODES} nœuds)" \
     "Cache Redis              : ${redis_masters} masters  > 500 000 ops/s" \
     "Tolérance MinIO          : ${minio_tol_nodes} nœud(s) ou ${minio_tol_drives} disques perdables (écriture)" \
+    "Collabora (home_mode)    : ${collab_max_conn} connexions max  /  ${collab_max_docs} documents simultanés (${COLLAB_NODES}×20 / ${COLLAB_NODES}×10)" \
     "" \
     "Données réelles : 0 erreur / 1 900 req · 150 concurrent · max 247 req/s"
 }
@@ -2009,7 +2014,11 @@ run_deploy() {
       break
     fi
     (( elapsed_setup += 10 )) || true
-    printf "\r  ${C_YELLOW}⟳${C_RESET}  Installation Nextcloud en cours... (%ds)" "$elapsed_setup"
+    local last_log
+    last_log=$(docker logs nextcloud-setup --tail 1 2>/dev/null \
+      | sed 's/\x1b\[[0-9;]*[mK]//g' | tr -d '\r' | xargs)
+    printf "\r\033[K  ${C_YELLOW}⟳${C_RESET}  [%ds]  %s" \
+      "$elapsed_setup" "${last_log:-Installation Nextcloud en cours...}"
     sleep 10
   done
   echo ""
