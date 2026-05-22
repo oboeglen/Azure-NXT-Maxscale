@@ -592,10 +592,10 @@ ask_minio_console() {
 
 # --- show_recap ---
 show_load_estimate() {
-  # Modèle basé sur les benchmarks réels du README.
-  # Rendement décroissant à 88 % par nœud FPM (ressources partagées : DB, Redis, HAProxy).
-  # Référence mesurée : 6 FPM → 44 req/s PHP, P99 1 154 ms, 0 erreur / 1 900 requêtes.
-  local req_s_php req_s_light concurrent active total p99_php ram_total
+  # Modèle calibré sur tests réels (README) :
+  #   6 FPM → 44 req/s PHP · 34 VUs → 500 DAU · P99 1 154 ms · 0 erreur / 1 900 req
+  # Rendement décroissant à 88 % par nœud (ressources partagées : DB, Redis, HAProxy).
+  local req_s_php req_s_light concurrent total p99_php ram_total
 
   # req/s PHP : somme géométrique de raison 0.88 à partir de 10 req/s pour 1 nœud
   req_s_php=$(awk -v n="$NC_NODES" \
@@ -604,15 +604,13 @@ show_load_estimate() {
   # req/s léger (/status.php, statiques) ≈ 4.15× le débit PHP
   req_s_light=$(( req_s_php * 415 / 100 ))
 
-  # Concurrent soutenable ≈ req/s PHP × 0.91 (ajusté sur données réelles)
-  concurrent=$(( req_s_php * 91 / 100 ))
+  # VUs peak (sessions simultanées) : req_s_php × 0.77
+  # Calibré sur test PME : 6 FPM → 44 req/s → 34 VUs  (34/44 = 0.773)
+  concurrent=$(awk -v r="$req_s_php" 'BEGIN{printf "%.0f", r * 0.77}')
   [[ $concurrent -lt 1 ]] && concurrent=1
 
-  # Actifs = concurrent × 6 (fenêtre de session 5 min)
-  active=$(( concurrent * 6 ))
-
-  # Total = actifs × 10 (10 % des utilisateurs connectés au pic)
-  total=$(( active * 10 ))
+  # DAU estimés : 1 VU ≈ 15 DAU (ratio mesuré : 34 VUs pour 500 DAU en test PME)
+  total=$(( concurrent * 15 ))
 
   # P99 PHP estimé : 3 381 ms × n^-0.6 (calé sur mesures réelles)
   p99_php=$(awk -v n="$NC_NODES" 'BEGIN{printf "%.0f", 3381 * n^(-0.6)}')
@@ -636,9 +634,8 @@ show_load_estimate() {
   local minio_tol_nodes=$(( MINIO_NODES / 2 ))
 
   box "Estimation de charge" \
-    "Utilisateurs simultanés  : ~${concurrent}  (rendement 88 %/nœud, mesuré)" \
-    "Sessions actives         : ~${active}  (fenêtre de session 5 min)" \
-    "Base totale confortable  : ~${total}  (10 % connectés au pic)" \
+    "Sessions simultanées     : ~${concurrent} VUs  (réf. : 34 VUs mesurés à 6 nœuds)" \
+    "Utilisateurs quotidiens  : ~${total} DAU  (ratio 1 VU : 15 DAU mesuré)" \
     "Débit PHP (login/API)    : ~${req_s_php} req/s  (réf. : 44 req/s à 6 nœuds)" \
     "Débit léger (/status…)   : ~${req_s_light} req/s" \
     "P99 PHP estimé           : ~${p99_php} ms" \
