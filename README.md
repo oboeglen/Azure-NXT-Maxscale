@@ -46,16 +46,16 @@
 
 <div align="center">
 
-<img src="https://cdn.simpleicons.org/haproxy/3E69AF" width="36" title="HAProxy"/>&nbsp;&nbsp;
-<img src="https://cdn.simpleicons.org/nginx/009639" width="36" title="Nginx"/>&nbsp;&nbsp;
-<img src="https://cdn.simpleicons.org/nextcloud/0082C9" width="36" title="Nextcloud"/>&nbsp;&nbsp;
-<img src="https://cdn.simpleicons.org/php/777BB4" width="36" title="PHP 8.4"/>&nbsp;&nbsp;
-<img src="https://cdn.simpleicons.org/mariadb/003545" width="36" title="MariaDB Galera"/>&nbsp;&nbsp;
-<img src="https://cdn.simpleicons.org/redis/DC382D" width="36" title="Redis Cluster"/>&nbsp;&nbsp;
-<img src="https://cdn.simpleicons.org/minio/C72E49" width="36" title="MinIO"/>&nbsp;&nbsp;
-<img src="https://cdn.simpleicons.org/libreoffice/18A303" width="36" title="Collabora CODE"/>&nbsp;&nbsp;
-<img src="https://cdn.simpleicons.org/docker/2CA5E0" width="36" title="Docker"/>&nbsp;&nbsp;
-<img src="https://cdn.simpleicons.org/letsencrypt/003A70" width="36" title="Let's Encrypt"/>
+![HAProxy](https://img.shields.io/badge/HAProxy-3E69AF?style=for-the-badge&logo=haproxy&logoColor=white)
+![Nginx](https://img.shields.io/badge/Nginx-009639?style=for-the-badge&logo=nginx&logoColor=white)
+![Nextcloud](https://img.shields.io/badge/Nextcloud-0082C9?style=for-the-badge&logo=nextcloud&logoColor=white)
+![PHP](https://img.shields.io/badge/PHP_8.4-777BB4?style=for-the-badge&logo=php&logoColor=white)
+![MariaDB](https://img.shields.io/badge/MariaDB_Galera-003545?style=for-the-badge&logo=mariadb&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis_Cluster-DC382D?style=for-the-badge&logo=redis&logoColor=white)
+![MinIO](https://img.shields.io/badge/MinIO_S3-C72E49?style=for-the-badge&logo=minio&logoColor=white)
+![Collabora](https://img.shields.io/badge/Collabora_CODE-0D72BB?style=for-the-badge&logo=libreoffice&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2CA5E0?style=for-the-badge&logo=docker&logoColor=white)
+![Let's Encrypt](https://img.shields.io/badge/Let's_Encrypt-003A70?style=for-the-badge&logo=letsencrypt&logoColor=white)
 
 </div>
 
