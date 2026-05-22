@@ -1385,7 +1385,7 @@ MCONSOLE
       - "9980"
     environment:
       - dictionaries=fr_FR en_US
-      - extra_params=--o:ssl.enable=false --o:ssl.termination=true --o:net.listen=any --o:server_name=\${COLLABORA_DOMAIN} --o:mount_jail_tree=false --o:welcome.enable=false --o:defaults.language=fr-FR
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=true --o:net.listen=any --o:server_name=\${COLLABORA_DOMAIN} --o:mount_jail_tree=false --o:home_mode.enable=true
       - DONT_GEN_SSL_CERT=true
       - LC_ALL=fr_FR.UTF-8
       - aliasgroup1=https://\${NEXTCLOUD_DOMAIN}:443
