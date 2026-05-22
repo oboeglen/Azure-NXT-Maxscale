@@ -173,8 +173,7 @@ services:
       /bin/sh -c "
         trap exit TERM;
         while :; do
-          certbot renew --webroot -w /var/www/certbot --quiet
-            --post-hook 'cat /etc/letsencrypt/live/stack/fullchain.pem /etc/letsencrypt/live/stack/privkey.pem > /certs/stack.pem && chmod 600 /certs/stack.pem';
+          certbot renew --webroot -w /var/www/certbot --quiet --post-hook 'cat /etc/letsencrypt/live/stack/fullchain.pem /etc/letsencrypt/live/stack/privkey.pem > /certs/stack.pem && chmod 600 /certs/stack.pem';
           sleep 12h & wait $$!;
         done"
     depends_on:
