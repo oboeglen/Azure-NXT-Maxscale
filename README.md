@@ -42,8 +42,6 @@
 
 ---
 
----
-
 <div align="center">
 
 ![HAProxy](https://img.shields.io/badge/HAProxy-3E69AF?style=for-the-badge&logo=haproxy&logoColor=white)
