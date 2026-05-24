@@ -58,11 +58,40 @@ info "Nextcloud opérationnel."
 # ---------------------------------------------------------------------------
 step "Configuration Redis Cluster"
 
-occ config:system:set memcache.local        --value '\OC\Memcache\APCu'
-occ config:system:set memcache.distributed  --value '\OC\Memcache\Redis'
-occ config:system:set memcache.locking      --value '\OC\Memcache\Redis'
-occ config:system:set filelocking.enabled   --type boolean --value true
-occ config:system:set filelocking.ttl       --type integer --value 3600
+# Attendre que le cluster Redis soit ok AVANT de configurer quoi que ce soit.
+# Sans ça, les OCC suivants bootent Nextcloud avec memcache.distributed=Redis
+# mais sans seeds configurés → tentative de connexion sur 127.0.0.1:6379 → Connection refused.
+info "Attente cluster Redis (cluster_state:ok)..."
+redis_ok=0
+for _attempt in $(seq 1 30); do
+    _state=$(php -r '
+        $fp = @fsockopen("redis-node1", 6379, $e, $m, 5);
+        if (!$fp) { exit(1); }
+        stream_set_timeout($fp, 3);
+        $pass = getenv("REDIS_PASSWORD");
+        fwrite($fp, "*2\r\n$4\r\nAUTH\r\n$" . strlen($pass) . "\r\n" . $pass . "\r\n");
+        fgets($fp, 128);
+        fwrite($fp, "*2\r\n$7\r\nCLUSTER\r\n$4\r\nINFO\r\n");
+        $buf = ""; $lines = 0;
+        while ($lines < 30) {
+            $line = fgets($fp, 256);
+            if ($line === false) break;
+            $buf .= $line;
+            $lines++;
+            if (stream_get_meta_data($fp)["timed_out"]) break;
+        }
+        fclose($fp);
+        echo strpos($buf, "cluster_state:ok") !== false ? "ok" : "loading";
+    ' 2>/dev/null)
+    if [ "${_state}" = "ok" ]; then
+        redis_ok=1
+        info "Redis cluster opérationnel (tentative ${_attempt})"
+        break
+    fi
+    warn "Redis cluster pas encore ok (tentative ${_attempt}/30, état: ${_state:-unreachable}), attente 5s..."
+    sleep 5
+done
+[ $redis_ok -eq 0 ] && warn "Redis cluster non confirmé après 150s — la configuration continuera"
 
 # RedisFactory::create() vérifie in_array('redis.cluster', getKeys()) — la clé DOIT être
 # un élément de premier niveau nommé littéralement 'redis.cluster' (avec point).
@@ -70,6 +99,9 @@ occ config:system:set filelocking.ttl       --type integer --value 3600
 # → getKeys() retourne 'redis', pas 'redis.cluster' → $isCluster=false → standalone 127.0.0.1
 # "redis.cluster seeds N" (1 arg avec point) crée $config['redis.cluster']['seeds'][N]
 # → getKeys() retourne 'redis.cluster' → $isCluster=true → RedisCluster correct
+#
+# Les seeds sont configurés EN PREMIER — avant memcache.distributed/locking —
+# pour que les OCC suivants trouvent le bon cluster Redis au boot de Nextcloud.
 occ config:system:set 'redis.cluster' seeds 0 --value "redis-node1:6379"
 occ config:system:set 'redis.cluster' seeds 1 --value "redis-node2:6379"
 occ config:system:set 'redis.cluster' seeds 2 --value "redis-node3:6379"
@@ -79,6 +111,13 @@ occ config:system:set 'redis.cluster' seeds 5 --value "redis-node6:6379"
 occ config:system:set 'redis.cluster' password       --value "${REDIS_PASSWORD}"
 occ config:system:set 'redis.cluster' timeout        --type float   --value 5.0
 occ config:system:set 'redis.cluster' read_timeout   --type float   --value 5.0
+
+# Maintenant que le cluster est connu de Nextcloud, activer le cache et le locking
+occ config:system:set memcache.local        --value '\OC\Memcache\APCu'
+occ config:system:set memcache.distributed  --value '\OC\Memcache\Redis'
+occ config:system:set memcache.locking      --value '\OC\Memcache\Redis'
+occ config:system:set filelocking.enabled   --type boolean --value true
+occ config:system:set filelocking.ttl       --type integer --value 3600
 
 info "Redis Cluster configuré (seeds : tous les nœuds redis-node1..6)."
 

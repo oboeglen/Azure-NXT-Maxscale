@@ -6,6 +6,16 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.1.8] — 2026-05-24
+
+### Fixed
+- Ordre de configuration Redis dans `nextcloud-init.sh` corrigé — les seeds `redis.cluster` sont désormais définis **avant** `memcache.distributed` et `memcache.locking`, ce qui élimine les avertissements « Aucun cache mémoire » et « Verrouillage de fichiers transactionnels » dans l'interface d'administration Nextcloud
+
+### Changed
+- README : tableau de persistance du patch Collabora mis à jour — le mode mise à jour rapide de `deploy.sh` réapplique le patch automatiquement après pull des images
+
+---
+
 ## [2.1.7] — 2026-05-24
 
 ### Added
@@ -133,6 +143,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.1.8]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.7...v2.1.8
 [2.1.7]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.6...v2.1.7
 [2.1.6]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.5...v2.1.6
 [2.1.5]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.4...v2.1.5
