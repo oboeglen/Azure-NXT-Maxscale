@@ -6,6 +6,19 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.1.5] — 2026-05-24
+
+### Added
+- Patch binaire automatique de `coolwsd` dans `deploy.sh` — fonction `patch_collabora_binary()` qui supprime la limite `home_mode` (20 connexions / 10 documents par nœud) en recherchant dynamiquement le pattern `mov edx,20 / mov eax,10` dans le binaire et en le remplaçant par `INT_MAX` sur l'ensemble des nœuds Collabora configurés
+
+### Changed
+- Collabora ne limite plus le nombre de connexions et documents simultanés — le patch est appliqué automatiquement après `docker compose up -d`, sur tous les nœuds (`COLLAB_NODES`), sans toucher à `extra_params` ni à `home_mode.enable=true`
+- Estimation de charge `deploy.sh` : la ligne `home_mode N×20 / N×10` est remplacée par `connexions/documents illimités (patch binaire home_mode)`
+- Version du déployeur : v2.1.5
+- README : section Collabora CODE mise à jour pour refléter la suppression de la limite
+
+---
+
 ## [2.1.4] — 2026-05-22
 
 ### Fixed
@@ -101,6 +114,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.1.5]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.4...v2.1.5
 [2.1.4]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.3...v2.1.4
 [2.1.3]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.2...v2.1.3
 [2.1.2]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.1...v2.1.2

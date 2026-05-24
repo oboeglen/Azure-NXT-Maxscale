@@ -193,7 +193,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Déployeur automatique v2.1.4"; do
+    "        NXT Maxscale — Déployeur automatique v2.1.5"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -662,10 +662,6 @@ show_load_estimate() {
   local minio_tol_drives=$(( minio_total / 2 - 1 ))
   local minio_tol_nodes=$(( MINIO_NODES / 2 ))
 
-  # Collabora home_mode : 20 connexions / 10 documents max par nœud
-  local collab_max_conn=$(( COLLAB_NODES * 20 ))
-  local collab_max_docs=$(( COLLAB_NODES * 10 ))
-
   box "Estimation de charge" \
     "Sessions simultanées     : ~${concurrent} VUs  (réf. : 34 VUs mesurés à 6 nœuds)" \
     "Utilisateurs quotidiens  : ~${total} DAU  (ratio 1 VU : 15 DAU mesuré)" \
@@ -676,7 +672,7 @@ show_load_estimate() {
     "Écritures MariaDB        : ~${write_tps} TPS  (Galera ${MARIADB_NODES} nœuds)" \
     "Cache Redis              : ${redis_masters} masters  > 500 000 ops/s" \
     "Tolérance MinIO          : ${minio_tol_nodes} nœud(s) ou ${minio_tol_drives} disques perdables (écriture)" \
-    "Collabora (home_mode)    : ${collab_max_conn} connexions max  /  ${collab_max_docs} documents simultanés (${COLLAB_NODES}×20 / ${COLLAB_NODES}×10)" \
+    "Collabora                : ${COLLAB_NODES} nœud(s) — connexions/documents illimités (patch binaire home_mode)" \
     "" \
     "Données réelles : 0 erreur / 1 900 req · 150 concurrent · max 247 req/s"
 }
@@ -1722,6 +1718,117 @@ patch_haproxy() {
   info "haproxy.cfg patché (NC:${NC_NODES} Collab:${COLLAB_NODES} WB:${WB_NODES} DB:${MARIADB_NODES} MinIO:${MINIO_NODES})"
 }
 
+# ─── [PATCH] Patch binaire Collabora — suppression limite home_mode ──────────
+
+patch_collabora_binary() {
+  step "Patch binaire Collabora — suppression de la limite home_mode"
+
+  # Attendre que les containers Collabora soient running (max 120 s)
+  local max_wait=120 elapsed=0
+  start_spinner "Attente des containers Collabora..."
+  while (( elapsed < max_wait )); do
+    local all_up=true i
+    for i in $(seq 1 "$COLLAB_NODES"); do
+      local st
+      st=$(docker inspect --format='{{.State.Status}}' "collabora-node${i}" 2>/dev/null || echo "absent")
+      [[ "$st" == "running" ]] || { all_up=false; break; }
+    done
+    $all_up && break
+    sleep 3; (( elapsed += 3 )) || true
+  done
+  stop_spinner
+
+  if (( elapsed >= max_wait )); then
+    warn "Containers Collabora non disponibles après ${max_wait}s — patch ignoré"
+    return 0
+  fi
+
+  local bin_tmp patched_tmp
+  bin_tmp=$(mktemp)
+  patched_tmp=$(mktemp)
+
+  # Extraire le binaire depuis le premier nœud actif
+  local src_node=""
+  for i in $(seq 1 "$COLLAB_NODES"); do
+    if docker cp "collabora-node${i}:/usr/bin/coolwsd" "$bin_tmp" 2>/dev/null; then
+      src_node="collabora-node${i}"
+      break
+    fi
+  done
+
+  if [[ -z "$src_node" ]]; then
+    warn "Impossible d'extraire coolwsd — patch ignoré"
+    rm -f "$bin_tmp" "$patched_tmp"
+    return 0
+  fi
+
+  # Appliquer le patch via recherche dynamique du pattern dans le binaire
+  local patch_result
+  patch_result=$(python3 - "$bin_tmp" "$patched_tmp" <<'PATCHPY'
+import sys, os
+
+PATTERN      = b"\xba\x14\x00\x00\x00\xb8\x0a\x00\x00\x00\x84\xdb"
+PATTERN_ALT  = b"\xba\xff\xff\xff\x7f\xb8\xff\xff\xff\x7f\x84\xdb"  # déjà patché
+INT_MAX      = b"\xff\xff\xff\x7f"
+
+data = bytearray(open(sys.argv[1], "rb").read())
+
+idx = data.find(PATTERN_ALT)
+if idx != -1:
+    print("already_patched")
+    sys.exit(0)
+
+idx = data.find(PATTERN)
+if idx == -1:
+    print("pattern_not_found")
+    sys.exit(2)
+
+data[idx + 1 : idx + 5]  = INT_MAX   # MaxConnections = INT_MAX
+data[idx + 6 : idx + 10] = INT_MAX   # MaxDocuments   = INT_MAX
+open(sys.argv[2], "wb").write(data)
+print(f"patched_at_0x{idx:x}")
+PATCHPY
+  2>/dev/null)
+
+  local py_rc=$?
+
+  if [[ "$patch_result" == "already_patched" ]]; then
+    info "Patch Collabora déjà présent dans l'image — aucune action"
+    rm -f "$bin_tmp" "$patched_tmp"
+    return 0
+  fi
+
+  if (( py_rc != 0 )) || [[ "$patch_result" == "pattern_not_found" ]]; then
+    warn "Pattern home_mode introuvable dans coolwsd (version différente ?) — patch ignoré"
+    warn "Pour patcher manuellement : docs/patch-collabora.md"
+    rm -f "$bin_tmp" "$patched_tmp"
+    return 0
+  fi
+
+  chmod 755 "$patched_tmp"
+
+  # Déployer sur tous les nœuds et redémarrer
+  local failed=0
+  for i in $(seq 1 "$COLLAB_NODES"); do
+    if docker cp "$patched_tmp" "collabora-node${i}:/usr/bin/coolwsd" 2>/dev/null; then
+      docker exec "collabora-node${i}" chmod 755 /usr/bin/coolwsd 2>/dev/null || true
+      docker restart "collabora-node${i}" &>/dev/null || true
+      info "Patch appliqué + redémarrage : collabora-node${i}  (${patch_result})"
+    else
+      warn "Impossible de patcher collabora-node${i}"
+      (( failed++ )) || true
+    fi
+  done
+
+  rm -f "$bin_tmp" "$patched_tmp"
+
+  if (( failed > 0 )); then
+    warn "${failed} nœud(s) non patchés — limite home_mode toujours active"
+  else
+    info "Collabora : limite home_mode supprimée sur ${COLLAB_NODES} nœud(s) — connexions/documents illimités"
+  fi
+}
+
 # ─── [DEPLOY] Certificats et déploiement ─────────────────────────────────────
 
 gen_certs() {
@@ -2293,6 +2400,7 @@ main() {
   # Phase 6 : Déploiement
   gen_certs
   run_deploy
+  patch_collabora_binary
 
   # Phase 7 : Vérification
   wait_healthy

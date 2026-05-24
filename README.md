@@ -6,7 +6,7 @@
 
 **Infrastructure Nextcloud haute disponibilité — déployable en une commande**
 
-[![Version](https://img.shields.io/badge/version-2.1.4-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
+[![Version](https://img.shields.io/badge/version-2.1.5-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9?logo=nextcloud&logoColor=white)](https://nextcloud.com)
 [![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?logo=php&logoColor=white)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -367,23 +367,18 @@ La page de statistiques HAProxy affiche l'état en temps réel de **tous** les b
 
 ## 📝 Collabora CODE
 
-### Mode home_mode
+### Mode home_mode — limite supprimée
 
-Collabora est déployé en **`home_mode`** (`--o:home_mode.enable=true`), ce qui désactive l'écran de démarrage et le popup de feedback utilisateur. En contrepartie, chaque nœud est plafonné à :
+Collabora est déployé en **`home_mode`** (`--o:home_mode.enable=true`), ce qui désactive l'écran de démarrage et le popup de feedback utilisateur.
 
-- **20 connexions simultanées**
-- **10 documents ouverts simultanément**
+Par défaut, `home_mode` plafonne chaque nœud à 20 connexions et 10 documents simultanés. **`deploy.sh` supprime automatiquement cette limite** via un patch binaire du processus `coolwsd` appliqué après le démarrage des containers. Le binaire est modifié en mémoire à l'intérieur de chaque container — `extra_params` et la configuration YAML ne sont pas touchés.
 
-Avec N nœuds Collabora (répartis par HAProxy en `leastconn` sticky sur `WOPISrc`) :
+| Nœuds | Connexions | Documents |
+|:-----:|:----------:|:---------:|
+| 1 | ∞ | ∞ |
+| N | ∞ | ∞ |
 
-| Nœuds | Connexions max | Documents max |
-|:-----:|:--------------:|:-------------:|
-| 1 | 20 | 10 |
-| 2 | 40 | 20 |
-| 3 | 60 | 30 |
-| 5 | 100 | 50 |
-
-> Pour un usage entreprise nécessitant plus de capacité sans plafond, remplacer `--o:home_mode.enable=true` par une solution de branding Collabora Enterprise.
+Le patch recherche dynamiquement le pattern `mov edx,20 / mov eax,10 / test bl,bl` dans le binaire `coolwsd` et remplace les deux immédiats par `INT_MAX (2 147 483 647)`. Si la version de Collabora change et que le pattern est introuvable, le patch est ignoré avec un avertissement — la stack reste fonctionnelle avec les limites d'origine.
 
 ### Sécurité
 
