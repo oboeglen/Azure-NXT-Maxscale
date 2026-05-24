@@ -1530,8 +1530,13 @@ NETWORKS
   # ── Volumes ─────────────────────────────────────────────────────────────
   echo "" >> "$dest"
   echo "volumes:" >> "$dest"
+  # Pré-créés par gen_certs() avant docker compose up → external: true évite le warning
   echo "  letsencrypt:" >> "$dest"
+  echo "    external: true" >> "$dest"
+  echo "    name: ${COMPOSE_PROJECT_NAME}_letsencrypt" >> "$dest"
   echo "  certbot_webroot:" >> "$dest"
+  echo "    external: true" >> "$dest"
+  echo "    name: ${COMPOSE_PROJECT_NAME}_certbot_webroot" >> "$dest"
   echo "  nextcloud_html:" >> "$dest"
   echo "  nextcloud_apps:" >> "$dest"
   echo "  nextcloud_config:" >> "$dest"
@@ -1853,7 +1858,8 @@ gen_certs() {
 
   # ── Réutiliser depuis le volume Let's Encrypt si disponible ───────────────
   step "Recherche d'un certificat existant dans le volume"
-  docker volume create "${le_vol}" &>/dev/null || true
+  docker volume create "${prefix}_letsencrypt" &>/dev/null || true   # toujours créé (utilisé par le certbot de renouvellement dans compose)
+  docker volume create "${le_vol}" &>/dev/null || true               # idem en prod ; crée _staging en mode staging
   docker volume create "${prefix}_certbot_webroot" &>/dev/null || true
 
   if docker run --rm -v "${le_vol}:/etc/letsencrypt" alpine \
