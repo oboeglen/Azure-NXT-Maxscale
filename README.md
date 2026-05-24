@@ -6,7 +6,7 @@
 
 **Infrastructure Nextcloud haute disponibilité — déployable en une commande**
 
-[![Version](https://img.shields.io/badge/version-2.1.5-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
+[![Version](https://img.shields.io/badge/version-2.1.6-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9?logo=nextcloud&logoColor=white)](https://nextcloud.com)
 [![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?logo=php&logoColor=white)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -379,6 +379,21 @@ Par défaut, `home_mode` plafonne chaque nœud à 20 connexions et 10 documents 
 | N | ∞ | ∞ |
 
 Le patch recherche dynamiquement le pattern `mov edx,20 / mov eax,10 / test bl,bl` dans le binaire `coolwsd` et remplace les deux immédiats par `INT_MAX (2 147 483 647)`. Si la version de Collabora change et que le pattern est introuvable, le patch est ignoré avec un avertissement — la stack reste fonctionnelle avec les limites d'origine.
+
+### Persistance du patch après redémarrage
+
+Le patch est écrit dans la couche d'écriture du container (`docker cp`). Son comportement selon le scénario :
+
+| Scénario | Patch conservé ? |
+|---|:---:|
+| Crash + redémarrage automatique (`restart: always`) | ✅ |
+| `docker restart collabora-nodeX` | ✅ |
+| `docker compose up -d` (container inchangé) | ✅ |
+| `docker compose up -d --force-recreate` | ❌ |
+| `docker compose down` + `docker compose up -d` | ❌ |
+| Mise à jour de l'image Collabora (`docker pull` + recreate) | ❌ |
+
+En cas de recréation de container, relancer `deploy.sh` réapplique le patch automatiquement. Un `docker compose up -d` manuel hors `deploy.sh` restaure le binaire d'origine sans avertissement.
 
 ### Sécurité
 

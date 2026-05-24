@@ -6,6 +6,17 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.1.6] — 2026-05-24
+
+### Fixed
+- Volumes `letsencrypt` et `certbot_webroot` déclarés `external: true` dans `docker-compose.yml` généré — supprime le warning `volume already exists but was not created by Docker Compose` au démarrage
+- En mode staging, `${COMPOSE_PROJECT_NAME}_letsencrypt` est désormais toujours pré-créé par `gen_certs()` pour que le container certbot de renouvellement trouve son volume
+
+### Changed
+- README : persistance du patch binaire Collabora documentée — tableau scénarios crash / `docker restart` / recreate / `down+up` / mise à jour image
+
+---
+
 ## [2.1.5] — 2026-05-24
 
 ### Added
@@ -114,6 +125,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.1.6]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.5...v2.1.6
 [2.1.5]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.4...v2.1.5
 [2.1.4]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.3...v2.1.4
 [2.1.3]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.2...v2.1.3
