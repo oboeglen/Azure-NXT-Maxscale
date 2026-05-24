@@ -193,7 +193,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Déployeur automatique v2.1.6"; do
+    "        NXT Maxscale — Déployeur automatique v2.1.7"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -2367,11 +2367,87 @@ final_check() {
   warn "Vérifiez dans quelques secondes ou consultez : docker logs app-next-01"
 }
 
+# ─── [UPDATE] Détection et mise à jour sur stack existante ──────────────────
+
+detect_existing_stack() {
+  [[ -d "$INSTALL_DIR" ]] || return 1
+  [[ -f "$INSTALL_DIR/docker-compose.yml" ]] || return 1
+  local state
+  state=$(docker inspect --format='{{.State.Status}}' haproxy 2>/dev/null || echo "absent")
+  [[ "$state" == "running" ]]
+}
+
+_detect_node_count() {
+  local filter="$1" pattern="$2"
+  local n
+  n=$(docker ps --filter "name=${filter}" --format "{{.Names}}" 2>/dev/null \
+      | grep -E "${pattern}" | wc -l)
+  (( n < 1 )) && n=1
+  echo "$n"
+}
+
+update_images() {
+  step "Mise à jour de la stack NXT Maxscale"
+  cd "$INSTALL_DIR"
+
+  # Charger les nœuds depuis le cache ou détecter depuis les containers
+  if [[ -f "$ANSWERS_CACHE" ]]; then
+    declare -gA MINIO_PATHS 2>/dev/null || true
+    # shellcheck source=/dev/null
+    source "$ANSWERS_CACHE"
+    info "Configuration rechargée (${NC_NODES} NC · ${MARIADB_NODES} DB · ${REDIS_NODES} Redis · ${COLLAB_NODES} Collab · ${MINIO_NODES} MinIO)"
+  else
+    warn "Cache absent — détection automatique depuis les containers en cours"
+    NC_NODES=$(_detect_node_count     "app-next-"       "^app-next-[0-9]")
+    MARIADB_NODES=$(_detect_node_count "mariadb-node"   "^mariadb-node[0-9]")
+    REDIS_NODES=$(_detect_node_count   "redis-node"     "^redis-node[0-9]")
+    COLLAB_NODES=$(_detect_node_count  "collabora-node" "^collabora-node[0-9]")
+    WB_NODES=$(_detect_node_count      "whiteboard-node" "^whiteboard-node[0-9]")
+    MINIO_NODES=$(_detect_node_count   "minio-node"     "^minio-node[0-9]")
+    info "Nœuds détectés : NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES}"
+  fi
+
+  step "Pull des nouvelles images Docker"
+  start_spinner "Téléchargement des images..."
+  docker compose pull -q 2>/dev/null || true
+  stop_spinner "Images téléchargées"
+
+  step "Recréation des containers dont l'image a changé"
+  start_spinner "Application des mises à jour..."
+  docker compose up -d 2>&1 | grep -E '^\s*(✔|✘|Recreated|Started|Error)' || true
+  stop_spinner "Containers mis à jour"
+
+  # Réappliquer le patch si l'image Collabora a changé (recreate = binaire original restauré)
+  patch_collabora_binary
+
+  wait_healthy
+
+  local nc_url
+  nc_url=$(grep -m1 '^NEXTCLOUD_DOMAIN=' "${INSTALL_DIR}/.env" 2>/dev/null | cut -d= -f2 || echo "votre-domaine")
+  info "Mise à jour terminée ✓  →  https://${nc_url}"
+}
+
 # ─── [MAIN] Point d'entrée ───────────────────────────────────────────────────
 
 main() {
   show_banner
   setup_logging
+
+  # Détection d'une stack existante → proposition mise à jour rapide
+  if detect_existing_stack; then
+    box "Stack existante détectée" \
+      "Une stack NXT Maxscale est active dans ${INSTALL_DIR}." \
+      "" \
+      "→ Mise à jour rapide : pull des images + patch Collabora (configuration conservée)" \
+      "→ Déploiement complet : re-génère tous les fichiers (⚠  repart de zéro)"
+    echo ""
+    if prompt_yn "Effectuer une mise à jour rapide des images ?" "Y"; then
+      update_images
+      return 0
+    fi
+    info "Déploiement complet sélectionné"
+    echo ""
+  fi
 
   # Phase 1-2 : Système
   detect_os
