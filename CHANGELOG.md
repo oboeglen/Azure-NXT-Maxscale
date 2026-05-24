@@ -6,6 +6,14 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.1.7] — 2026-05-24
+
+### Added
+- Mode mise à jour rapide dans `deploy.sh` — si une stack est déjà active dans `$INSTALL_DIR`, le script propose en priorité de ne mettre à jour que les images (`docker compose pull` + `docker compose up -d`) sans régénérer la configuration, suivi d'un réapplication automatique du patch binaire Collabora et d'une vérification `wait_healthy`
+- Détection automatique du nombre de nœuds depuis les containers en cours si le cache de configuration est absent
+
+---
+
 ## [2.1.6] — 2026-05-24
 
 ### Fixed
@@ -125,6 +133,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.1.7]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.6...v2.1.7
 [2.1.6]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.5...v2.1.6
 [2.1.5]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.4...v2.1.5
 [2.1.4]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.3...v2.1.4
