@@ -6,7 +6,7 @@
 
 **Infrastructure Nextcloud haute disponibilité — déployable en une commande**
 
-[![Version](https://img.shields.io/badge/version-2.1.7-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
+[![Version](https://img.shields.io/badge/version-2.1.8-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9?logo=nextcloud&logoColor=white)](https://nextcloud.com)
 [![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?logo=php&logoColor=white)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -389,11 +389,12 @@ Le patch est écrit dans la couche d'écriture du container (`docker cp`). Son c
 | Crash + redémarrage automatique (`restart: always`) | ✅ |
 | `docker restart collabora-nodeX` | ✅ |
 | `docker compose up -d` (container inchangé) | ✅ |
+| Mise à jour via `deploy.sh` (mode mise à jour rapide) | ✅ |
 | `docker compose up -d --force-recreate` | ❌ |
 | `docker compose down` + `docker compose up -d` | ❌ |
-| Mise à jour de l'image Collabora (`docker pull` + recreate) | ❌ |
+| Mise à jour manuelle (`docker pull` + `docker compose up -d` hors `deploy.sh`) | ❌ |
 
-En cas de recréation de container, relancer `deploy.sh` réapplique le patch automatiquement. Un `docker compose up -d` manuel hors `deploy.sh` restaure le binaire d'origine sans avertissement.
+`deploy.sh` réapplique le patch automatiquement dans tous les cas : déploiement initial et mode mise à jour rapide (pull + recreate des images). Un `docker compose up -d` manuel hors `deploy.sh` restaure le binaire d'origine sans avertissement.
 
 ### Sécurité
 

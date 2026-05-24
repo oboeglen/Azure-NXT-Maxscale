@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.4
+# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.8
 # Usage : sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -193,7 +193,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Déployeur automatique v2.1.7"; do
+    "        NXT Maxscale — Déployeur automatique v2.1.8"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
