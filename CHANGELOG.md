@@ -6,6 +6,16 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.1.12] — 2026-05-25
+
+### Fixed
+- **Patch binaire Collabora non fonctionnel sur certaines versions de coolwsd** — l'algorithme de recherche était limité à un unique pattern d'octets codé en dur (`mov edx,20 / mov eax,10 / test bl,bl`), spécifique à un seul build. Remplacé par une approche à 4 stratégies successives, indépendante de la version :
+  1. Pattern exact original (rétro-compatibilité)
+  2. Toutes les combinaisons de registres x86-64 pour `(MOV r32, 20) + (MOV r32, 10)` avec vérification `TEST`/`CMP` à proximité
+  3. Idem pour `(MOV r32, 20) + (MOV r32, 20)` (quand les deux limites valent 20)
+  4. Ancrage sur la chaîne `"home_mode.enable"` dans le binaire puis recherche de paires de petites constantes dans le code voisin
+  La détection « déjà patché » est aussi généralisée (plus liée au pattern exact)
+
 ## [2.1.11] — 2026-05-25
 
 ### Fixed
@@ -183,6 +193,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.1.12]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.11...v2.1.12
 [2.1.11]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.10...v2.1.11
 [2.1.10]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.9...v2.1.10
 [2.1.9]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.8...v2.1.9
