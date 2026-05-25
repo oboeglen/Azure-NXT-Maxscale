@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.8
+# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.9
 # Usage : sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -193,7 +193,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Déployeur automatique v2.1.8"; do
+    "        NXT Maxscale — Déployeur automatique v2.1.9"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -844,11 +844,34 @@ MINIO_SECRET_KEY=${GEN_MINIO_SECRET}
 NEXTCLOUD_S3_BUCKET=nextcloud
 
 ${minio_lines}
+MINIO_MODE=${MINIO_MODE}
+MINIO_BYPASS=${MINIO_BYPASS}
+
 WHITEBOARD_JWT_SECRET=${GEN_JWT_SECRET}
 EOF
 
   chmod 600 "$dest"
   info ".env généré : $dest"
+}
+
+# gen_minio_server_cmd — construit la commande MinIO server depuis le fichier de pools
+# Si .minio-pools existe : multi-pool (expansion); sinon : comportement d'origine
+gen_minio_server_cmd() {
+  local pools_file="$INSTALL_DIR/.minio-pools"
+  if [[ -f "$pools_file" ]]; then
+    local cmd="server"
+    while IFS=: read -r start end; do
+      cmd+=" http://minio-node{${start}...${end}}/data{1...${MINIO_DISKS}}"
+    done < "$pools_file"
+    cmd+=" --address :9000"
+    echo "$cmd"
+  elif (( MINIO_NODES == 1 )); then
+    local vols_cmd="" _d
+    for _d in $(seq 1 "$MINIO_DISKS"); do vols_cmd+=" /data${_d}"; done
+    echo "server${vols_cmd} --address :9000"
+  else
+    echo "server http://minio-node{1...${MINIO_NODES}}/data{1...${MINIO_DISKS}} --address :9000"
+  fi
 }
 
 gen_compose() {
@@ -971,7 +994,7 @@ NCSETUP
       app-next-01:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cron.sh > /dev/null || exit 1"]
+      test: ["CMD-SHELL", "grep -qa cron /proc/1/cmdline || exit 1"]
       interval: 60s
       timeout: 5s
       retries: 3
@@ -1315,15 +1338,9 @@ ${redis_deps_block}
 RCINIT
 
   # ── MinIO nodes (dynamic) ──────────────────────────────────────────────
-  # Commande server : SNMD (1 nœud, N drives locaux) ou MNMD (N nœuds × D drives)
+  # Commande server : SNMD / MNMD single-pool / MNMD multi-pool (expansion)
   local minio_server_cmd
-  if (( MINIO_NODES == 1 )); then
-    local vols_cmd=""
-    for _d in $(seq 1 "$MINIO_DISKS"); do vols_cmd+=" /data${_d}"; done
-    minio_server_cmd="server${vols_cmd} --address :9000"
-  else
-    minio_server_cmd="server http://minio-node{1...${MINIO_NODES}}/data{1...${MINIO_DISKS}} --address :9000"
-  fi
+  minio_server_cmd=$(gen_minio_server_cmd)
 
   for i in $(seq 1 "$MINIO_NODES"); do
     local rfs_ip="172.50.0.$((10 + i))"
@@ -1549,6 +1566,12 @@ NETWORKS
     echo "  redis_data_${j}:" >> "$dest"
   done
   echo "  redis_whiteboard_data:" >> "$dest"
+
+  # Initialiser le fichier de pools MinIO lors du premier déploiement
+  local _pools_file="$INSTALL_DIR/.minio-pools"
+  if [[ ! -f "$_pools_file" ]] && (( MINIO_NODES > 1 )); then
+    echo "1:${MINIO_NODES}" > "$_pools_file"
+  fi
 
   info "docker-compose.yml généré ($dest)"
 }
@@ -2427,26 +2450,397 @@ update_images() {
   info "Mise à jour terminée ✓  →  https://${nc_url}"
 }
 
+# ─── [REDIS] Opérations cluster (scale-up / scale-down) ─────────────────────
+
+_redis_scale_up() {
+  local new_count="$1" old_count="$2"
+  local redis_pass
+  redis_pass=$(grep -m1 '^REDIS_PASSWORD=' "$INSTALL_DIR/.env" | cut -d= -f2)
+  [[ -z "$redis_pass" ]] && die "REDIS_PASSWORD introuvable dans .env"
+
+  local add_pairs=$(( (new_count - old_count) / 2 ))
+
+  for i in $(seq $((old_count+1)) $new_count); do
+    start_spinner "Attente de redis-node${i}..."
+    local elapsed=0
+    while (( elapsed < 120 )); do
+      docker exec redis-node1 redis-cli -h "redis-node${i}" \
+        -a "$redis_pass" --no-auth-warning ping 2>/dev/null | grep -q PONG && break
+      sleep 3; (( elapsed+=3 )) || true
+    done
+    stop_spinner "redis-node${i} prêt"
+  done
+
+  for p in $(seq 1 $add_pairs); do
+    local mi=$(( old_count + (p-1)*2 + 1 ))
+    local ri=$(( old_count + (p-1)*2 + 2 ))
+    step "Intégration : redis-node${mi} (master) + redis-node${ri} (replica)"
+
+    docker exec redis-node1 redis-cli --cluster add-node \
+      "redis-node${mi}:6379" "redis-node1:6379" \
+      -a "$redis_pass" --no-auth-warning
+
+    # Get master ID directly from the new node (cluster nodes shows IPs, not hostnames)
+    sleep 3
+    local master_id
+    master_id=$(docker exec "redis-node${mi}" redis-cli \
+      -a "$redis_pass" --no-auth-warning cluster myid 2>/dev/null | tr -d '[:space:]')
+
+    docker exec redis-node1 redis-cli --cluster add-node \
+      "redis-node${ri}:6379" "redis-node1:6379" \
+      -a "$redis_pass" --no-auth-warning \
+      --cluster-slave --cluster-master-id "$master_id"
+  done
+
+  # Fix any open/migrating slots before rebalance
+  docker exec redis-node1 redis-cli --cluster fix "redis-node1:6379" \
+    -a "$redis_pass" --no-auth-warning 2>/dev/null || true
+  sleep 3
+
+  step "Rééquilibrage des slots Redis sur tous les masters"
+  docker exec redis-node1 redis-cli --cluster rebalance "redis-node1:6379" \
+    -a "$redis_pass" --no-auth-warning --cluster-use-empty-masters
+  info "Redis : ${new_count} nœuds ($((new_count/2)) masters + $((new_count/2)) replicas)"
+}
+
+_redis_scale_down() {
+  local new_count="$1" old_count="$2"
+  local redis_pass
+  redis_pass=$(grep -m1 '^REDIS_PASSWORD=' "$INSTALL_DIR/.env" | cut -d= -f2)
+  [[ -z "$redis_pass" ]] && die "REDIS_PASSWORD introuvable dans .env"
+
+  for n in $(seq $old_count -1 $((new_count + 1))); do
+    local node_line
+    node_line=$(docker exec "redis-node${n}" redis-cli \
+      -a "$redis_pass" --no-auth-warning cluster nodes 2>/dev/null | grep myself || true)
+    if [[ -z "$node_line" ]]; then
+      warn "redis-node${n} inaccessible — ignoré"; continue
+    fi
+
+    local node_id; node_id=$(echo "$node_line" | cut -d' ' -f1)
+    local node_flags; node_flags=$(echo "$node_line" | awk '{print $3}')
+
+    if echo "$node_flags" | grep -q "master"; then
+      local slot_count
+      slot_count=$(echo "$node_line" | awk '{
+        for(i=9;i<=NF;i++){
+          n=split($i,a,"-")
+          if(n==2 && a[1]~/^[0-9]+$/ && a[2]~/^[0-9]+$/) c+=a[2]-a[1]+1
+        }
+      } END{print c+0}')
+
+      if (( slot_count > 0 )); then
+        local target_id
+        target_id=$(docker exec redis-node1 redis-cli \
+          -a "$redis_pass" --no-auth-warning cluster nodes 2>/dev/null \
+          | awk -v skip="$node_id" '!/myself/ && /master/ && $1!=skip {print $1; exit}')
+        step "Migration de ${slot_count} slots depuis redis-node${n}"
+        docker exec redis-node1 redis-cli --cluster reshard "redis-node1:6379" \
+          -a "$redis_pass" --no-auth-warning \
+          --cluster-from "$node_id" --cluster-to "$target_id" \
+          --cluster-slots "$slot_count" --cluster-yes
+      fi
+    fi
+
+    info "Retrait de redis-node${n} du cluster"
+    docker exec redis-node1 redis-cli --cluster del-node \
+      "redis-node1:6379" "$node_id" \
+      -a "$redis_pass" --no-auth-warning
+  done
+
+  # Rebalance slots evenly after all removals
+  step "Rééquilibrage des slots Redis après scale-down"
+  docker exec redis-node1 redis-cli --cluster fix "redis-node1:6379" \
+    -a "$redis_pass" --no-auth-warning 2>/dev/null || true
+  sleep 2
+  docker exec redis-node1 redis-cli --cluster rebalance "redis-node1:6379" \
+    -a "$redis_pass" --no-auth-warning 2>/dev/null || true
+  info "Redis : ${new_count} nœuds ($((new_count/2)) masters + $((new_count/2)) replicas)"
+}
+
+# ─── [MINIO] Enregistrement d'un nouveau pool ────────────────────────────────
+
+_minio_register_pool() {
+  local old_count="$1" new_count="$2"
+  local pools_file="$INSTALL_DIR/.minio-pools"
+  local new_start=$(( old_count + 1 ))
+
+  # Rétrocompatibilité : créer le fichier si absent
+  if [[ ! -f "$pools_file" ]]; then
+    echo "1:${old_count}" > "$pools_file"
+    info "Fichier de pools MinIO initialisé (pool 1 : nœuds 1–${old_count})"
+  fi
+
+  echo "${new_start}:${new_count}" >> "$pools_file"
+  info "Nouveau pool MinIO enregistré : nœuds ${new_start}–${new_count}"
+
+  local n d
+  for n in $(seq $new_start $new_count); do
+    grep -q "^MINIO_NODE${n}_PATH=" "$INSTALL_DIR/.env" || \
+      echo "MINIO_NODE${n}_PATH=${MINIO_PATHS[${n}_path]}" >> "$INSTALL_DIR/.env"
+    for d in $(seq 1 "$MINIO_DISKS"); do
+      grep -q "^MINIO_NODE${n}_DATA${d}=" "$INSTALL_DIR/.env" || \
+        echo "MINIO_NODE${n}_DATA${d}=${MINIO_PATHS[${n}_${d}]}" >> "$INSTALL_DIR/.env"
+    done
+  done
+  info "Chemins des nouveaux nœuds MinIO ajoutés au .env"
+}
+
+# ─── [SCALE] Modification du nombre de nœuds sur stack existante ─────────────
+
+scale_nodes() {
+  step "Mode scaling — modification du nombre de nœuds"
+  cd "$INSTALL_DIR"
+
+  # ── Chargement de la configuration ──────────────────────────────────────────
+  declare -gA MINIO_PATHS 2>/dev/null || true
+
+  if [[ -f "$ANSWERS_CACHE" ]]; then
+    # shellcheck source=/dev/null
+    source "$ANSWERS_CACHE"
+    info "Configuration rechargée depuis le cache"
+  elif [[ -f "$INSTALL_DIR/.env" ]]; then
+    warn "Cache absent — reconstruction depuis .env et containers en cours"
+    NC_DOMAIN=$(grep    -m1 '^NEXTCLOUD_DOMAIN='    "$INSTALL_DIR/.env" | cut -d= -f2)
+    COLLAB_DOMAIN=$(grep -m1 '^COLLABORA_DOMAIN='   "$INSTALL_DIR/.env" | cut -d= -f2)
+    WB_DOMAIN=$(grep    -m1 '^WHITEBOARD_DOMAIN='   "$INSTALL_DIR/.env" | cut -d= -f2)
+    CERTBOT_EMAIL=$(grep -m1 '^CERTBOT_EMAIL='       "$INSTALL_DIR/.env" | cut -d= -f2 || echo "")
+    NC_NODES=$(_detect_node_count     "app-next-"       "^app-next-[0-9]")
+    MARIADB_NODES=$(_detect_node_count "mariadb-node"   "^mariadb-node[0-9]")
+    REDIS_NODES=$(_detect_node_count   "redis-node"     "^redis-node[0-9]")
+    COLLAB_NODES=$(_detect_node_count  "collabora-node" "^collabora-node[0-9]")
+    WB_NODES=$(_detect_node_count      "whiteboard-node" "^whiteboard-node[0-9]")
+    MINIO_NODES=$(_detect_node_count   "minio-node"     "^minio-node[0-9]")
+    NC_VERSION=$(docker inspect --format='{{index .Config.Image}}' app-next-01 2>/dev/null \
+                 | cut -d: -f2 || echo "latest-fpm")
+    MINIO_DISKS="${MINIO_DISKS:-4}"
+    MINIO_MODE=$(grep -m1 '^MINIO_MODE=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "test")
+    MINIO_MODE="${MINIO_MODE:-test}"
+    MINIO_BYPASS=$(grep -m1 '^MINIO_BYPASS=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "true")
+    MINIO_BYPASS="${MINIO_BYPASS:-true}"
+    HAPROXY_STATS="${HAPROXY_STATS:-no}"
+    MINIO_CONSOLE="${MINIO_CONSOLE:-no}"
+    CERTBOT_STAGING="${CERTBOT_STAGING:-no}"
+    local n d
+    for n in $(seq 1 "$MINIO_NODES"); do
+      MINIO_PATHS["${n}_path"]=$(grep -m1 "^MINIO_NODE${n}_PATH=" "$INSTALL_DIR/.env" 2>/dev/null \
+                                  | cut -d= -f2 || echo "/data/minio/node${n}")
+      for d in $(seq 1 "$MINIO_DISKS"); do
+        MINIO_PATHS["${n}_${d}"]=$(grep -m1 "^MINIO_NODE${n}_DATA${d}=" "$INSTALL_DIR/.env" 2>/dev/null \
+                                    | cut -d= -f2 || echo "/data/minio/node${n}/data${d}")
+      done
+    done
+    info "Configuration reconstruite : NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES}"
+  else
+    die "Ni cache de configuration ni fichier .env trouvé dans $INSTALL_DIR — impossible de scaler"
+  fi
+
+  # ── Affichage de la configuration actuelle ───────────────────────────────────
+  box "Nœuds actuels" \
+    "Nextcloud FPM+nginx : ${NC_NODES} nœuds" \
+    "MariaDB Galera      : ${MARIADB_NODES} nœuds  (impair requis)" \
+    "Redis Cluster       : ${REDIS_NODES} nœuds  (pair ≥ 6, delta pair)" \
+    "Collabora           : ${COLLAB_NODES} nœuds" \
+    "Whiteboard          : ${WB_NODES} nœuds" \
+    "MinIO               : ${MINIO_NODES} nœuds × ${MINIO_DISKS} disques  (scale-up par pool)"
+  echo ""
+
+  # ── Saisie des nouvelles valeurs ─────────────────────────────────────────────
+  local ORIG_NC_NODES="$NC_NODES"
+  local ORIG_MARIADB_NODES="$MARIADB_NODES"
+  local ORIG_REDIS_NODES="$REDIS_NODES"
+  local ORIG_COLLAB_NODES="$COLLAB_NODES"
+  local ORIG_WB_NODES="$WB_NODES"
+  local ORIG_MINIO_NODES="$MINIO_NODES"
+
+  step "Nouveaux nombres de nœuds (Entrée = conserver la valeur actuelle)"
+  ask_int "Nextcloud — nœuds FPM+nginx"       "$NC_NODES"      is_positive_int "Entier ≥ 1 requis"             NC_NODES
+  ask_int "MariaDB Galera — nœuds (impair)"   "$MARIADB_NODES" is_odd          "Nombre impair requis (quorum)" MARIADB_NODES
+  ask_int "Redis Cluster — nœuds (pair ≥ 6)"  "$REDIS_NODES"   is_even_min6    "Nombre pair ≥ 6 requis"        REDIS_NODES
+  ask_int "Collabora — nœuds"                 "$COLLAB_NODES"  is_positive_int "Entier ≥ 1 requis"             COLLAB_NODES
+  ask_int "Whiteboard — nœuds"                "$WB_NODES"      is_positive_int "Entier ≥ 1 requis"             WB_NODES
+
+  # MinIO : scale-up uniquement (pool expansion) — scale-down via decommission manuel
+  echo ""
+  ask_int "MinIO — nœuds total (≥ ${ORIG_MINIO_NODES}, ↑ uniquement)" \
+    "$MINIO_NODES" is_positive_int "Entier ≥ 1 requis" MINIO_NODES
+  if (( MINIO_NODES < ORIG_MINIO_NODES )); then
+    warn "MinIO scale-down non supporté — valeur ramenée à ${ORIG_MINIO_NODES}"
+    warn "Pour réduire MinIO : mc admin decommission start (procédure manuelle)"
+    MINIO_NODES="$ORIG_MINIO_NODES"
+  fi
+
+  # Valider que le delta Redis est pair (master+replica par paire)
+  local redis_delta=$(( REDIS_NODES - ORIG_REDIS_NODES ))
+  if (( redis_delta != 0 && redis_delta % 2 != 0 )); then
+    warn "Redis : le delta doit être pair — valeur ramenée à ${ORIG_REDIS_NODES}"
+    REDIS_NODES="$ORIG_REDIS_NODES"
+    redis_delta=0
+  fi
+
+  # Si MinIO scale-up : collecter les chemins des nouveaux nœuds MAINTENANT
+  local minio_scaled_up=false
+  if (( MINIO_NODES > ORIG_MINIO_NODES )); then
+    minio_scaled_up=true
+    local new_pool_start=$(( ORIG_MINIO_NODES + 1 ))
+    step "Disques pour les nouveaux nœuds MinIO (${new_pool_start}–${MINIO_NODES})"
+    warn "Tous les nœuds MinIO existants redémarreront avec le nouveau pool (~30s d'indisponibilité)."
+    warn "Les données sont préservées — seule la commande server change."
+    echo ""
+    local n d
+    for n in $(seq $new_pool_start $MINIO_NODES); do
+      prompt_input "Nœud ${n} — chemin métadonnées" "/data/minio/node${n}"
+      MINIO_PATHS["${n}_path"]="$REPLY"
+      for d in $(seq 1 "$MINIO_DISKS"); do
+        prompt_input "Nœud ${n} — Disque ${d}" "/data/minio/node${n}/data${d}"
+        MINIO_PATHS["${n}_${d}"]="$REPLY"
+      done
+    done
+  fi
+
+  # ── Vérification des changements ─────────────────────────────────────────────
+  local changed=false
+  [[ "$NC_NODES"      != "$ORIG_NC_NODES"      ]] && changed=true
+  [[ "$MARIADB_NODES" != "$ORIG_MARIADB_NODES" ]] && changed=true
+  [[ "$REDIS_NODES"   != "$ORIG_REDIS_NODES"   ]] && changed=true
+  [[ "$COLLAB_NODES"  != "$ORIG_COLLAB_NODES"  ]] && changed=true
+  [[ "$WB_NODES"      != "$ORIG_WB_NODES"      ]] && changed=true
+  $minio_scaled_up && changed=true
+
+  if ! $changed; then
+    info "Aucune modification demandée — opération annulée"
+    return 0
+  fi
+
+  # ── Récapitulatif et confirmations ───────────────────────────────────────────
+  box "Modifications prévues" \
+    "Nextcloud  : ${ORIG_NC_NODES} → ${NC_NODES} nœuds" \
+    "Galera     : ${ORIG_MARIADB_NODES} → ${MARIADB_NODES} nœuds" \
+    "Redis      : ${ORIG_REDIS_NODES} → ${REDIS_NODES} nœuds" \
+    "Collabora  : ${ORIG_COLLAB_NODES} → ${COLLAB_NODES} nœuds" \
+    "Whiteboard : ${ORIG_WB_NODES} → ${WB_NODES} nœuds" \
+    "MinIO      : ${ORIG_MINIO_NODES} → ${MINIO_NODES} nœuds"
+
+  if (( MARIADB_NODES > ORIG_MARIADB_NODES )); then
+    info "Galera : les nouveaux nœuds rejoindront le cluster via SST (automatique)."
+  elif (( MARIADB_NODES < ORIG_MARIADB_NODES )); then
+    warn "⚠  Réduction Galera : données répliquées sur tous les nœuds — aucune perte si quorum maintenu."
+    prompt_yn "Confirmer la réduction du cluster Galera ?" "N" || { info "Annulé"; return 0; }
+  fi
+
+  if (( REDIS_NODES > ORIG_REDIS_NODES )); then
+    info "Redis scale-up : $((redis_delta/2)) paire(s) master+replica — slots redistribués automatiquement."
+  elif (( REDIS_NODES < ORIG_REDIS_NODES )); then
+    warn "⚠  Redis scale-down : slots migrés avant suppression — aucune perte de données."
+    warn "   Durée variable selon le volume de données en cache."
+    prompt_yn "Confirmer la réduction du cluster Redis ?" "N" || { info "Annulé"; return 0; }
+  fi
+
+  prompt_yn "Appliquer ces modifications ?" "Y" || { info "Annulé"; return 0; }
+
+  # ── APPLICATION ───────────────────────────────────────────────────────────────
+
+  # Étape 1 : Redis scale-DOWN — migration des slots AVANT toute modif compose
+  if (( REDIS_NODES < ORIG_REDIS_NODES )); then
+    step "Redis scale-down : migration des slots et retrait des nœuds"
+    _redis_scale_down "$REDIS_NODES" "$ORIG_REDIS_NODES"
+  fi
+
+  # Étape 2 : MinIO pool expansion — enregistrement AVANT gen_compose
+  if $minio_scaled_up; then
+    _minio_register_pool "$ORIG_MINIO_NODES" "$MINIO_NODES"
+    step "Création des répertoires MinIO (nouveaux nœuds)"
+    local n d
+    for n in $(seq $(( ORIG_MINIO_NODES + 1 )) $MINIO_NODES); do
+      for d in $(seq 1 "$MINIO_DISKS"); do
+        local path="${MINIO_PATHS[${n}_${d}]}"
+        mkdir -p "$path"
+        find "${path:?}" -mindepth 1 -delete 2>/dev/null || true
+      done
+    done
+  fi
+
+  # Étape 3 : Génération des fichiers de config (sans .env — mots de passe conservés)
+  save_answers
+  gen_compose
+  gen_galera_cnf
+  patch_haproxy
+  patch_nextcloud_init
+
+  # Étape 4 : Démarrage / arrêt des containers
+  step "Application du scaling (nouveaux containers démarrés, orphelins supprimés)"
+  start_spinner "docker compose up -d --remove-orphans..."
+  docker compose up -d --remove-orphans 2>&1 \
+    | grep -E '^\s*(✔|✘|Created|Started|Removed|Error)' || true
+  stop_spinner "Containers mis à jour"
+
+  # Étape 5 : Redémarrage de HAProxy pour appliquer les nouveaux backends
+  step "Redémarrage de HAProxy"
+  docker compose restart haproxy 2>/dev/null || true
+  info "HAProxy redémarré (nouveaux backends actifs immédiatement)"
+
+  # Étape 6 : Redis scale-UP — intégration des nouveaux nœuds dans le cluster
+  if (( REDIS_NODES > ORIG_REDIS_NODES )); then
+    step "Redis scale-up : intégration des nouveaux nœuds dans le cluster"
+    _redis_scale_up "$REDIS_NODES" "$ORIG_REDIS_NODES"
+  fi
+
+  # Étape 7 : Patch binaire Collabora sur les nouveaux nœuds (scale-up seulement)
+  if (( COLLAB_NODES > ORIG_COLLAB_NODES )); then
+    patch_collabora_binary
+  fi
+
+  wait_healthy
+
+  box "Scaling terminé ✓" \
+    "Nextcloud  : ${NC_NODES} nœuds FPM + ${NC_NODES} nginx" \
+    "Galera     : ${MARIADB_NODES} nœuds" \
+    "Redis      : ${REDIS_NODES} nœuds ($((REDIS_NODES/2)) masters + $((REDIS_NODES/2)) replicas)" \
+    "Collabora  : ${COLLAB_NODES} nœuds" \
+    "Whiteboard : ${WB_NODES} nœuds" \
+    "MinIO      : ${MINIO_NODES} nœuds × ${MINIO_DISKS} disques"
+}
+
 # ─── [MAIN] Point d'entrée ───────────────────────────────────────────────────
 
 main() {
   show_banner
   setup_logging
 
-  # Détection d'une stack existante → proposition mise à jour rapide
+  # Détection d'une stack existante → proposition mise à jour / scaling / redéploiement
   if detect_existing_stack; then
     box "Stack existante détectée" \
       "Une stack NXT Maxscale est active dans ${INSTALL_DIR}." \
       "" \
-      "→ Mise à jour rapide : pull des images + patch Collabora (configuration conservée)" \
-      "→ Déploiement complet : re-génère tous les fichiers (⚠  repart de zéro)"
+      "→ [1] Mise à jour rapide  : pull des images + patch Collabora (configuration conservée)" \
+      "→ [2] Scaling des nœuds   : augmenter/réduire les nœuds sans réinitialisation" \
+      "→ [3] Déploiement complet : re-génère tous les fichiers (⚠  repart de zéro)"
     echo ""
-    if prompt_yn "Effectuer une mise à jour rapide des images ?" "Y"; then
-      update_images
-      return 0
-    fi
-    info "Déploiement complet sélectionné"
+    echo -e "  ${C_WHITE}[1]${C_RESET} Mise à jour rapide ${C_GRAY}(recommandé)${C_RESET}"
+    echo -e "  ${C_WHITE}[2]${C_RESET} Augmenter / réduire les nœuds"
+    echo -e "  ${C_WHITE}[3]${C_RESET} Déploiement complet ${C_GRAY}(repart de zéro)${C_RESET}"
     echo ""
+    local stack_choice
+    while true; do
+      prompt_input "Votre choix" "1"
+      stack_choice="$REPLY"
+      [[ "$stack_choice" =~ ^[123]$ ]] && break
+      error "Entrez 1, 2 ou 3"
+    done
+    case "$stack_choice" in
+      1)
+        update_images
+        return 0
+        ;;
+      2)
+        scale_nodes
+        return 0
+        ;;
+      3)
+        info "Déploiement complet sélectionné"
+        echo ""
+        ;;
+    esac
   fi
 
   # Phase 1-2 : Système

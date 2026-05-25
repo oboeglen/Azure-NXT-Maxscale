@@ -6,6 +6,33 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.1.9] — 2026-05-25
+
+### Added
+- **Scaling interactif** — `deploy.sh` propose un menu « Augmenter / réduire les nœuds » lorsqu'une stack est déjà déployée. Toutes les données sont préservées ; seuls les fichiers de configuration sont régénérés
+  - **Nextcloud FPM+nginx** — ajout/suppression de paires de nœuds en hot
+  - **MariaDB Galera** — scale-up via SST automatique, scale-down via `--remove-orphans` (quorum maintenu)
+  - **Redis Cluster** — scale-up avec intégration cluster (`add-node`, `--cluster-slave`, `rebalance`) et scale-down avec migration des slots avant retrait (`reshard`, `del-node`, `rebalance`)
+  - **Collabora CODE** — ajout/suppression de nœuds ; patch binaire `home_mode` automatiquement réappliqué sur les nouveaux nœuds
+  - **Whiteboard** — ajout/suppression de nœuds
+  - **MinIO** — scale-up par expansion de pool (multi-pool MNMD) via `.minio-pools` ; scale-down non supporté par MinIO (renvoi vers `mc admin decommission`)
+- Fonction `gen_minio_server_cmd()` — commande `server` MinIO construite dynamiquement depuis `.minio-pools` (multi-pool transparent)
+- Fichier `.minio-pools` — trace l'historique des pools MinIO (format `start:end` par ligne), utilisé pour reconstruire la commande `server` après un redémarrage
+- `MINIO_MODE` et `MINIO_BYPASS` persistés dans `.env` (étaient uniquement dans le cache transient `/tmp/`) — reconstruits correctement après un reboot sans cache
+
+### Fixed
+- Healthcheck `nextcloud-cron` cassé — `pgrep` absent de l'image `nextcloud:33.0.3-fpm` ; remplacé par `grep -qa cron /proc/1/cmdline`
+- Redis scale-up : `master_id` via grep hostname échouait (`cluster nodes` affiche des IPs, pas des hostnames) — remplacé par `cluster myid` directement sur le nouveau nœud
+- Redis scale-up : slot en état `migrating` bloquait l'ajout de la réplica — ajout d'un `--cluster fix` avant `--cluster rebalance`
+- Redis scale-down : slots non rééquilibrés après retrait (un master héritait de tous les slots) — ajout de `--cluster fix` + `rebalance` en fin de `_redis_scale_down`
+- HAProxy reload après scaling : remplacé `kill -USR2 1` (graceful, nouveaux backends inactifs pour trafic en cours) par `docker compose restart haproxy` (nouveaux backends actifs immédiatement)
+
+### Changed
+- Menu principal `deploy.sh` : 3 options sur stack existante — mise à jour rapide · scaling · déploiement complet
+- HAProxy reload après scaling : `docker compose restart haproxy` au lieu de `SIGUSR2`
+
+---
+
 ## [2.1.8] — 2026-05-24
 
 ### Fixed
@@ -143,6 +170,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.1.9]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.8...v2.1.9
 [2.1.8]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.7...v2.1.8
 [2.1.7]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.6...v2.1.7
 [2.1.6]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.5...v2.1.6
