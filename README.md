@@ -5,7 +5,7 @@
 
 **Infrastructure Nextcloud haute disponibilité — déployable en une commande**
 
-[![Version](https://img.shields.io/badge/version-2.1.8-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
+[![Version](https://img.shields.io/badge/version-2.1.9-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9?logo=nextcloud&logoColor=white)](https://nextcloud.com)
 [![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?logo=php&logoColor=white)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -70,6 +70,7 @@
 - [💾 Stockage objet MinIO](#-stockage-objet-minio)
 - [🔒 Sécurité HAProxy](#-sécurité-haproxy)
 - [📝 Collabora CODE](#-collabora-code)
+- [📐 Scaling — ajout et suppression de nœuds](#-scaling--ajout-et-suppression-de-nœuds)
 - [🛠️ Opérations courantes](#️-opérations-courantes)
 - [🚢 Déploiement manuel](#-déploiement-manuel)
 - [📊 Performances & dimensionnement](#-performances--dimensionnement)
@@ -214,7 +215,7 @@ Tout est appliqué automatiquement par `nextcloud-setup` au premier démarrage.
 
 ### Performance
 
-- Cron système via `nextcloud-cron` — `cron.php` toutes les 5 minutes — healthcheck `pgrep cron.sh`
+- Cron système via `nextcloud-cron` — `cron.php` toutes les 5 minutes — healthcheck `/proc/1/cmdline`
 - OPcache activé avec `validate_timestamps=0` (rechargement PHP requis pour prendre en compte les mises à jour de fichiers)
 - Previews limitées à 2 048 px, formats légers uniquement (vidéo et Office désactivés)
 - Rotation automatique des logs à 100 Mo
@@ -400,6 +401,75 @@ Le patch est écrit dans la couche d'écriture du container (`docker cp`). Son c
 - **Console d'administration** (`/browser/dist/admin/admin.html`) bloquée par HAProxy → HTTP 403
 - **Limite de taille de document** — 100 Mo maximum par document ouvert (`--o:net.max_file_size=104857600`), configurable dans `extra_params`
 - **SSL terminé par HAProxy** — Collabora reçoit du HTTP en interne (`ssl.enable=false`, `ssl.termination=true`)
+
+---
+
+## 📐 Scaling — ajout et suppression de nœuds
+
+Lorsqu'une stack est déjà déployée, relancer `deploy.sh` propose un menu en trois options :
+
+```
+[1] Mise à jour rapide       — pull des images + redémarrage
+[2] Augmenter / réduire les nœuds
+[3] Déploiement complet      — repart de zéro
+```
+
+Le mode **scaling** modifie le nombre de nœuds de chaque service **sans perte de données** — les volumes Docker ne sont jamais supprimés, le `.env` n'est pas régénéré.
+
+### Comportement par service
+
+| Service | Scale-up | Scale-down | Notes |
+|---------|:--------:|:----------:|-------|
+| **Nextcloud FPM + nginx** | ✅ | ✅ | Paires FPM+nginx ajoutées ou retirées ensemble |
+| **MariaDB Galera** | ✅ | ✅ | Nombre impair requis — SST automatique à l'ajout |
+| **Redis Cluster** | ✅ | ✅ | Delta pair obligatoire — intégration cluster automatique |
+| **Collabora CODE** | ✅ | ✅ | Patch binaire `home_mode` réappliqué sur les nouveaux nœuds |
+| **Whiteboard** | ✅ | ✅ | |
+| **MinIO** | ✅ | ❌ | Scale-up par expansion de pool ; scale-down via `mc admin decommission` |
+
+### Mécanique interne
+
+**Nextcloud / Galera / Collabora / Whiteboard** — `docker compose up -d --remove-orphans` crée les nouveaux containers et retire les orphelins. HAProxy est redémarré pour prendre en compte les nouveaux backends.
+
+**Redis Cluster (scale-up)**
+1. Attente que les nouveaux nœuds répondent à `PING`
+2. `--cluster add-node` pour chaque master
+3. `cluster myid` pour récupérer l'ID du master, puis `--cluster add-node --cluster-slave` pour la réplica
+4. `--cluster fix` pour résoudre les éventuels slots en migration ouverte
+5. `--cluster rebalance --cluster-use-empty-masters` pour égaliser les slots
+
+**Redis Cluster (scale-down)**
+1. Les slots du master à retirer sont reshardés vers un autre master (`--cluster reshard`)
+2. `--cluster del-node` pour la réplica puis le master
+3. `--cluster fix` + `--cluster rebalance` pour rééquilibrer les slots restants
+
+**MinIO (scale-up)**
+- Les chemins des nouveaux nœuds sont collectés interactivement (défaut : `/data/minio/nodeN/dataN`)
+- Le nouveau pool est enregistré dans `.minio-pools` (`start:end` par ligne)
+- `gen_compose` reconstruit la commande `server` avec tous les pools : `server pool1 pool2 ...`
+- Tous les nœuds MinIO redémarrent avec la nouvelle commande (~30 s d'indisponibilité, données préservées)
+
+### Contraintes
+
+| Contrainte | Détail |
+|-----------|--------|
+| Redis — delta pair | Chaque lot = 1 master + 1 réplica |
+| Redis — minimum 6 | 3 masters + 3 réplicas minimum |
+| Galera — nombre impair | Quorum requis |
+| MinIO — scale-down | Non supporté — décommissionnement via `mc admin decommission start` |
+| Mots de passe | Jamais régénérés lors du scaling — le `.env` est préservé |
+
+### Persistance entre reboots
+
+La configuration de scaling est stockée dans :
+
+| Fichier | Contenu | Persistance |
+|---------|---------|:-----------:|
+| `.env` | Mots de passe, chemins MinIO, MINIO_MODE, MINIO_BYPASS | ✅ Permanent |
+| `.minio-pools` | Historique des pools MinIO | ✅ Permanent |
+| `/tmp/.nxt-maxscale-config.env` | Cache réponses deploy.sh | ❌ Perdu au reboot |
+
+Si le cache `/tmp/` est absent, `deploy.sh` reconstruit automatiquement la configuration depuis `.env` et l'état des containers en cours.
 
 ---
 
