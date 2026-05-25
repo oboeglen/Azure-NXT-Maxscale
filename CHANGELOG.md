@@ -6,6 +6,11 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.1.14] — 2026-05-25
+
+### Fixed
+- **Patch Collabora non appliqué aux nouveaux nœuds lors d'un scale-up** — `patch_collabora_binary` extrayait toujours le binaire depuis `collabora-node1`, qui est déjà patché depuis le déploiement initial. Au scale-up (ex. 3→6 nœuds), le re-patch du binaire déjà patché échouait en `pattern_not_found` et les nouveaux nœuds (4–6) ne recevaient jamais le patch. `patch_collabora_binary` accepte maintenant un paramètre `first_src` (premier nœud à utiliser pour l'extraction) et `scale_nodes` passe `ORIG_COLLAB_NODES + 1`, garantissant que l'extraction se fait depuis un nouveau nœud au binaire non patché
+
 ## [2.1.13] — 2026-05-25
 
 ### Fixed
@@ -202,6 +207,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.1.14]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.13...v2.1.14
 [2.1.13]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.12...v2.1.13
 [2.1.12]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.11...v2.1.12
 [2.1.11]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.10...v2.1.11

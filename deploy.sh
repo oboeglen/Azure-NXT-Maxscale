@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.13
+# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.14
 # Usage : sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -1750,6 +1750,9 @@ patch_haproxy() {
 # ─── [PATCH] Patch binaire Collabora — suppression limite home_mode ──────────
 
 patch_collabora_binary() {
+  # $1 optionnel : premier nœud à préférer pour l'extraction (ex. premier nouveau nœud
+  #   lors d'un scale-up, qui a un binaire non patché). Défaut = 1.
+  local first_src="${1:-1}"
   step "Patch binaire Collabora — suppression de la limite home_mode"
 
   # Attendre que les containers Collabora soient running (max 120 s)
@@ -1776,9 +1779,10 @@ patch_collabora_binary() {
   bin_tmp=$(mktemp)
   patched_tmp=$(mktemp)
 
-  # Extraire le binaire depuis le premier nœud actif
+  # Extraire le binaire depuis first_src en priorité (nouveau nœud = binaire non patché),
+  # puis fallback sur les autres nœuds si first_src n'est pas disponible.
   local src_node=""
-  for i in $(seq 1 "$COLLAB_NODES"); do
+  for i in $(seq "$first_src" "$COLLAB_NODES") $(seq 1 $(( first_src - 1 ))); do
     if docker cp "collabora-node${i}:/usr/bin/coolwsd" "$bin_tmp" 2>/dev/null; then
       src_node="collabora-node${i}"
       break
@@ -2980,8 +2984,10 @@ scale_nodes() {
   fi
 
   # Étape 7 : Patch binaire Collabora sur les nouveaux nœuds (scale-up seulement)
+  # On passe (ORIG_COLLAB_NODES + 1) pour extraire depuis un nouveau nœud (binaire non patché)
+  # plutôt que depuis node1 qui est déjà patché depuis le déploiement initial.
   if (( COLLAB_NODES > ORIG_COLLAB_NODES )); then
-    patch_collabora_binary
+    patch_collabora_binary $(( ORIG_COLLAB_NODES + 1 ))
   fi
 
   wait_healthy
