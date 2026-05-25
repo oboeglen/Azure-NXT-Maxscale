@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.9
+# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.10
 # Usage : sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -193,7 +193,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Déployeur automatique v2.1.9"; do
+    "        NXT Maxscale — Déployeur automatique v2.1.10"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -846,6 +846,7 @@ NEXTCLOUD_S3_BUCKET=nextcloud
 ${minio_lines}
 MINIO_MODE=${MINIO_MODE}
 MINIO_BYPASS=${MINIO_BYPASS}
+HAPROXY_STATS=${HAPROXY_STATS}
 
 WHITEBOARD_JWT_SECRET=${GEN_JWT_SECRET}
 EOF
@@ -2212,6 +2213,10 @@ wait_healthy() {
 
   info "Timeout calculé : ${timeout}s (${NC_NODES} NC + ${MARIADB_NODES} DB + ${MINIO_NODES} MinIO + ${COLLAB_NODES} Collabora)"
 
+  # Compteurs de redémarrages consécutifs par container (détection crash loop)
+  declare -A _restart_counts=()
+  local _crash_loop=()
+
   while (( elapsed < timeout )); do
     local remaining=$(( timeout - elapsed ))
     local eta_min=$(( remaining / 60 )) eta_sec=$(( remaining % 60 ))
@@ -2220,6 +2225,12 @@ wait_healthy() {
     local all_healthy=true
 
     for name in "${containers[@]}"; do
+      # Containers confirmés en crash loop : afficher et ignorer (ne bloquent plus le wait)
+      if [[ " ${_crash_loop[*]:-} " == *" ${name} "* ]]; then
+        printf "  ${C_BRED}✗${C_RESET}  %s  ${C_RED}(crash loop — exclu)${C_RESET}\n" "$name"
+        continue
+      fi
+
       local status
       if ! docker inspect "$name" &>/dev/null; then
         status="absent"
@@ -2227,7 +2238,6 @@ wait_healthy() {
         local health
         health=$(docker inspect --format='{{.State.Health.Status}}' "$name" 2>/dev/null | tr -d '\n\r')
         if [[ -z "$health" || "$health" == "<no value>" ]]; then
-          # Pas de healthcheck — utilise le statut du container
           local cstate
           cstate=$(docker inspect --format='{{.State.Status}}' "$name" 2>/dev/null | tr -d '\n\r')
           [[ "$cstate" == "running" ]] && status="healthy" || status="${cstate:-absent}"
@@ -2235,19 +2245,54 @@ wait_healthy() {
           status="$health"
         fi
       fi
+
       case "$status" in
-        healthy)   printf "  ${C_BGREEN}✓${C_RESET}  %s\n" "$name" ;;
-        starting)  printf "  ${C_YELLOW}⟳${C_RESET}  %s  ${C_GRAY}(starting...)${C_RESET}\n" "$name"; all_healthy=false ;;
-        unhealthy) printf "  ${C_BRED}✗${C_RESET}  %s  ${C_RED}(unhealthy — docker logs %s)${C_RESET}\n" "$name" "$name"; all_healthy=false ;;
-        *)         printf "  ${C_GRAY}·${C_RESET}  %s  ${C_GRAY}(%s)${C_RESET}\n" "$name" "$status"; all_healthy=false ;;
+        healthy)
+          printf "  ${C_BGREEN}✓${C_RESET}  %s\n" "$name"
+          _restart_counts["$name"]=0
+          ;;
+        starting)
+          printf "  ${C_YELLOW}⟳${C_RESET}  %s  ${C_GRAY}(starting...)${C_RESET}\n" "$name"
+          all_healthy=false
+          ;;
+        unhealthy)
+          printf "  ${C_BRED}✗${C_RESET}  %s  ${C_RED}(unhealthy — docker logs %s)${C_RESET}\n" "$name" "$name"
+          all_healthy=false
+          ;;
+        restarting)
+          _restart_counts["$name"]=$(( ${_restart_counts["$name"]:-0} + 1 ))
+          local rc=${_restart_counts["$name"]}
+          if (( rc >= 3 )); then
+            warn "${name} en crash loop (${rc} redémarrages) — exclu du wait"
+            warn "  docker logs ${name}"
+            _crash_loop+=("$name")
+          else
+            printf "  ${C_YELLOW}⟳${C_RESET}  %s  ${C_GRAY}(restarting… %d/3)${C_RESET}\n" "$name" "$rc"
+            all_healthy=false
+          fi
+          ;;
+        *)
+          printf "  ${C_GRAY}·${C_RESET}  %s  ${C_GRAY}(%s)${C_RESET}\n" "$name" "$status"
+          all_healthy=false
+          ;;
       esac
     done
 
-    $all_healthy && { info "Tous les services sont healthy ✓"; return 0; }
+    if $all_healthy; then
+      if (( ${#_crash_loop[@]} > 0 )); then
+        warn "Services en crash loop (non bloquants) : ${_crash_loop[*]}"
+      fi
+      info "Tous les services surveillés sont healthy ✓"
+      return 0
+    fi
     sleep "$interval"
     (( elapsed += interval )) || true
   done
 
+  if (( ${#_crash_loop[@]} > 0 )); then
+    warn "Containers en crash loop détectés : ${_crash_loop[*]}"
+    warn "Vérifiez : docker logs ${_crash_loop[0]}"
+  fi
   die "Timeout — certains services ne sont pas healthy après ${timeout}s.\nVérifiez : docker compose logs"
 }
 
@@ -2571,6 +2616,12 @@ _minio_register_pool() {
     info "Fichier de pools MinIO initialisé (pool 1 : nœuds 1–${old_count})"
   fi
 
+  # Dédup : ne pas enregistrer deux fois le même pool
+  if grep -qF "${new_start}:${new_count}" "$pools_file" 2>/dev/null; then
+    warn "Pool MinIO ${new_start}:${new_count} déjà présent dans .minio-pools — doublon ignoré"
+    return 0
+  fi
+
   echo "${new_start}:${new_count}" >> "$pools_file"
   info "Nouveau pool MinIO enregistré : nœuds ${new_start}–${new_count}"
 
@@ -2599,6 +2650,14 @@ scale_nodes() {
     # shellcheck source=/dev/null
     source "$ANSWERS_CACHE"
     info "Configuration rechargée depuis le cache"
+    # Sécurité : vérifier que MINIO_NODES du cache correspond aux containers réels
+    # (évite ORIG_MINIO_NODES périmé → double appel _minio_register_pool)
+    local _actual_minio
+    _actual_minio=$(_detect_node_count "minio-node" "^minio-node[0-9]")
+    if (( _actual_minio > MINIO_NODES )); then
+      warn "MINIO_NODES cache (${MINIO_NODES}) < containers réels (${_actual_minio}) — correction"
+      MINIO_NODES="$_actual_minio"
+    fi
   elif [[ -f "$INSTALL_DIR/.env" ]]; then
     warn "Cache absent — reconstruction depuis .env et containers en cours"
     NC_DOMAIN=$(grep    -m1 '^NEXTCLOUD_DOMAIN='    "$INSTALL_DIR/.env" | cut -d= -f2)
@@ -2618,6 +2677,7 @@ scale_nodes() {
     MINIO_MODE="${MINIO_MODE:-test}"
     MINIO_BYPASS=$(grep -m1 '^MINIO_BYPASS=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "true")
     MINIO_BYPASS="${MINIO_BYPASS:-true}"
+    HAPROXY_STATS=$(grep -m1 '^HAPROXY_STATS=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
     HAPROXY_STATS="${HAPROXY_STATS:-no}"
     MINIO_CONSOLE="${MINIO_CONSOLE:-no}"
     CERTBOT_STAGING="${CERTBOT_STAGING:-no}"

@@ -6,6 +6,14 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.1.10] — 2026-05-25
+
+### Fixed
+- **MinIO crash loop sur scale répété** — `_minio_register_pool` n'avait pas de vérification de doublon ; si le cache de configuration était périmé, le même pool (`start:end`) était ajouté deux fois dans `.minio-pools`, ce qui provoquait un `FATAL Invalid command line arguments: duplicate endpoints found` au démarrage de MinIO. Un dedup par `grep -qF` empêche désormais l'ajout du même pool deux fois
+- **ORIG_MINIO_NODES périmé depuis le cache** — `scale_nodes()` charge le cache puis vérifie le nombre de containers réellement actifs ; si le count réel est supérieur au cache, MINIO_NODES est corrigé avant d'être mémorisé comme ORIG_MINIO_NODES (protection contre les double-registrations)
+- **HAProxy /stats perdu après reboot** — `HAPROXY_STATS` n'était pas écrit dans `.env` (seulement dans le cache transient `/tmp/`) ; après un reboot, la reconstruction depuis `.env` le fixait à `no` par défaut, désactivant la page de statistiques. `HAPROXY_STATS` est désormais persisté dans `.env` et relu dans le chemin de reconstruction
+- **`wait_healthy` bloqué sur containers en crash loop** — des containers en état `restarting` (ex. MinIO avec pool dupliqué) maintenaient `all_healthy=false` indéfiniment jusqu'au timeout. Après 3 redémarrages consécutifs, un container est désormais marqué « crash loop », exclu du wait et un avertissement est affiché ; les autres containers continuent d'être attendus normalement
+
 ## [2.1.9] — 2026-05-25
 
 ### Added
@@ -170,6 +178,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.1.10]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.9...v2.1.10
 [2.1.9]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.8...v2.1.9
 [2.1.8]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.7...v2.1.8
 [2.1.7]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.6...v2.1.7
