@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.12
+# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.13
 # Usage : sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -1843,21 +1843,15 @@ def find_pair(data, list_a, list_b, max_gap, require_test=True):
 mov20 = all_mov(20)
 mov10 = all_mov(10)
 
-# ── Détection « déjà patché » ─────────────────────────────────────────────────
-# Cherche MOV reg, INT_MAX suivi d'un autre MOV reg, INT_MAX dans MAX_GAP octets
-def is_already_patched(data, max_gap):
-    mov_imax = all_mov(0x7FFFFFFF)
-    r = find_pair(data, mov_imax, mov_imax, max_gap, require_test=False)
-    return r is not None
-
-if is_already_patched(data, MAX_GAP):
-    print("already_patched")
-    sys.exit(0)
-
-# ── Stratégie 1 : pattern exact original (coolwsd ≤ 25.04.x variant A) ───────
+# ── Stratégie 1 : pattern exact original ─────────────────────────────────────
+# Pas de recherche globale ORIG_PATCHED — des faux positifs existent dans le binaire.
+# La détection "déjà patché" se fait uniquement à l'offset trouvé.
 ORIG = b"\xba\x14\x00\x00\x00\xb8\x0a\x00\x00\x00\x84\xdb"
 idx = data.find(ORIG)
 if idx != -1:
+    if data[idx + 1 : idx + 5] == INT_MAX and data[idx + 6 : idx + 10] == INT_MAX:
+        print("already_patched")
+        sys.exit(0)
     data[idx + 1 : idx + 5]  = INT_MAX
     data[idx + 6 : idx + 10] = INT_MAX
     open(sys.argv[2], "wb").write(data)
@@ -1865,22 +1859,15 @@ if idx != -1:
     sys.exit(0)
 
 # ── Stratégie 2 : MOV r32,20 + MOV r32,10 (n'importe quel registre) + TEST ──
+# Ordre fixe (20 puis 10) : l'ordre inversé génère des faux positifs sur binaire patché
 result = find_pair(data, mov20, mov10, MAX_GAP)
-if result is None:
-    result = find_pair(data, mov10, mov20, MAX_GAP)  # ordre inversé
 
-# ── Stratégie 3 : MOV r32,20 + MOV r32,20 (les deux limites sont 20) ─────────
-if result is None:
-    result = find_pair(data, mov20, mov20, MAX_GAP)
-
-# ── Stratégie 4 : ancrage sur la chaîne "home_mode.enable" dans le binaire ───
+# ── Stratégie 3 : ancrage sur la chaîne "home_mode.enable" dans le binaire ───
+# (Stratégie (20+20) supprimée : 56+ faux positifs dans le binaire)
 if result is None:
     anchor = b"home_mode.enable"
     str_pos = data.find(anchor)
     if str_pos != -1:
-        # En x86-64 ELF, les refs aux chaînes utilisent des déplacements RIP-relatifs
-        # addr_chaine = pos_disp + 4 + disp32
-        # => disp32 = str_pos - (pos_disp + 4)
         code_refs = []
         for i in range(max(0, str_pos - 0x100000), min(len(data) - 4, str_pos + 0x100000)):
             try:
@@ -1912,6 +1899,11 @@ if result is None:
     sys.exit(2)
 
 pos_a, off_a, pos_b, off_b = result
+# Détection déjà patché aux offsets précis trouvés (pas de faux positif global)
+if (data[pos_a + off_a : pos_a + off_a + 4] == INT_MAX and
+        data[pos_b + off_b : pos_b + off_b + 4] == INT_MAX):
+    print("already_patched")
+    sys.exit(0)
 data[pos_a + off_a : pos_a + off_a + 4] = INT_MAX
 data[pos_b + off_b : pos_b + off_b + 4] = INT_MAX
 open(sys.argv[2], "wb").write(data)
@@ -1928,8 +1920,8 @@ PATCHPY
   fi
 
   if (( py_rc != 0 )) || [[ "$patch_result" == "pattern_not_found" ]]; then
-    warn "Limite home_mode introuvable dans coolwsd — 4 stratégies tentées (exact, multi-registre 20/10, 20/20, ancrage chaîne)"
-    warn "Le binaire a probablement changé ses valeurs limites ou son encodage. Signalez la version pour ajouter le support."
+    warn "Limite home_mode introuvable dans coolwsd — 3 stratégies tentées (exact, multi-registre 20/10, ancrage chaîne 'home_mode.enable')"
+    warn "Le binaire a peut-être changé ses valeurs limites ou son encodage. Si le patch est déjà appliqué sur ce container, ignorez ce message."
     rm -f "$bin_tmp" "$patched_tmp"
     return 0
   fi

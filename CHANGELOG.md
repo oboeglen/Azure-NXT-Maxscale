@@ -6,6 +6,15 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.1.13] — 2026-05-25
+
+### Fixed
+- **Patch binaire Collabora — faux positifs "already_patched"** — deux types de faux positifs empêchaient le patch de s'appliquer sur coolwsd 25.04.9.4 :
+  - La séquence `ORIG_PATCHED` (`ba ff ff ff 7f b8 ff ff ff 7f 84 db`) existe naturellement dans le binaire à une adresse différente (0x269fcf), déclenchant une fausse détection "déjà patché" avant même de chercher le pattern cible
+  - 21 paires `MOV reg, INT_MAX + MOV reg, INT_MAX` (valeur naturelle dans le binaire) déclenchaient une fausse détection globale
+  - La stratégie "(MOV 20 + MOV 20) + TEST" génère 56 faux positifs et était susceptible de patcher de mauvais emplacements sur un re-run
+  **Corrections** : suppression de toute recherche globale de "déjà patché" ; le check est uniquement effectué aux offsets précis trouvés par les stratégies ; suppression de la stratégie (20+20) et de la recherche en ordre inversé (10→20)
+
 ## [2.1.12] — 2026-05-25
 
 ### Fixed
@@ -193,6 +202,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.1.13]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.12...v2.1.13
 [2.1.12]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.11...v2.1.12
 [2.1.11]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.10...v2.1.11
 [2.1.10]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.9...v2.1.10
