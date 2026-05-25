@@ -371,14 +371,14 @@ La page de statistiques HAProxy affiche l'état en temps réel de **tous** les b
 
 Collabora est déployé en **`home_mode`** (`--o:home_mode.enable=true`), ce qui désactive l'écran de démarrage et le popup de feedback utilisateur.
 
-Par défaut, `home_mode` plafonne chaque nœud à 20 connexions et 10 documents simultanés. **`deploy.sh` supprime automatiquement cette limite** via un patch binaire du processus `coolwsd` appliqué après le démarrage des containers. Le binaire est modifié en mémoire à l'intérieur de chaque container — `extra_params` et la configuration YAML ne sont pas touchés.
+Par défaut, `home_mode` plafonne chaque nœud à 20 connexions et 10 documents simultanés. **`deploy.sh` supprime automatiquement cette limite** via un patch binaire du processus `coolwsd` appliqué après le démarrage des containers. Le binaire est remplacé sur le disque du container (`docker cp` + `docker restart`) — `extra_params` et la configuration YAML ne sont pas touchés.
 
 | Nœuds | Connexions | Documents |
 |:-----:|:----------:|:---------:|
 | 1 | ∞ | ∞ |
 | N | ∞ | ∞ |
 
-Le patch recherche dynamiquement le pattern `mov edx,20 / mov eax,10 / test bl,bl` dans le binaire `coolwsd` et remplace les deux immédiats par `INT_MAX (2 147 483 647)`. Si la version de Collabora change et que le pattern est introuvable, le patch est ignoré avec un avertissement — la stack reste fonctionnelle avec les limites d'origine.
+Le patch tente trois stratégies dans l'ordre : ① séquence d'octets exacte connue, ② paire `mov r32,20 + mov r32,10` suivie d'un `TEST`/`CMP` dans les 24 octets suivants (tous les registres x86-64 testés), ③ ancrage sur la chaîne `home_mode.enable` pour localiser le code adjacent. Les deux immédiats trouvés sont remplacés par `INT_MAX (2 147 483 647)`. Si aucune stratégie ne correspond, le patch est ignoré avec un avertissement — la stack reste fonctionnelle avec les limites d'origine.
 
 ### Persistance du patch après redémarrage
 
