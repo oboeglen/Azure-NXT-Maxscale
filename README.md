@@ -1,6 +1,6 @@
 <div align="center">
 
-![Azure NXT Maxscale](NXTMAXSCALE.png)
+![Azure NXT Maxscale](nxt-maxscale-logo.png)
 
 # Azure NXT Maxscale
 
