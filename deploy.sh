@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.10
+# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.11
 # Usage : sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -2525,16 +2525,48 @@ _redis_scale_up() {
       "redis-node${mi}:6379" "redis-node1:6379" \
       -a "$redis_pass" --no-auth-warning
 
-    # Get master ID directly from the new node (cluster nodes shows IPs, not hostnames)
-    sleep 3
-    local master_id
-    master_id=$(docker exec "redis-node${mi}" redis-cli \
-      -a "$redis_pass" --no-auth-warning cluster myid 2>/dev/null | tr -d '[:space:]')
+    # Attendre que le nouveau master soit visible dans cluster nodes avant d'ajouter le replica
+    local master_id="" wait_master=0
+    while (( wait_master < 30 )); do
+      master_id=$(docker exec "redis-node${mi}" redis-cli \
+        -a "$redis_pass" --no-auth-warning cluster myid 2>/dev/null | tr -d '[:space:]')
+      # Vérifier que ce node est bien vu comme master par redis-node1
+      if [[ -n "$master_id" ]] && docker exec redis-node1 redis-cli \
+          -a "$redis_pass" --no-auth-warning cluster nodes 2>/dev/null \
+          | grep -q "^${master_id}.*master"; then
+        break
+      fi
+      sleep 2; (( wait_master += 2 )) || true
+    done
+
+    if [[ -z "$master_id" ]]; then
+      warn "Impossible d'obtenir le master_id de redis-node${mi} — replica redis-node${ri} ignoré"
+      continue
+    fi
 
     docker exec redis-node1 redis-cli --cluster add-node \
       "redis-node${ri}:6379" "redis-node1:6379" \
       -a "$redis_pass" --no-auth-warning \
       --cluster-slave --cluster-master-id "$master_id"
+
+    # Vérifier que le replica a bien rejoint le cluster
+    sleep 3
+    local replica_id
+    replica_id=$(docker exec "redis-node${ri}" redis-cli \
+      -a "$redis_pass" --no-auth-warning cluster myid 2>/dev/null | tr -d '[:space:]')
+    if [[ -n "$replica_id" ]] && ! docker exec redis-node1 redis-cli \
+        -a "$redis_pass" --no-auth-warning cluster nodes 2>/dev/null \
+        | grep -q "^${replica_id}"; then
+      warn "redis-node${ri} non intégré via add-node — tentative MEET+REPLICATE"
+      local ri_ip
+      ri_ip=$(docker inspect "redis-node${ri}" \
+        --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null | head -1)
+      docker exec redis-node1 redis-cli \
+        -a "$redis_pass" --no-auth-warning cluster meet "$ri_ip" 6379 2>/dev/null || true
+      sleep 3
+      docker exec "redis-node${ri}" redis-cli \
+        -a "$redis_pass" --no-auth-warning cluster replicate "$master_id" 2>/dev/null || true
+    fi
   done
 
   # Fix any open/migrating slots before rebalance
@@ -2545,6 +2577,16 @@ _redis_scale_up() {
   step "Rééquilibrage des slots Redis sur tous les masters"
   docker exec redis-node1 redis-cli --cluster rebalance "redis-node1:6379" \
     -a "$redis_pass" --no-auth-warning --cluster-use-empty-masters
+
+  # Vérification finale : tous les nodes attendus sont dans le cluster
+  local expected_nodes="$new_count"
+  local known_nodes
+  known_nodes=$(docker exec redis-node1 redis-cli \
+    -a "$redis_pass" --no-auth-warning cluster info 2>/dev/null \
+    | grep 'cluster_known_nodes' | cut -d: -f2 | tr -d '[:space:]')
+  if [[ "$known_nodes" != "$expected_nodes" ]]; then
+    warn "cluster_known_nodes=${known_nodes} ≠ attendu=${expected_nodes} — vérifiez manuellement"
+  fi
   info "Redis : ${new_count} nœuds ($((new_count/2)) masters + $((new_count/2)) replicas)"
 }
 

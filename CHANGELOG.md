@@ -6,6 +6,11 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.1.11] — 2026-05-25
+
+### Fixed
+- **Race condition Redis scale-up — replica non intégré** — après l'ajout d'un nœud master via `--cluster add-node`, le nœud n'était pas encore visible dans `cluster nodes` lors de l'appel immédiat suivant pour ajouter le replica (`--cluster-slave --cluster-master-id`), provoquant un échec silencieux (redis-node8 absent du cluster). `_redis_scale_up` attend désormais jusqu'à 30 s que le master soit visible dans `cluster nodes` avant d'ajouter le replica. Si `--cluster add-node --cluster-slave` échoue malgré tout, un fallback `MEET + REPLICATE` est tenté. Un contrôle final compare `cluster_known_nodes` au compte attendu et avertit en cas d'écart
+
 ## [2.1.10] — 2026-05-25
 
 ### Fixed
@@ -178,6 +183,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.1.11]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.10...v2.1.11
 [2.1.10]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.9...v2.1.10
 [2.1.9]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.8...v2.1.9
 [2.1.8]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.7...v2.1.8
