@@ -1,8 +1,7 @@
 <div align="center">
 
-![Azure NXT Maxscale](nxt-maxscale-logo.png)
+<img src="nxt-maxscale-logo.png" width="500" alt="Azure NXT Maxscale">
 
-# Azure NXT Maxscale
 
 **Infrastructure Nextcloud haute disponibilité — déployable en une commande**
 
