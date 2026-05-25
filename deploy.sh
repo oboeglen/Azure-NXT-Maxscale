@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.11
+# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.1.12
 # Usage : sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -1794,28 +1794,128 @@ patch_collabora_binary() {
   # Appliquer le patch via recherche dynamique du pattern dans le binaire
   local patch_result
   patch_result=$(python3 - "$bin_tmp" "$patched_tmp" <<'PATCHPY'
-import sys, os
+import sys, struct
 
-PATTERN      = b"\xba\x14\x00\x00\x00\xb8\x0a\x00\x00\x00\x84\xdb"
-PATTERN_ALT  = b"\xba\xff\xff\xff\x7f\xb8\xff\xff\xff\x7f\x84\xdb"  # déjà patché
-INT_MAX      = b"\xff\xff\xff\x7f"
+INT_MAX  = b"\xff\xff\xff\x7f"
+MAX_GAP  = 64   # octets max entre les deux MOV
+TEST_WIN = 24   # fenêtre après le 2e MOV pour chercher TEST/CMP
 
 data = bytearray(open(sys.argv[1], "rb").read())
 
-idx = data.find(PATTERN_ALT)
-if idx != -1:
+# ── Génération de tous les encodages MOV r32, <val> (x86-64) ─────────────────
+# Opcodes B8..BF = eax/ecx/edx/ebx/esp/ebp/esi/edi
+# 41 B8..BF = r8d..r15d  (REX.B prefix)
+_base = list(range(0xB8, 0xC0))
+
+def all_mov(val):
+    """Retourne liste de (pattern_bytes, offset_de_l'immédiat_dans_le_pattern)."""
+    r = []
+    v = struct.pack("<I", val)
+    for op in _base:
+        r.append((bytes([op]) + v, 1))
+    for op in _base:
+        r.append((bytes([0x41, op]) + v, 2))
+    return r
+
+def find_pair(data, list_a, list_b, max_gap, require_test=True):
+    """Cherche (MOV A, MOV B) avec TEST/CMP facultatif dans la fenêtre suivante."""
+    for pa, off_a in list_a:
+        start = 0
+        while True:
+            pos_a = data.find(pa, start)
+            if pos_a == -1:
+                break
+            end_b = pos_a + len(pa) + max_gap
+            for pb, off_b in list_b:
+                pos_b = data.find(pb, pos_a + len(pa), end_b)
+                if pos_b == -1:
+                    continue
+                if require_test:
+                    after = pos_b + len(pb)
+                    win = bytes(data[after : after + TEST_WIN])
+                    # TEST r/m8 = 0x84 ; TEST r/m32 = 0x85 ; CMP r/m32 = 0x83/0x81
+                    if 0x84 not in win and 0x85 not in win and 0x83 not in win:
+                        continue
+                return pos_a, off_a, pos_b, off_b
+            start = pos_a + 1
+    return None
+
+mov20 = all_mov(20)
+mov10 = all_mov(10)
+
+# ── Détection « déjà patché » ─────────────────────────────────────────────────
+# Cherche MOV reg, INT_MAX suivi d'un autre MOV reg, INT_MAX dans MAX_GAP octets
+def is_already_patched(data, max_gap):
+    mov_imax = all_mov(0x7FFFFFFF)
+    r = find_pair(data, mov_imax, mov_imax, max_gap, require_test=False)
+    return r is not None
+
+if is_already_patched(data, MAX_GAP):
     print("already_patched")
     sys.exit(0)
 
-idx = data.find(PATTERN)
-if idx == -1:
+# ── Stratégie 1 : pattern exact original (coolwsd ≤ 25.04.x variant A) ───────
+ORIG = b"\xba\x14\x00\x00\x00\xb8\x0a\x00\x00\x00\x84\xdb"
+idx = data.find(ORIG)
+if idx != -1:
+    data[idx + 1 : idx + 5]  = INT_MAX
+    data[idx + 6 : idx + 10] = INT_MAX
+    open(sys.argv[2], "wb").write(data)
+    print(f"patched_exact_at_0x{idx:x}")
+    sys.exit(0)
+
+# ── Stratégie 2 : MOV r32,20 + MOV r32,10 (n'importe quel registre) + TEST ──
+result = find_pair(data, mov20, mov10, MAX_GAP)
+if result is None:
+    result = find_pair(data, mov10, mov20, MAX_GAP)  # ordre inversé
+
+# ── Stratégie 3 : MOV r32,20 + MOV r32,20 (les deux limites sont 20) ─────────
+if result is None:
+    result = find_pair(data, mov20, mov20, MAX_GAP)
+
+# ── Stratégie 4 : ancrage sur la chaîne "home_mode.enable" dans le binaire ───
+if result is None:
+    anchor = b"home_mode.enable"
+    str_pos = data.find(anchor)
+    if str_pos != -1:
+        # En x86-64 ELF, les refs aux chaînes utilisent des déplacements RIP-relatifs
+        # addr_chaine = pos_disp + 4 + disp32
+        # => disp32 = str_pos - (pos_disp + 4)
+        code_refs = []
+        for i in range(max(0, str_pos - 0x100000), min(len(data) - 4, str_pos + 0x100000)):
+            try:
+                disp = struct.unpack_from("<i", data, i)[0]
+                if i + 4 + disp == str_pos:
+                    code_refs.append(i)
+            except Exception:
+                pass
+        for ref in code_refs:
+            win_start = max(0, ref - 128)
+            win_end   = min(len(data), ref + 256)
+            sub = bytearray(data[win_start:win_end])
+            for val_a in [20, 10]:
+                for val_b in [20, 10]:
+                    if val_a == val_b:
+                        continue
+                    r = find_pair(sub, all_mov(val_a), all_mov(val_b), MAX_GAP)
+                    if r:
+                        pos_a, off_a, pos_b, off_b = r
+                        result = (win_start + pos_a, off_a, win_start + pos_b, off_b)
+                        break
+                if result:
+                    break
+            if result:
+                break
+
+if result is None:
     print("pattern_not_found")
     sys.exit(2)
 
-data[idx + 1 : idx + 5]  = INT_MAX   # MaxConnections = INT_MAX
-data[idx + 6 : idx + 10] = INT_MAX   # MaxDocuments   = INT_MAX
+pos_a, off_a, pos_b, off_b = result
+data[pos_a + off_a : pos_a + off_a + 4] = INT_MAX
+data[pos_b + off_b : pos_b + off_b + 4] = INT_MAX
 open(sys.argv[2], "wb").write(data)
-print(f"patched_at_0x{idx:x}")
+print(f"patched_at_0x{pos_a:x}_0x{pos_b:x}")
 PATCHPY
   2>/dev/null)
 
@@ -1828,8 +1928,8 @@ PATCHPY
   fi
 
   if (( py_rc != 0 )) || [[ "$patch_result" == "pattern_not_found" ]]; then
-    warn "Pattern home_mode introuvable dans coolwsd (version différente ?) — patch ignoré"
-    warn "Pour patcher manuellement : docs/patch-collabora.md"
+    warn "Limite home_mode introuvable dans coolwsd — 4 stratégies tentées (exact, multi-registre 20/10, 20/20, ancrage chaîne)"
+    warn "Le binaire a probablement changé ses valeurs limites ou son encodage. Signalez la version pour ajouter le support."
     rm -f "$bin_tmp" "$patched_tmp"
     return 0
   fi
