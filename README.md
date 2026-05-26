@@ -772,6 +772,50 @@ sudo fail2ban-client status sshd
 
 ---
 
+## 🐳 Images Docker — versions figées
+
+Toutes les images Docker sont épinglées à des versions précises plutôt qu'à des tags flottants (`:latest`, `:stable`). Les versions sont centralisées dans des variables `IMG_*` en tête de `deploy.sh`, ce qui permet de mettre à jour une image en changeant une seule ligne.
+
+### Pourquoi figer les versions ?
+
+| Risque avec `:latest` | Solution avec version figée |
+|---|---|
+| Une mise à jour upstream silencieuse casse le déploiement | Deux déploiements à 6 mois d'intervalle utilisent les mêmes binaires |
+| Une image compromise est tirée automatiquement au prochain `docker compose pull` | La montée de version est explicite et volontaire |
+| Le patch binaire Collabora peut tomber en `pattern_not_found` si le binaire `coolwsd` est restructuré | Le patch est validé sur une version précise (`25.04.9.4`) avant d'être mis à jour |
+
+### Versions actuelles
+
+| Variable | Image | Version |
+|---|---|---|
+| `IMG_HAPROXY` | `haproxy` | `2.8-alpine` |
+| `IMG_NGINX` | `nginx` | `1.27-alpine` |
+| `IMG_CERTBOT` | `certbot/certbot` | `v5.6.0` |
+| `IMG_REDIS` | `redis` | `7.4-alpine` |
+| `IMG_MARIADB` | `maxscale-mariadb-galera` | `11.4` |
+| `IMG_MINIO` | `minio/minio` | `RELEASE.2025-09-07T16-13-09Z` |
+| `IMG_MINIO_MC` | `minio/mc` | `RELEASE.2025-08-13T08-35-41Z` |
+| `IMG_MINIO_CONSOLE` | `ghcr.io/georgmangold/console` | `v1.9.1` |
+| `IMG_COLLABORA` | `collabora/code` | `25.04.9.4` |
+| `IMG_AUTOHEAL` | `willfarrell/autoheal` | digest SHA256 |
+| `IMG_WHITEBOARD` | `ghcr.io/nextcloud-releases/whiteboard` | digest SHA256 |
+
+> `autoheal` et `whiteboard` ne publient pas de tags versionnés exploitables — ils sont épinglés par digest SHA256, ce qui garantit la même reproductibilité.
+
+### Mettre à jour une image
+
+```bash
+# Éditer la variable correspondante dans deploy.sh
+IMG_COLLABORA="collabora/code:25.04.9.4"   # → nouvelle version
+
+# Puis relancer la mise à jour rapide
+sudo bash deploy.sh   # → choix [1] Mise à jour rapide
+```
+
+> **Collabora** : toujours tester le patch binaire `home_mode` après une montée de version — le pattern peut changer si le binaire `coolwsd` est restructuré.
+
+---
+
 ## Support
 
 **Dépôt :** [github.com/oboeglen/Azure-NXT-Maxscale](https://github.com/oboeglen/Azure-NXT-Maxscale)
