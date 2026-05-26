@@ -25,6 +25,10 @@ IMG_MINIO_MC="minio/mc:RELEASE.2025-08-13T08-35-41Z"
 IMG_MINIO_CONSOLE="ghcr.io/georgmangold/console:v1.9.1"
 IMG_COLLABORA="collabora/code:25.04.9.4"
 IMG_WHITEBOARD="ghcr.io/nextcloud-releases/whiteboard@sha256:fd34087710a3d9fac521b8b54665ce4f425377d67a1ed89c5dfa5d11e9d7064a"
+IMG_HAPROXY="haproxy:2.8-alpine"
+IMG_NGINX="nginx:1.27-alpine"
+IMG_REDIS="redis:7.4-alpine"
+IMG_MARIADB="maxscale-mariadb-galera:11.4"
 
 # ─── Couleurs ────────────────────────────────────────────────────────────────
 C_RESET='\033[0m'
@@ -1031,7 +1035,7 @@ NCCRON
       retries: 3
 
   certbot:
-    image: ${IMG_CERTBOT}
+    image: certbot/certbot:v5.6.0
     container_name: certbot
     restart: unless-stopped
     volumes:
@@ -1162,7 +1166,7 @@ NCNODE
     cat >> "$dest" <<NGNX
 
   ${nginx_name}:
-    image: nginx:1.27-alpine
+    image: ${IMG_NGINX}
     container_name: ${nginx_name}
     restart: always
     expose:
@@ -1219,7 +1223,7 @@ NGNX
     build:
       context: .
       dockerfile: Dockerfile.mariadb-galera
-    image: maxscale-mariadb-galera:11.4
+    image: ${IMG_MARIADB}
     container_name: mariadb-node${i}
     restart: always
     labels:
@@ -1288,7 +1292,7 @@ AUTOHEAL
     cat >> "$dest" <<RNODE
 
   redis-node${i}:
-    image: redis:7.4-alpine
+    image: ${IMG_REDIS}
     container_name: redis-node${i}
     restart: always
     expose:
@@ -1325,7 +1329,7 @@ RNODE
   cat >> "$dest" <<RCINIT
 
   redis-cluster-init:
-    image: redis:7.4-alpine
+    image: ${IMG_REDIS}
     container_name: redis-cluster-init
     environment:
       - REDIS_PASSWORD=\${REDIS_PASSWORD}
@@ -2164,11 +2168,11 @@ run_deploy() {
 
   step "Pull des images Docker (parallèle)"
   local images=(
-    "haproxy:2.8-alpine"
-    "nginx:1.27-alpine"
+    "${IMG_HAPROXY}"
+    "${IMG_NGINX}"
     "${IMG_CERTBOT}"
     "nextcloud:${NC_VERSION}"
-    "redis:7.4-alpine"
+    "${IMG_REDIS}"
     "${IMG_MINIO}"
     "${IMG_MINIO_MC}"
     "${IMG_COLLABORA}"
