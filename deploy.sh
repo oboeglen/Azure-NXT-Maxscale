@@ -2405,6 +2405,31 @@ wait_healthy() {
   die "Timeout — certains services ne sont pas healthy après ${timeout}s.\nVérifiez : docker compose logs"
 }
 
+reset_bruteforce() {
+  local redis_pass
+  redis_pass=$(grep -m1 '^REDIS_PASSWORD=' "$INSTALL_DIR/.env" | cut -d= -f2)
+  [[ -z "$redis_pass" ]] && { warn "REDIS_PASSWORD introuvable — skip reset bruteforce"; return 0; }
+
+  step "Nettoyage des entrées brute force Nextcloud (Redis)"
+  local deleted=0 i key keys
+
+  for i in $(seq 1 "$REDIS_NODES"); do
+    keys=$(docker exec "redis-node${i}" redis-cli -a "$redis_pass" --no-auth-warning \
+      KEYS '*Bruteforce*' 2>/dev/null) || true
+    if [[ -n "$keys" ]]; then
+      while IFS= read -r key; do
+        [[ -z "$key" ]] && continue
+        docker exec redis-node1 redis-cli -c -a "$redis_pass" --no-auth-warning \
+          DEL "$key" &>/dev/null && (( deleted++ )) || true
+      done <<< "$keys"
+    fi
+  done
+
+  (( deleted > 0 )) \
+    && info "Brute force reset : ${deleted} entrée(s) supprimée(s) de Redis" \
+    || info "Brute force reset : aucune entrée à supprimer"
+}
+
 check_services() {
   step "Tests fonctionnels"
   local failures=0
@@ -3093,6 +3118,7 @@ main() {
 
   # Phase 7 : Vérification
   wait_healthy
+  reset_bruteforce
   check_services
   final_check
   show_summary
