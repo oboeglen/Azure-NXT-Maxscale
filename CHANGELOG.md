@@ -6,6 +6,16 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.1.16] — 2026-05-26
+
+### Fixed
+- **Bug `${IMG_CERTBOT}` dans heredoc quoté** — la variable n'était pas expandée par bash (heredoc `<<'ACME'`), docker-compose recevait le nom de variable littéral au lieu de l'image. Corrigé en remplaçant par la chaîne `certbot/certbot:v5.6.0` directement dans le heredoc
+
+### Changed
+- **Centralisation complète des images Docker** — ajout des variables `IMG_HAPROXY`, `IMG_NGINX`, `IMG_REDIS`, `IMG_MARIADB` dans le bloc de constantes en tête de script. Toutes les images sont désormais référencées via `IMG_*` dans les heredocs non quotés et la liste de pull parallèle. Les 3 heredocs quotés (HAPROXY, ACME, WBREDIS) conservent les chaînes littérales car ils contiennent des variables docker-compose (`${NEXTCLOUD_DOMAIN}` etc.) qui ne doivent pas être expandées par bash
+
+---
+
 ## [2.1.15] — 2026-05-26
 
 ### Fixed
@@ -217,6 +227,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.1.16]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.15...v2.1.16
 [2.1.15]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.14...v2.1.15
 [2.1.14]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.13...v2.1.14
 [2.1.13]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.12...v2.1.13
