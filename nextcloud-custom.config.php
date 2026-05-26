@@ -15,4 +15,10 @@ $CONFIG = [
   // Niveau de log : 3 = Erreur uniquement (supprime les Avertissements PHP)
   // 0=Débogage 1=Info 2=Avertissement 3=Erreur 4=Fatal
   'loglevel' => 3,
+
+  // HAProxy fait des health checks fréquents qui déclenchent le brute force
+  // et le rate limiting dès le premier déploiement — désactivés car la
+  // protection réelle est assurée par HAProxy en amont.
+  'auth.bruteforce.protection.enabled' => false,
+  'ratelimit.protection.enabled' => false,
 ];
