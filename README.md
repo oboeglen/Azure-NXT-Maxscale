@@ -75,6 +75,7 @@
 - [🚢 Déploiement manuel](#-déploiement-manuel)
 - [📊 Performances & dimensionnement](#-performances--dimensionnement)
 - [🛡️ Recommandations sécurité réseau](#️-recommandations-sécurité-réseau)
+- [🐳 Images Docker — versions figées](#-images-docker--versions-figées)
 
 ---
 
