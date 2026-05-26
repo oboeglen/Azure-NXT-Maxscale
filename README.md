@@ -806,7 +806,7 @@ Toutes les images Docker sont épinglées à des versions précises plutôt qu'�
 
 ```bash
 # Éditer la variable correspondante dans deploy.sh
-IMG_COLLABORA="collabora/code:25.04.9.4"   # → nouvelle version
+IMG_COLLABORA="collabora/code@sha256:fe49c08c27..."   # → nouveau digest
 
 # Puis relancer la mise à jour rapide
 sudo bash deploy.sh   # → choix [1] Mise à jour rapide
