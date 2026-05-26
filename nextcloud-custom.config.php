@@ -16,9 +16,11 @@ $CONFIG = [
   // 0=Débogage 1=Info 2=Avertissement 3=Erreur 4=Fatal
   'loglevel' => 3,
 
-  // HAProxy fait des health checks fréquents qui déclenchent le brute force
-  // et le rate limiting dès le premier déploiement — désactivés car la
-  // protection réelle est assurée par HAProxy en amont.
-  'auth.bruteforce.protection.enabled' => false,
-  'ratelimit.protection.enabled' => false,
+  // Sans trusted_proxies, Nextcloud voit toutes les requêtes comme venant de
+  // l'IP HAProxy — health checks + logins partagent le même compteur brute force.
+  // Avec ces CIDRs, Nextcloud utilise X-Forwarded-For → chaque client a son propre
+  // compteur. Les subnets couvrent les 6 réseaux Docker définis dans docker-compose.
+  'trusted_proxies' =>
+    ['172.10.0.0/24', '172.20.0.0/24', '172.30.0.0/24',
+     '172.40.0.0/24', '172.50.0.0/24', '172.100.0.0/24'],
 ];
