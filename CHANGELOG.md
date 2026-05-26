@@ -6,6 +6,16 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.1.15] — 2026-05-26
+
+### Fixed
+- **Permissions Nextcloud incorrectes au premier déploiement** — le service `nextcloud-perms` utilisait `command:` avec `user: root`, mais l'entrypoint de l'image `nextcloud:fpm` exécute `run_as()` qui réduit les privilèges vers `www-data` avant d'exécuter la commande. En résultat, `chown` échouait silencieusement sur un serveur vierge, laissant les volumes en `root:root` et bloquant `nextcloud-setup`. Corrigé en remplaçant `command:` par `entrypoint: ["/bin/sh", "-c", "chown ..."]` pour contourner l'entrypoint natif
+
+### Changed
+- **Images Docker — versions figées** — tous les tags `:latest` et `:stable` remplacés par des versions précises extraites de la production : `certbot/certbot:v5.6.0`, `minio/minio:RELEASE.2025-09-07T16-13-09Z`, `minio/mc:RELEASE.2025-08-13T08-35-41Z`, `collabora/code:25.04.9.4`, `ghcr.io/georgmangold/console:v1.9.1`, `willfarrell/autoheal` et `ghcr.io/nextcloud-releases/whiteboard` épinglés par digest SHA256. Versions centralisées dans des variables `IMG_*` en tête de script
+
+---
+
 ## [2.1.14] — 2026-05-25
 
 ### Fixed
@@ -207,6 +217,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.1.15]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.14...v2.1.15
 [2.1.14]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.13...v2.1.14
 [2.1.13]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.12...v2.1.13
 [2.1.12]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.11...v2.1.12
