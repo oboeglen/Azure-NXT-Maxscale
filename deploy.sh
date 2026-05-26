@@ -17,6 +17,15 @@ ANSWERS_CACHE="/tmp/.nxt-maxscale-config.env"
 LOG_FILE="/var/log/nxt-maxscale-deploy.log"
 CERTBOT_STAGING="no"
 
+# ─── Images — versions figées ─────────────────────────────────────────────────
+IMG_CERTBOT="certbot/certbot:v5.6.0"
+IMG_AUTOHEAL="willfarrell/autoheal@sha256:786706780f67140c2fac237dee5014add684a3cf648da7cb343a12cef2e088cc"
+IMG_MINIO="minio/minio:RELEASE.2025-09-07T16-13-09Z"
+IMG_MINIO_MC="minio/mc:RELEASE.2025-08-13T08-35-41Z"
+IMG_MINIO_CONSOLE="ghcr.io/georgmangold/console:v1.9.1"
+IMG_COLLABORA="collabora/code:25.04.9.4"
+IMG_WHITEBOARD="ghcr.io/nextcloud-releases/whiteboard@sha256:fd34087710a3d9fac521b8b54665ce4f425377d67a1ed89c5dfa5d11e9d7064a"
+
 # ─── Couleurs ────────────────────────────────────────────────────────────────
 C_RESET='\033[0m'
 C_CYAN='\033[0;36m';  C_BCYAN='\033[1;36m'
@@ -1022,7 +1031,7 @@ NCCRON
       retries: 3
 
   certbot:
-    image: certbot/certbot:latest
+    image: ${IMG_CERTBOT}
     container_name: certbot
     restart: unless-stopped
     volumes:
@@ -1241,10 +1250,10 @@ DBNODE
   done
 
   # ── galera-autoheal ────────────────────────────────────────────────────
-  cat >> "$dest" <<'AUTOHEAL'
+  cat >> "$dest" <<AUTOHEAL
 
   galera-autoheal:
-    image: willfarrell/autoheal:latest
+    image: ${IMG_AUTOHEAL}
     container_name: galera-autoheal
     restart: always
     environment:
@@ -1367,7 +1376,7 @@ RCINIT
     cat >> "$dest" <<MINIONODE
 
   minio-node${i}:
-    image: minio/minio:latest
+    image: ${IMG_MINIO}
     container_name: minio-node${i}
     hostname: minio-node${i}
     restart: always
@@ -1395,7 +1404,7 @@ MINIONODE
     cat >> "$dest" <<MCONSOLE
 
   minio-console:
-    image: ghcr.io/georgmangold/console:latest
+    image: ${IMG_MINIO_CONSOLE}
     container_name: minio-console
     restart: always
     expose:
@@ -1428,7 +1437,7 @@ MCONSOLE
     cat >> "$dest" <<COLLNODE
 
   collabora-node${i}:
-    image: collabora/code:latest
+    image: ${IMG_COLLABORA}
     container_name: collabora-node${i}
     restart: always
     expose:
@@ -1452,7 +1461,7 @@ COLLNODE
     cat >> "$dest" <<WBNODE
 
   whiteboard-node${i}:
-    image: ghcr.io/nextcloud-releases/whiteboard:stable
+    image: ${IMG_WHITEBOARD}
     container_name: whiteboard-node${i}
     restart: always
     expose:
@@ -2157,13 +2166,13 @@ run_deploy() {
   local images=(
     "haproxy:2.8-alpine"
     "nginx:1.27-alpine"
-    "certbot/certbot:latest"
+    "${IMG_CERTBOT}"
     "nextcloud:${NC_VERSION}"
     "redis:7.4-alpine"
-    "minio/minio:latest"
-    "minio/mc:latest"
-    "collabora/code:latest"
-    "ghcr.io/nextcloud-releases/whiteboard:stable"
+    "${IMG_MINIO}"
+    "${IMG_MINIO_MC}"
+    "${IMG_COLLABORA}"
+    "${IMG_WHITEBOARD}"
   )
   local total=${#images[@]}
   local tmpdir; tmpdir=$(mktemp -d)
@@ -2260,7 +2269,7 @@ run_deploy() {
         start_spinner "Activation du versioning MinIO..."
         if docker run --rm \
             --network storage-net \
-            --entrypoint sh minio/mc:latest -c \
+            --entrypoint sh "${IMG_MINIO_MC}" -c \
             "mc alias set r http://minio-node1:9000 ${GEN_MINIO_KEY} ${GEN_MINIO_SECRET} --quiet 2>/dev/null \
              && mc version enable r/${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null \
              && mc ilm rule add --expire-delete-marker r/${NEXTCLOUD_S3_BUCKET:-nextcloud} 2>/dev/null || true" \
