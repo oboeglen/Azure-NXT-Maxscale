@@ -820,26 +820,27 @@ sudo bash deploy.sh   # → choix [1] Mise à jour rapide
 
 ## 🗄️ Sauvegarde
 
+> [!WARNING]
 > **Ce projet ne fournit pas de solution de sauvegarde.** C'est à vous de mettre en place une stratégie adaptée avant de passer en production.
 
 ### Données critiques à sauvegarder
 
 | Donnée | Emplacement | Contenu |
 |--------|-------------|---------|
-| Fichiers utilisateurs | Volume Docker `nextcloud-data` | Fichiers Nextcloud (photos, documents…) |
+| **Fichiers utilisateurs** | Cluster MinIO (`/srv/minio/data*` sur l'hôte) | Photos, documents, fichiers — stockés en S3 via le driver `objectstore` |
 | Base de données | Volume Docker `mariadb-data-node*` | Comptes, partages, métadonnées |
 | Config Nextcloud | Volume Docker `nextcloud-config` | `config.php`, apps installées |
-| Stockage objet | Répertoires MinIO (`/srv/minio/data*`) | Fichiers si S3 externe désactivé |
 | Fichiers de déploiement | `$INSTALL_DIR` (ex. `/opt/nxt-maxscale`) | `.env`, `haproxy.cfg`, certificats SSL |
+
+> **Note :** les fichiers utilisateurs ne sont **pas** dans un volume Docker `nextcloud-data` — ils sont stockés directement dans MinIO via le driver S3 (`objectstore`). La sauvegarde de MinIO est donc la sauvegarde principale des données utilisateurs.
 
 ### Stratégies recommandées
 
 **Snapshots VM (Azure / cloud)** — la solution la plus simple : snapshot du disque OS + données à intervalles réguliers depuis le portail Azure ou via `az snapshot create`. Restauration complète en quelques minutes.
 
-**Sauvegarde des volumes Docker** — pour chaque volume critique :
+**Synchronisation MinIO vers stockage externe** *(priorité absolue)* — `mc mirror` vers un bucket S3 distant ou Azure Blob Storage :
 ```bash
-docker run --rm -v nextcloud-data:/data -v /backup:/backup alpine \
-  tar czf /backup/nextcloud-data-$(date +%Y%m%d).tar.gz -C /data .
+docker exec minio-node1 mc mirror --overwrite local/nextcloud s3-remote/nextcloud-backup
 ```
 
 **Dump MariaDB (Galera)** — export logique cohérent depuis n'importe quel nœud :
@@ -849,9 +850,10 @@ docker exec mariadb-node1 mariadb-dump \
   > /backup/mariadb-$(date +%Y%m%d).sql
 ```
 
-**Synchronisation MinIO vers stockage externe** — `mc mirror` vers un bucket S3 distant ou Azure Blob Storage :
+**Sauvegarde des volumes Docker** — pour la config Nextcloud :
 ```bash
-docker exec minio-node1 mc mirror --overwrite local/nextcloud s3-remote/nextcloud-backup
+docker run --rm -v nextcloud-config:/data -v /backup:/backup alpine \
+  tar czf /backup/nextcloud-config-$(date +%Y%m%d).tar.gz -C /data .
 ```
 
 ### Points d'attention
