@@ -76,6 +76,7 @@
 - [📊 Performances & dimensionnement](#-performances--dimensionnement)
 - [🛡️ Recommandations sécurité réseau](#️-recommandations-sécurité-réseau)
 - [🐳 Images Docker — versions figées](#-images-docker--versions-figées)
+- [🗄️ Sauvegarde](#️-sauvegarde)
 
 ---
 
@@ -814,6 +815,51 @@ sudo bash deploy.sh   # → choix [1] Mise à jour rapide
 ```
 
 > **Collabora** : toujours tester le patch binaire `home_mode` après une montée de version — le pattern peut changer si le binaire `coolwsd` est restructuré.
+
+---
+
+## 🗄️ Sauvegarde
+
+> **Ce projet ne fournit pas de solution de sauvegarde.** C'est à vous de mettre en place une stratégie adaptée avant de passer en production.
+
+### Données critiques à sauvegarder
+
+| Donnée | Emplacement | Contenu |
+|--------|-------------|---------|
+| Fichiers utilisateurs | Volume Docker `nextcloud-data` | Fichiers Nextcloud (photos, documents…) |
+| Base de données | Volume Docker `mariadb-data-node*` | Comptes, partages, métadonnées |
+| Config Nextcloud | Volume Docker `nextcloud-config` | `config.php`, apps installées |
+| Stockage objet | Répertoires MinIO (`/srv/minio/data*`) | Fichiers si S3 externe désactivé |
+| Fichiers de déploiement | `$INSTALL_DIR` (ex. `/opt/nxt-maxscale`) | `.env`, `haproxy.cfg`, certificats SSL |
+
+### Stratégies recommandées
+
+**Snapshots VM (Azure / cloud)** — la solution la plus simple : snapshot du disque OS + données à intervalles réguliers depuis le portail Azure ou via `az snapshot create`. Restauration complète en quelques minutes.
+
+**Sauvegarde des volumes Docker** — pour chaque volume critique :
+```bash
+docker run --rm -v nextcloud-data:/data -v /backup:/backup alpine \
+  tar czf /backup/nextcloud-data-$(date +%Y%m%d).tar.gz -C /data .
+```
+
+**Dump MariaDB (Galera)** — export logique cohérent depuis n'importe quel nœud :
+```bash
+docker exec mariadb-node1 mariadb-dump \
+  -u root -p"$MYSQL_ROOT_PASSWORD" --all-databases --single-transaction \
+  > /backup/mariadb-$(date +%Y%m%d).sql
+```
+
+**Synchronisation MinIO vers stockage externe** — `mc mirror` vers un bucket S3 distant ou Azure Blob Storage :
+```bash
+docker exec minio-node1 mc mirror --overwrite local/nextcloud s3-remote/nextcloud-backup
+```
+
+### Points d'attention
+
+- **Galera ne remplace pas une sauvegarde** — la réplication synchronise les données en temps réel, y compris les suppressions accidentelles. Un snapshot Galera ne protège pas contre la perte de données logique.
+- **Tester la restauration** — une sauvegarde non testée n'est pas une sauvegarde. Vérifiez régulièrement que vous pouvez restaurer depuis vos archives.
+- **Chiffrer les archives hors site** — les volumes contiennent des données personnelles ; chiffrez avant tout transfert externe.
+- **Automatiser** — planifiez les sauvegardes via `cron` ou un orchestrateur (Azure Backup, Restic, Borgbackup…).
 
 ---
 
