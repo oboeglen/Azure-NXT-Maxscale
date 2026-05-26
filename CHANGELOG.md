@@ -6,6 +6,18 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.2.0] — 2026-05-26
+
+### Fixed
+- **Brute force Nextcloud sur premier déploiement** — sans `trusted_proxies`, Nextcloud attribuait toutes les requêtes (health checks HAProxy + logins utilisateurs) à la même IP interne Docker, saturant le compteur brute force dès le premier login. Corrigé via `trusted_proxies` avec les 6 subnets Docker du projet (`172.10–172.100`), permettant à Nextcloud d'utiliser le header `X-Forwarded-For` pour tracker chaque client sur son IP réelle (`/32`). Les protections `auth.bruteforce.protection` et `ratelimit.protection` sont désormais actives (précédemment désactivées comme contournement)
+- **Entrées Redis brute force persistantes entre déploiements** — les clés `*Bruteforce*` accumulées pendant la phase d'init (Nextcloud non encore prêt, HAProxy faisant des health checks) persistaient dans Redis entre les redémarrages de containers. Ajout de la fonction `reset_bruteforce()` appelée après `wait_healthy` : supprime toutes les clés brute force sur les 6 nœuds Redis du cluster via DEL en mode cluster (`-c`)
+
+### Added
+- **Section Sauvegarde dans le README** — avertissement `[!WARNING]` sur l'absence de solution de sauvegarde intégrée, tableau des données critiques (MinIO S3 en priorité, MariaDB, config), stratégies recommandées (snapshot VM, `mc mirror`, `mariadb-dump`), points d'attention (Galera ≠ backup, test de restauration, chiffrement)
+- **Section Images Docker dans le README** — explication du gel des versions, tableau des variables `IMG_*` avec versions actuelles, exemple de mise à jour
+
+---
+
 ## [2.1.16] — 2026-05-26
 
 ### Fixed
@@ -227,6 +239,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.2.0]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.16...v2.2.0
 [2.1.16]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.15...v2.1.16
 [2.1.15]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.14...v2.1.15
 [2.1.14]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.13...v2.1.14
