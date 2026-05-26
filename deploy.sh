@@ -1054,7 +1054,7 @@ ACME
     container_name: nextcloud-perms
     restart: "no"
     user: root
-    command: ["chown", "-R", "www-data:www-data", "/var/www/html/config", "/var/www/html/data", "/var/www/html/custom_apps"]
+    entrypoint: ["/bin/sh", "-c", "chown -R www-data:www-data /var/www/html/config /var/www/html/data /var/www/html/custom_apps"]
     volumes:
       - nextcloud_config:/var/www/html/config
       - nextcloud_data:/var/www/html/data
