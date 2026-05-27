@@ -737,7 +737,7 @@ La dégradation est **cohérente avec le modèle** et **gracieuse** : aucun cras
 | 🏢 Petite équipe | 3 | 3 | 6 | 22–28 Go | ~1 450 |
 | 🏭 PME ★ | 6 | 5 | 6 | 32–40 Go | ~2 450 |
 | 🏦 Entreprise | 9–12 | 5–7 | 6–8 | 48–64 Go | 3 000–3 600 |
-| 🏛️ Grande organisation | 15–20 | 7 | 8 | 64–80 Go | ~4 000 |
+| 🏛️ Grande organisation | 15–20 | 7 | 8 | 64–80 Go | +4 000 |
 
 ---
 
