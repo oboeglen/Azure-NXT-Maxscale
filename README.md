@@ -167,25 +167,25 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 
 ## 🧩 Services déployés
 
-| Service | Image | Rôle |
-|---------|-------|------|
-| `haproxy` | `haproxy:2.8-alpine` | Point d'entrée unique — reverse proxy, SSL, load balancing |
-| `nginx-acme` | `nginx:1.27-alpine` | Validation des challenges ACME (Let's Encrypt) |
-| `certbot` | `certbot/certbot` | Renouvellement SSL automatique toutes les 12h + healthcheck expiry 30 j |
-| `nginx-next-01..N` | `nginx:1.27-alpine` | Fichiers statiques + proxy FastCGI vers PHP-FPM |
-| `app-next-01..N` | `nextcloud:X.Y.Z-fpm` | Application Nextcloud (PHP-FPM) |
-| `nextcloud-perms` | `nextcloud:X.Y.Z-fpm` | Correction des permissions volumes (one-shot) |
-| `nextcloud-setup` | `nextcloud:X.Y.Z-fpm` | Auto-configuration post-installation (one-shot, protégé par sentinel) |
-| `nextcloud-cron` | `nextcloud:X.Y.Z-fpm` | Tâches de fond — `cron.php` toutes les 5 min |
-| `mariadb-node1..N` | `maxscale-mariadb-galera:11.4` | Base de données répliquée (Galera, bootstrap via `galera-bootstrap.sh`) |
-| `galera-autoheal` | `willfarrell/autoheal` | Redémarrage automatique des nœuds Galera hors-sync — healthcheck `pgrep autoheal` |
-| `redis-node1..N` | `redis:7.4-alpine` | Cache distribué (Redis Cluster) |
-| `redis-cluster-init` | `redis:7.4-alpine` | Initialisation du cluster Redis (retry on-failure:5) |
-| `minio-node1..N` | `minio/minio:latest` | Stockage objet S3 distribué (erasure coding) |
-| `collabora-node1..N` | `collabora/code:latest` | Édition bureautique collaborative en ligne — healthcheck `/hosting/discovery` sur tous les nœuds |
-| `whiteboard-node1..N` | `ghcr.io/nextcloud-releases/whiteboard:stable` | Tableau blanc collaboratif temps réel |
-| `redis-whiteboard` | `redis:7.4-alpine` | État partagé du whiteboard (Redis Streams) |
-| `minio-console` *(optionnel)* | `ghcr.io/georgmangold/console` | Console web MinIO — accessible via `/s3-console` |
+| Service | Rôle |
+|---------|------|
+| `haproxy` | Point d'entrée unique — reverse proxy, SSL, load balancing |
+| `nginx-acme` | Validation des challenges ACME (Let's Encrypt) |
+| `certbot` | Renouvellement SSL automatique toutes les 12h + healthcheck expiry 30 j |
+| `nginx-next-01..N` | Fichiers statiques + proxy FastCGI vers PHP-FPM |
+| `app-next-01..N` | Application Nextcloud (PHP-FPM) |
+| `nextcloud-perms` | Correction des permissions volumes (one-shot) |
+| `nextcloud-setup` | Auto-configuration post-installation (one-shot, protégé par sentinel) |
+| `nextcloud-cron` | Tâches de fond — `cron.php` toutes les 5 min |
+| `mariadb-node1..N` | Base de données répliquée (Galera, bootstrap via `galera-bootstrap.sh`) |
+| `galera-autoheal` | Redémarrage automatique des nœuds Galera hors-sync — healthcheck `pgrep autoheal` |
+| `redis-node1..N` | Cache distribué (Redis Cluster) |
+| `redis-cluster-init` | Initialisation du cluster Redis (retry on-failure:5) |
+| `minio-node1..N` | Stockage objet S3 distribué (erasure coding) |
+| `collabora-node1..N` | Édition bureautique collaborative en ligne — healthcheck `/hosting/discovery` sur tous les nœuds |
+| `whiteboard-node1..N` | Tableau blanc collaboratif temps réel |
+| `redis-whiteboard` | État partagé du whiteboard (Redis Streams) |
+| `minio-console` *(optionnel)* | Console web MinIO — accessible via `/s3-console` |
 
 > Le versioning du bucket MinIO est activé automatiquement par `deploy.sh` à la fin de l'installation Nextcloud, via `minio/mc:latest` (image tirée au déploiement mais sans container persistant).
 
