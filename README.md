@@ -587,7 +587,7 @@ Deux séries de tests couvrent la plateforme : des **microbenchmarks HTTP bruts*
 
 ### Microbenchmarks HTTP bruts — config 6 FPM (référence)
 
-> Mesures réalisées sur **6 FPM · 5 Galera · 6 Redis · 4 MinIO · 3 Collabora · 3 Whiteboard**, depuis un client externe via HAProxy/TLS.
+> Mesures réalisées sur **6 FPM · 5 Galera · 6 Redis · 4 MinIO · 3 Collabora · 3 Whiteboard**, depuis le serveur lui-même via HAProxy/TLS.
 
 | Endpoint | Concurrence | Débit | Moyenne | P95 | P99 | Erreurs |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|
