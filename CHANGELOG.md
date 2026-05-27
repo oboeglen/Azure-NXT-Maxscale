@@ -6,6 +6,13 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnag
 
 ---
 
+## [2.2.1] — 2026-05-27
+
+### Changed
+- **README** — suppression de la colonne Image du tableau Services déployés
+
+---
+
 ## [2.2.0] — 2026-05-26
 
 ### Fixed
@@ -239,6 +246,7 @@ Version majeure — refonte complète de l'architecture vers une stack FPM + Min
 
 ---
 
+[2.2.1]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.16...v2.2.0
 [2.1.16]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.15...v2.1.16
 [2.1.15]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.14...v2.1.15
