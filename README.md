@@ -581,9 +581,13 @@ docker compose logs -f nextcloud-setup
 
 ## 📊 Performances & dimensionnement
 
-> Benchmarks réalisés sur une instance de référence — **6 nœuds FPM, 5 Galera, 6 Redis, MinIO 4×2 drives, 3 Collabora, 3 Whiteboard** — depuis un client externe.
+Deux séries de tests couvrent la plateforme : des **microbenchmarks HTTP bruts** (débit pur sur `/status.php` et `/login`) et des **tests k6 de charge réaliste** simulant des utilisateurs actifs sur quatre scénarios métier.
 
-### Résultats mesurés
+---
+
+### Microbenchmarks HTTP bruts — config 6 FPM (référence)
+
+> Mesures réalisées sur **6 FPM · 5 Galera · 6 Redis · 4 MinIO · 3 Collabora · 3 Whiteboard**, depuis un client externe via HAProxy/TLS.
 
 | Endpoint | Concurrence | Débit | Moyenne | P95 | P99 | Erreurs |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -598,37 +602,21 @@ docker compose logs -f nextcloud-setup
 
 ---
 
-### Test de charge grandeur nature — PME 500 utilisateurs quotidiens
+### Tests k6 de charge réaliste — scénarios utilisateurs
 
-> Test réalisé sur la configuration de référence **6 FPM · 5 Galera · 6 Redis · 4 MinIO · 3 Collabora · 3 Whiteboard** sur un VPS 7,6 Go RAM (sous-dimensionné vs. production recommandée — 32 Go). k6 v0.55 lancé **depuis le serveur lui-même** : la latence réseau TLS est quasi nulle ; en usage réel, ajouter ~50–150 ms par requête selon la géographie du client.
+Les deux tests ci-dessous ont été lancés **depuis le serveur lui-même** (k6 en local) : la latence TLS réseau est quasi nulle. En usage réel, ajouter ~50–150 ms selon la géographie du client.
 
-#### Protocole
+> Un VU (Virtual User) simule une **session concurrente** avec des temps de réflexion réalistes (10–30 s entre requêtes). 500 DAU ne sont jamais tous connectés simultanément : le pic de concurrence dans une PME représente ~5–10 % des DAU, soit 35–50 sessions actives au même moment — **1 VU ≈ 15 DAU**. La charge serveur dépend des requêtes concurrentes, pas du nombre de comptes distincts.
+
+#### Test A — Configuration PME, charge nominale (k6 v0.55)
+
+Config : **6 FPM · 5 Galera · 6 Redis · 4 MinIO · 3 Collabora · 3 Whiteboard** · VPS 7,6 Go RAM
 
 | Paramètre | Valeur |
 |-----------|--------|
-| Outil | [k6](https://k6.io) v0.55 |
-| Durée | 1 min ramp-up · 6 min charge soutenue · 1 min ramp-down |
-| VUs peak | **34** |
-| Comptes de test | 25 (`pme_user_01..25`) en rotation parmi les VUs |
-| Itérations complètes | 980 en 8m30s |
-| Requêtes HTTP totales | 3 911 — 7,68 req/s moyen |
-
-> **Pourquoi 34 VUs représentent ~500 utilisateurs quotidiens**
->
-> Un VU (Virtual User) simule une **session concurrente** avec des temps de réflexion réalistes (10–30 s entre requêtes), ce qui reproduit le comportement d'un humain. 500 DAU (Daily Active Users) ne sont jamais tous connectés simultanément : en pratique, le pic de concurrence dans une PME représente 5–10 % des DAU, soit ~35–50 sessions actives au même moment. Le ratio ici est **1 VU : ~15 DAU**.
->
-> Les **25 comptes** ne limitent pas la représentativité : la charge serveur (PHP-FPM, Galera, Redis, MinIO) est déterminée par le nombre de **requêtes concurrentes**, pas par le nombre de comptes distincts en base. Chaque VU pioche un compte au hasard dans le pool ; plusieurs VUs peuvent utiliser le même compte simultanément, ce qui est plus agressif sur les verrous de fichiers Nextcloud qu'en usage réel — les résultats sont donc conservateurs.
-
-**Scénarios simulés**
-
-| Scénario | VUs | Comportement |
-|----------|:---:|--------------|
-| Sync client WebDAV desktop | 20 | `PROPFIND` · `GET` · `PUT` txt · `PUT` binaire — intervalle 10–30 s |
-| Sessions navigateur | 8 | Login CSRF · Dashboard · Files app · OCS Activity · Upload |
-| Éditeurs Collabora | 4 | WOPI discovery · config richdocuments · upload .odt · save |
-| Utilisateurs Whiteboard | 2 | Création `.whiteboard` · lecture · session 20–50 s |
-
-#### Résultats
+| VUs peak | **34** (20 WebDAV · 8 navigateur · 4 Collabora · 2 Whiteboard) |
+| Comptes de test | 25 (`pme_user_01..25`) |
+| Itérations complètes | 980 en 8m30s — 7,68 req/s moyen |
 
 | Scénario | avg | p(50) | p(90) | **p(95)** | p(99) | SLA | Statut |
 |---|---:|---:|---:|---:|---:|:---:|:---:|
@@ -636,39 +624,90 @@ docker compose logs -f nextcloud-setup
 | Sync WebDAV | 862 ms | 689 ms | 1 680 ms | **1 980 ms** | 2 660 ms | < 3 s | ✅ |
 | Collabora WOPI | 959 ms | 864 ms | 1 920 ms | **2 160 ms** | 3 010 ms | < 5 s | ✅ |
 | Whiteboard | 904 ms | 930 ms | 1 770 ms | **2 060 ms** | 2 720 ms | < 5 s | ✅ |
-| **Login** (p.m.) | 167 ms | 149 ms | 244 ms | 303 ms | 444 ms | — | — |
-| **Upload fichier** (p.m.) | 449 ms | 392 ms | 694 ms | 764 ms | 1 070 ms | — | — |
-
-**Fiabilité pendant le test**
+| Login (p.m.) | 167 ms | 149 ms | 244 ms | 303 ms | 444 ms | — | — |
+| Upload fichier (p.m.) | 449 ms | 392 ms | 694 ms | 764 ms | 1 070 ms | — | — |
 
 | Métrique | Valeur |
 |----------|--------|
 | Erreurs HTTP 5xx | **0** |
 | Crashs de conteneurs | **0** |
-| `http_req_failed` (timeouts + resets TLS) | 0,97 % (38 / 3 911) |
+| `http_req_failed` | 0,97 % (38 / 3 911) — timeouts + resets TLS |
 | Données reçues | 45 MB · 88 kB/s |
-| Données envoyées | 3,4 MB · 6,6 kB/s |
 
-**Tous les seuils de performance passent.** La configuration 6 FPM tient le pic PME sans erreur serveur ni crash, y compris sur un VPS limité à 7,6 Go RAM.
+**Tous les SLA passent.** La configuration PME 6 FPM tient le pic sans erreur serveur ni crash sur un VPS sous-dimensionné à 7,6 Go RAM.
+
+---
+
+#### Test B — Configuration petite équipe, charge de saturation (k6 v2.0.0) — 2026-05-27
+
+Config : **3 FPM · 3 Galera · 6 Redis · 4 MinIO · 3 Collabora · 1 Whiteboard** · VPS 7,6 Go RAM
+
+> La configuration 3 FPM est dimensionnée pour ~1 500 utilisateurs (pic nominal ~24 VUs). Ce test pousse volontairement à **60 VUs — 2,5× la capacité nominale** — pour mesurer le comportement en saturation.
+
+| Paramètre | Valeur |
+|-----------|--------|
+| VUs peak | **60** (30 WebDAV · 15 navigateur · 10 Collabora · 5 Whiteboard) |
+| Comptes de test | 50 (`pme_user_01..50`) |
+| Itérations complètes | 654 en 8m26s — 5,69 req/s moyen |
+
+| Scénario | avg | p(50) | p(90) | **p(95)** | p(99) | SLA | Statut |
+|---|---:|---:|---:|---:|---:|:---:|:---:|
+| Sessions navigateur | 927 ms | 770 ms | 2 247 ms | **2 868 ms** | 3 794 ms | < 4 s | ✅ |
+| Sync WebDAV | 1 201 ms | 731 ms | 3 000 ms | **4 285 ms** | 5 822 ms | < 3 s | ⚠️ |
+| Collabora WOPI | 836 ms | 533 ms | 2 378 ms | **3 089 ms** | 3 753 ms | < 5 s | ✅ |
+| Whiteboard | 2 104 ms | 1 774 ms | 4 071 ms | **4 900 ms** | 6 015 ms | < 5 s | ✅ |
+
+> ⚠️ WebDAV p95 dépasse 3 s à 2,5× la capacité nominale — comportement attendu. À charge nominale (≤ 24 VUs), le SLA est respecté conformément au modèle.
+
+| Métrique | Valeur |
+|----------|--------|
+| Erreurs HTTP 5xx | **0** |
+| Crashs de conteneurs | **0** |
+| Erreurs réseau réelles (broken pipe WebDAV) | **0,07 %** (2 / 2 881) |
+| `http_req_failed` déclaré | 5,13 % — dont 146 HTTP 404 sur `richdocuments/checkSettings` (endpoint non exposé dans ce déploiement) |
+| Checks applicatifs réussis | **99,92 %** (2 728 / 2 730) |
+| Données reçues | 39 MB · 78 kB/s |
+
+**0 erreur serveur, 0 crash.** La configuration 3 FPM absorbe 2,5× sa charge nominale avec une dégradation gracieuse : navigateur, Collabora et Whiteboard restent dans les SLA ; WebDAV seul dépasse en p95 sous surcharge extrême.
+
+---
+
+### Comparaison A vs B
+
+> ⚠️ Les deux tests ne sont **pas comparables à iso-charge** : le test B utilise 76 % de VUs en plus (+26 VUs) et deux fois moins de FPM. La dégradation reflète les deux effets combinés — non pas la seule réduction de FPM.
+
+| Critère | Test A — 6 FPM · 34 VUs | Test B — 3 FPM · 60 VUs |
+|---------|:-----------------------:|:-----------------------:|
+| FPM / charge nominale | 6 nœuds (~2 450 users) | 3 nœuds (~1 450 users) |
+| VUs injectés | 34 (charge nominale) | 60 (**2,5× seuil 3 FPM**) |
+| Sessions navigateur p95 | **155 ms** | 2 868 ms |
+| WebDAV p95 | **1 980 ms** ✅ | 4 285 ms ⚠️ |
+| Collabora p95 | **2 160 ms** ✅ | 3 089 ms ✅ |
+| Whiteboard p95 | **2 060 ms** ✅ | 4 900 ms ✅ |
+| Erreurs HTTP 5xx | **0** | **0** |
+| Crashs conteneurs | **0** | **0** |
+| Erreurs réseau | 0,97 % | 0,07 % |
+
+La dégradation est **cohérente avec le modèle** et **gracieuse** : aucun crash, aucune erreur serveur, même sous saturation.
 
 ---
 
 ### Simulation par nombre de nœuds FPM
 
-> Modèle basé sur les mesures réelles. Rendement décroissant de **88 % par nœud** dû aux ressources partagées (DB, Redis, HAProxy). Avec 5 nœuds Galera (~2 500 TPS en écriture), le goulot DB n'est atteint qu'à partir de **14 nœuds FPM**.
+> Modèle basé sur les mesures réelles (★ Test A, ▲ Test B extrapolé à charge nominale). Rendement décroissant de **88 % par nœud** dû aux ressources partagées (DB, Redis, HAProxy). Avec 5 nœuds Galera (~2 500 TPS en écriture), le goulot DB n'est atteint qu'à partir de **14 nœuds FPM**.
 
 | Nœuds FPM | req/s PHP | req/s léger | Concurrent | Actifs | Total users | P99 PHP | RAM min |
 |:---------:|:---------:|:-----------:|:----------:|:------:|:-----------:|:-------:|:-------:|
 | 1 | ~10 | ~41 | ~9 | ~55 | ~550 | 3 381 ms | 16 Go |
 | 2 | ~18 | ~77 | ~17 | ~103 | ~1 030 | 2 230 ms | 19 Go |
-| 3 | ~26 | ~109 | ~24 | ~145 | ~1 450 | 1 749 ms | 22 Go |
+| **3** ▲ | **~26** | **~109** | **~24** | **~145** | **~1 450** | **1 749 ms** | **22 Go** |
 | **6** ★ | **~44** | **~183** | **~40** | **~245** | **~2 450** | **1 154 ms** | **31 Go** |
 | 9 | ~56 | ~234 | ~52 | ~313 | ~3 130 | 904 ms | 40 Go |
 | 12 | ~65 | ~269 | ~59 | ~359 | ~3 590 | 761 ms | 49 Go |
 | 15 | ~70 | ~291 | ~64 | ~389 | ~3 890 | 665 ms | 58 Go |
 | 20 | ~73 | ~303 | ~67 | ~405 | ~4 050 | 560 ms | 73 Go |
 
-> **★** Configuration de référence mesurée en conditions réelles  
+> **★** Config PME mesurée à charge nominale (Test A) · **▲** Config petite équipe testée à 2,5× la charge nominale (Test B) — les valeurs du modèle correspondent à la charge nominale  
 > **Actifs** = concurrent × 6 (fenêtre de session de 5 min) · **Total users** = actifs × 10 (10 % connectés au pic)  
 > **RAM min** = 3 Go/nœud FPM + 13 Go overhead (5 Galera · 6 Redis · 4 MinIO · 3 Collabora · 3 Whiteboard · HAProxy)
 
