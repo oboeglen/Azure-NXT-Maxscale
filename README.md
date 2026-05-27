@@ -606,7 +606,7 @@ Deux séries de tests couvrent la plateforme : des **microbenchmarks HTTP bruts*
 
 Les deux tests ci-dessous ont été lancés **depuis le serveur lui-même** (k6 en local) : la latence TLS réseau est quasi nulle. En usage réel, ajouter ~50–150 ms selon la géographie du client.
 
-> Un VU (Virtual User) simule une **session concurrente** avec des temps de réflexion réalistes (10–30 s entre requêtes). 500 DAU ne sont jamais tous connectés simultanément : le pic de concurrence dans une PME représente ~5–10 % des DAU, soit 35–50 sessions actives au même moment — **1 VU ≈ 15 DAU**. La charge serveur dépend des requêtes concurrentes, pas du nombre de comptes distincts.
+> Un VU (Virtual User) simule une **session concurrente** avec des temps de réflexion réalistes (10–30 s entre requêtes). Les ~1 450 utilisateurs d'une config 3 FPM ne sont jamais tous connectés simultanément : le pic de concurrence représente ~5–10 % des actifs, soit ~24 sessions au même moment — **1 VU ≈ 15 DAU**. La charge serveur dépend des requêtes concurrentes, pas du nombre de comptes distincts.
 
 #### Test A — Configuration PME, charge nominale (k6 v0.55)
 
@@ -642,7 +642,7 @@ Config : **6 FPM · 5 Galera · 6 Redis · 4 MinIO · 3 Collabora · 3 Whiteboar
 
 Config : **3 FPM · 3 Galera · 6 Redis · 4 MinIO · 3 Collabora · 1 Whiteboard** · VPS 7,6 Go RAM
 
-> La configuration 3 FPM est dimensionnée pour ~1 500 utilisateurs (pic nominal ~24 VUs). Ce test pousse volontairement à **60 VUs — 2,5× la capacité nominale** — pour mesurer le comportement en saturation.
+> La configuration 3 FPM est dimensionnée pour ~1 450 utilisateurs (pic nominal ~24 VUs). Ce test pousse volontairement à **60 VUs — 2,5× la capacité nominale** — pour mesurer le comportement en saturation.
 
 | Paramètre | Valeur |
 |-----------|--------|
@@ -734,8 +734,8 @@ La dégradation est **cohérente avec le modèle** et **gracieuse** : aucun cras
 | Profil | FPM | DB Galera | Redis | RAM serveur | Utilisateurs |
 |--------|:---:|:---------:|:-----:|:-----------:|:------------:|
 | 🧪 Test / dev | 1–2 | 1 | 0 (APCu) | 8–16 Go | < 100 |
-| 🏢 Petite équipe | 3 | 3 | 6 | 22–28 Go | ~1 500 |
-| 🏭 PME ★ | 6 | 5 | 6 | 32–40 Go | ~2 500 |
+| 🏢 Petite équipe | 3 | 3 | 6 | 22–28 Go | ~1 450 |
+| 🏭 PME ★ | 6 | 5 | 6 | 32–40 Go | ~2 450 |
 | 🏦 Entreprise | 9–12 | 5–7 | 6–8 | 48–64 Go | 3 000–3 600 |
 | 🏛️ Grande organisation | 15–20 | 7 | 8 | 64–80 Go | ~4 000 |
 
