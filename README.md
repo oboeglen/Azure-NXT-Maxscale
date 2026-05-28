@@ -906,6 +906,14 @@ docker run --rm -v nextcloud-config:/data -v /backup:/backup alpine \
 
 ---
 
-## Disclaimer
+<div align="center">
 
-Ce projet est une initiative indépendante et n'est ni affilié, ni sponsorisé, ni approuvé par Nextcloud GmbH, Collabora Productivity, MariaDB Corporation, Redis Ltd., MinIO Inc. ou toute autre société dont les technologies sont intégrées. Les noms et marques restent la propriété de leurs détenteurs.
+### ⚖️ Disclaimer
+
+> Ce projet est une **initiative indépendante** et n'est ni affilié, ni sponsorisé, ni approuvé par
+> **Nextcloud GmbH**, **Collabora Productivity**, **MariaDB Corporation**, **Redis Ltd.**, **MinIO Inc.**
+> ou toute autre société dont les technologies sont intégrées.
+>
+> *Les noms et marques restent la propriété de leurs détenteurs respectifs.*
+
+</div>
