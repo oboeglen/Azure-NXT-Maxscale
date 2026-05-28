@@ -903,3 +903,5 @@ docker run --rm -v nextcloud-config:/data -v /backup:/backup alpine \
 ## Support
 
 **Dépôt :** [github.com/oboeglen/Azure-NXT-Maxscale](https://github.com/oboeglen/Azure-NXT-Maxscale)
+
+Ce projet est une initiative indépendante et n'est ni affilié, ni sponsorisé, ni approuvé par Nextcloud GmbH, Collabora Productivity, MariaDB Corporation, Redis Ltd., MinIO Inc. ou toute autre société dont les technologies sont intégrées. Les noms et marques restent la propriété de leurs détenteurs.
