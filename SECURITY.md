@@ -1,99 +1,99 @@
-# Politique de sécurité
+# Security Policy
 
-## Versions supportées
+## Supported versions
 
-| Version | Support sécurité |
+| Version | Security support |
 |---------|:----------------:|
 | 2.1.x (latest) | ✅ |
-| 2.0.x | ⚠️ Mise à jour recommandée |
+| 2.0.x | ⚠️ Update recommended |
 | < 2.0 | ❌ |
 
-Seule la dernière version stable reçoit des correctifs de sécurité. Il est recommandé de toujours déployer depuis `main` ou la dernière release.
+Only the latest stable version receives security patches. It is recommended to always deploy from `main` or the latest release.
 
 ---
 
-## Signaler une vulnérabilité
+## Reporting a vulnerability
 
 > [!IMPORTANT]
-> **Ne pas ouvrir d'issue publique pour signaler une vulnérabilité.** Une divulgation publique prématurée expose les utilisateurs avant qu'un correctif soit disponible.
+> **Do not open a public issue to report a vulnerability.** Premature public disclosure exposes users before a fix is available.
 
-### Méthode préférée — GitHub Private Vulnerability Reporting
+### Preferred method — GitHub Private Vulnerability Reporting
 
-Utilisez la fonctionnalité de signalement privé de GitHub :
+Use GitHub's private reporting feature:
 
-**[Signaler une vulnérabilité](https://github.com/oboeglen/Azure-NXT-Maxscale/security/advisories/new)**
+**[Report a vulnerability](https://github.com/oboeglen/Azure-NXT-Maxscale/security/advisories/new)**
 
-Vous recevrez un accusé de réception dans les **48 heures**.
+You will receive an acknowledgment within **48 hours**.
 
-### Informations à inclure
+### Information to include
 
-Pour accélérer le traitement, précisez :
+To speed up processing, please specify:
 
-- **Version concernée** — tag ou commit hash
-- **Composant** — `deploy.sh`, `haproxy.cfg`, `nextcloud-init.sh`, etc.
-- **Description** — nature de la vulnérabilité et impact potentiel
-- **Reproduction** — étapes minimales pour reproduire
-- **Correctif suggéré** — si vous en avez un (optionnel)
-
----
-
-## Délais de réponse
-
-| Étape | Délai |
-|-------|-------|
-| Accusé de réception | 48 h |
-| Évaluation et classification | 5 jours ouvrés |
-| Correctif (critique / haute) | 14 jours |
-| Correctif (moyenne / faible) | 30 jours |
-| Publication de l'advisory | Après déploiement du correctif |
+- **Affected version** — tag or commit hash
+- **Component** — `deploy.sh`, `haproxy.cfg`, `nextcloud-init.sh`, etc.
+- **Description** — nature of the vulnerability and potential impact
+- **Reproduction** — minimal steps to reproduce
+- **Suggested fix** — if you have one (optional)
 
 ---
 
-## Périmètre
+## Response timeline
 
-### Dans le périmètre ✅
-
-- `deploy.sh` — génération de secrets, gestion des permissions, logique de déploiement
-- `haproxy.cfg` — règles de filtrage, configuration TLS, headers de sécurité
-- `nextcloud-init.sh` — configuration post-installation, gestion des credentials
-- `docker-compose.yml` / templates générés — exposition de ports, montages de volumes
-- `nextcloud-custom.config.php` — configuration Nextcloud sensible
-- Toute configuration qui exposerait des données utilisateur ou permettrait un accès non autorisé
-
-### Hors périmètre ❌
-
-- Vulnérabilités dans les images Docker upstream (`nextcloud`, `haproxy`, `collabora/code`, `redis`, `minio/minio`…) — signaler directement aux éditeurs concernés
-- Vulnérabilités dans Nextcloud lui-même — [Nextcloud Security](https://nextcloud.com/security/)
-- Vulnérabilités dans Collabora CODE — [Collabora Security](https://www.collaboraonline.com/security/)
-- Configuration spécifique à l'environnement de l'utilisateur (mots de passe faibles, DNS mal configuré…)
+| Step | Timeline |
+|------|----------|
+| Acknowledgment | 48 h |
+| Assessment and classification | 5 business days |
+| Fix (critical / high) | 14 days |
+| Fix (medium / low) | 30 days |
+| Advisory publication | After fix deployment |
 
 ---
 
-## Mesures de sécurité en place
+## Scope
 
-Ce projet intègre nativement les protections suivantes :
+### In scope ✅
 
-| Couche | Mesure |
-|--------|--------|
-| **Transport** | TLS 1.2 minimum, TLS 1.3 préféré, `no-tls-tickets` (PFS) |
+- `deploy.sh` — secret generation, permission management, deployment logic
+- `haproxy.cfg` — filtering rules, TLS configuration, security headers
+- `nextcloud-init.sh` — post-installation configuration, credential management
+- `docker-compose.yml` / generated templates — port exposure, volume mounts
+- `nextcloud-custom.config.php` — sensitive Nextcloud configuration
+- Any configuration that would expose user data or allow unauthorized access
+
+### Out of scope ❌
+
+- Vulnerabilities in upstream Docker images (`nextcloud`, `haproxy`, `collabora/code`, `redis`, `minio/minio`…) — report directly to the relevant publishers
+- Vulnerabilities in Nextcloud itself — [Nextcloud Security](https://nextcloud.com/security/)
+- Vulnerabilities in Collabora CODE — [Collabora Security](https://www.collaboraonline.com/security/)
+- Configuration specific to the user's environment (weak passwords, misconfigured DNS…)
+
+---
+
+## Security measures in place
+
+This project natively integrates the following protections:
+
+| Layer | Measure |
+|-------|---------|
+| **Transport** | TLS 1.2 minimum, TLS 1.3 preferred, `no-tls-tickets` (PFS) |
 | **HSTS** | `max-age=63072000; includeSubDomains; preload` |
-| **Headers HTTP** | XCTO, XSS-Protection, Referrer-Policy, X-Frame-Options, Permissions-Policy |
-| **CSP** | Nonce Nextcloud 33 + WebSocket Collabora/Whiteboard |
-| **Méthodes** | TRACE/DEBUG/CONNECT bloquées, WebDAV restreint aux paths API |
-| **Scanners** | User-agents malveillants et paths de scan courants bloqués (403) |
-| **Collabora** | Console d'administration inaccessible depuis l'extérieur |
-| **Secrets** | Générés aléatoirement via `openssl rand`, sans caractère `#` |
-| **Réseau** | Isolation par réseau Docker dédié par service |
-| **Logs** | Health checks silencés, version HAProxy masquée |
+| **HTTP headers** | XCTO, XSS-Protection, Referrer-Policy, X-Frame-Options, Permissions-Policy |
+| **CSP** | Nextcloud 33 nonce + Collabora/Whiteboard WebSocket |
+| **Methods** | TRACE/DEBUG/CONNECT blocked, WebDAV restricted to API paths |
+| **Scanners** | Malicious user-agents and common scan paths blocked (403) |
+| **Collabora** | Administration console inaccessible from outside |
+| **Secrets** | Randomly generated via `openssl rand`, without `#` character |
+| **Network** | Isolation via dedicated Docker network per service |
+| **Logs** | Health checks silenced, HAProxy version hidden |
 
 ---
 
-## Divulgation coordonnée
+## Coordinated disclosure
 
-Une fois le correctif déployé dans une release, un **GitHub Security Advisory** sera publié avec :
-- La description de la vulnérabilité
-- Les versions affectées
-- Les mesures de mitigation
-- Le crédit au rapporteur (sauf demande d'anonymat)
+Once the fix is deployed in a release, a **GitHub Security Advisory** will be published with:
+- The vulnerability description
+- Affected versions
+- Mitigation measures
+- Credit to the reporter (unless anonymity is requested)
 
-Merci de contribuer à la sécurité de ce projet.
+Thank you for contributing to the security of this project.
