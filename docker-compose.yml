@@ -111,6 +111,7 @@ services:
   nextcloud-cron:
     image: nextcloud:33.0.3-fpm
     container_name: nextcloud-cron
+    hostname: nextcloud-cron
     restart: unless-stopped
     entrypoint: /cron.sh
     volumes:
@@ -201,6 +202,7 @@ services:
   app-next-01:
     image: nextcloud:33.0.3-fpm
     container_name: app-next-01
+    hostname: app-next-01
     restart: always
     expose:
       - "9000"
@@ -254,6 +256,7 @@ services:
   app-next-02:
     image: nextcloud:33.0.3-fpm
     container_name: app-next-02
+    hostname: app-next-02
     restart: always
     expose:
       - "9000"
@@ -297,6 +300,7 @@ services:
   app-next-03:
     image: nextcloud:33.0.3-fpm
     container_name: app-next-03
+    hostname: app-next-03
     restart: always
     expose:
       - "9000"
