@@ -1,248 +1,248 @@
 # Changelog
 
-Toutes les modifications notables de ce projet sont documentées dans ce fichier.
+All notable changes to this project are documented in this file.
 
-Format : [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/) — versionnage [Semantic Versioning](https://semver.org/lang/fr/).
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning [Semantic Versioning](https://semver.org/).
 
 ---
 
 ## [2.2.1] — 2026-05-27
 
 ### Changed
-- **README** — suppression de la colonne Image du tableau Services déployés
+- **README** — removed the Image column from the Deployed services table
 
 ---
 
 ## [2.2.0] — 2026-05-26
 
 ### Fixed
-- **Brute force Nextcloud sur premier déploiement** — sans `trusted_proxies`, Nextcloud attribuait toutes les requêtes (health checks HAProxy + logins utilisateurs) à la même IP interne Docker, saturant le compteur brute force dès le premier login. Corrigé via `trusted_proxies` avec les 6 subnets Docker du projet (`172.10–172.100`), permettant à Nextcloud d'utiliser le header `X-Forwarded-For` pour tracker chaque client sur son IP réelle (`/32`). Les protections `auth.bruteforce.protection` et `ratelimit.protection` sont désormais actives (précédemment désactivées comme contournement)
-- **Entrées Redis brute force persistantes entre déploiements** — les clés `*Bruteforce*` accumulées pendant la phase d'init (Nextcloud non encore prêt, HAProxy faisant des health checks) persistaient dans Redis entre les redémarrages de containers. Ajout de la fonction `reset_bruteforce()` appelée après `wait_healthy` : supprime toutes les clés brute force sur les 6 nœuds Redis du cluster via DEL en mode cluster (`-c`)
+- **Nextcloud brute force on first deployment** — without `trusted_proxies`, Nextcloud attributed all requests (HAProxy health checks + user logins) to the same internal Docker IP, saturating the brute force counter from the first login. Fixed via `trusted_proxies` with the 6 Docker subnets of the project (`172.10–172.100`), allowing Nextcloud to use the `X-Forwarded-For` header to track each client on its real IP (`/32`). `auth.bruteforce.protection` and `ratelimit.protection` are now active (previously disabled as a workaround)
+- **Persistent Redis brute force entries between deployments** — `*Bruteforce*` keys accumulated during the init phase (Nextcloud not yet ready, HAProxy doing health checks) persisted in Redis between container restarts. Added `reset_bruteforce()` function called after `wait_healthy`: deletes all brute force keys on the 6 Redis cluster nodes via DEL in cluster mode (`-c`)
 
 ### Added
-- **Section Sauvegarde dans le README** — avertissement `[!WARNING]` sur l'absence de solution de sauvegarde intégrée, tableau des données critiques (MinIO S3 en priorité, MariaDB, config), stratégies recommandées (snapshot VM, `mc mirror`, `mariadb-dump`), points d'attention (Galera ≠ backup, test de restauration, chiffrement)
-- **Section Images Docker dans le README** — explication du gel des versions, tableau des variables `IMG_*` avec versions actuelles, exemple de mise à jour
+- **Backup section in the README** — `[!WARNING]` alert about the absence of a built-in backup solution, table of critical data (MinIO S3 first, MariaDB, config), recommended strategies (VM snapshot, `mc mirror`, `mariadb-dump`), key points (Galera ≠ backup, restore testing, encryption)
+- **Docker Images section in the README** — version pinning explanation, `IMG_*` variable table with current versions, update example
 
 ---
 
 ## [2.1.16] — 2026-05-26
 
 ### Fixed
-- **Bug `${IMG_CERTBOT}` dans heredoc quoté** — la variable n'était pas expandée par bash (heredoc `<<'ACME'`), docker-compose recevait le nom de variable littéral au lieu de l'image. Corrigé en remplaçant par la chaîne `certbot/certbot:v5.6.0` directement dans le heredoc
+- **`${IMG_CERTBOT}` bug in quoted heredoc** — variable was not expanded by bash (heredoc `<<'ACME'`), docker-compose received the literal variable name instead of the image. Fixed by replacing with the string `certbot/certbot:v5.6.0` directly in the heredoc
 
 ### Changed
-- **Centralisation complète des images Docker** — ajout des variables `IMG_HAPROXY`, `IMG_NGINX`, `IMG_REDIS`, `IMG_MARIADB` dans le bloc de constantes en tête de script. Toutes les images sont désormais référencées via `IMG_*` dans les heredocs non quotés et la liste de pull parallèle. Les 3 heredocs quotés (HAPROXY, ACME, WBREDIS) conservent les chaînes littérales car ils contiennent des variables docker-compose (`${NEXTCLOUD_DOMAIN}` etc.) qui ne doivent pas être expandées par bash
+- **Full Docker image centralization** — added `IMG_HAPROXY`, `IMG_NGINX`, `IMG_REDIS`, `IMG_MARIADB` variables in the constants block at the top of the script. All images are now referenced via `IMG_*` in unquoted heredocs and the parallel pull list. The 3 quoted heredocs (HAPROXY, ACME, WBREDIS) retain literal strings because they contain docker-compose variables (`${NEXTCLOUD_DOMAIN}` etc.) that must not be expanded by bash
 
 ---
 
 ## [2.1.15] — 2026-05-26
 
 ### Fixed
-- **Permissions Nextcloud incorrectes au premier déploiement** — le service `nextcloud-perms` utilisait `command:` avec `user: root`, mais l'entrypoint de l'image `nextcloud:fpm` exécute `run_as()` qui réduit les privilèges vers `www-data` avant d'exécuter la commande. En résultat, `chown` échouait silencieusement sur un serveur vierge, laissant les volumes en `root:root` et bloquant `nextcloud-setup`. Corrigé en remplaçant `command:` par `entrypoint: ["/bin/sh", "-c", "chown ..."]` pour contourner l'entrypoint natif
+- **Incorrect Nextcloud permissions on first deployment** — the `nextcloud-perms` service used `command:` with `user: root`, but the `nextcloud:fpm` image entrypoint runs `run_as()` which drops privileges to `www-data` before executing the command. As a result, `chown` failed silently on a fresh server, leaving volumes as `root:root` and blocking `nextcloud-setup`. Fixed by replacing `command:` with `entrypoint: ["/bin/sh", "-c", "chown ..."]` to bypass the native entrypoint
 
 ### Changed
-- **Images Docker — versions figées** — tous les tags `:latest` et `:stable` remplacés par des versions précises extraites de la production : `certbot/certbot:v5.6.0`, `minio/minio:RELEASE.2025-09-07T16-13-09Z`, `minio/mc:RELEASE.2025-08-13T08-35-41Z`, `collabora/code:25.04.9.4`, `ghcr.io/georgmangold/console:v1.9.1`, `willfarrell/autoheal` et `ghcr.io/nextcloud-releases/whiteboard` épinglés par digest SHA256. Versions centralisées dans des variables `IMG_*` en tête de script
+- **Docker images — pinned versions** — all `:latest` and `:stable` tags replaced with precise versions extracted from production: `certbot/certbot:v5.6.0`, `minio/minio:RELEASE.2025-09-07T16-13-09Z`, `minio/mc:RELEASE.2025-08-13T08-35-41Z`, `collabora/code:25.04.9.4`, `ghcr.io/georgmangold/console:v1.9.1`, `willfarrell/autoheal` and `ghcr.io/nextcloud-releases/whiteboard` pinned by SHA256 digest. Versions centralized in `IMG_*` variables at the top of the script
 
 ---
 
 ## [2.1.14] — 2026-05-25
 
 ### Fixed
-- **Patch Collabora non appliqué aux nouveaux nœuds lors d'un scale-up** — `patch_collabora_binary` extrayait toujours le binaire depuis `collabora-node1`, qui est déjà patché depuis le déploiement initial. Au scale-up (ex. 3→6 nœuds), le re-patch du binaire déjà patché échouait en `pattern_not_found` et les nouveaux nœuds (4–6) ne recevaient jamais le patch. `patch_collabora_binary` accepte maintenant un paramètre `first_src` (premier nœud à utiliser pour l'extraction) et `scale_nodes` passe `ORIG_COLLAB_NODES + 1`, garantissant que l'extraction se fait depuis un nouveau nœud au binaire non patché
+- **Collabora patch not applied to new nodes during scale-up** — `patch_collabora_binary` always extracted the binary from `collabora-node1`, which was already patched from the initial deployment. During scale-up (e.g. 3→6 nodes), re-patching the already-patched binary failed with `pattern_not_found` and new nodes (4–6) never received the patch. `patch_collabora_binary` now accepts a `first_src` parameter (first node to use for extraction) and `scale_nodes` passes `ORIG_COLLAB_NODES + 1`, ensuring extraction is done from a new node with an unpatched binary
 
 ## [2.1.13] — 2026-05-25
 
 ### Fixed
-- **Patch binaire Collabora — faux positifs "already_patched"** — deux types de faux positifs empêchaient le patch de s'appliquer sur coolwsd 25.04.9.4 :
-  - La séquence `ORIG_PATCHED` (`ba ff ff ff 7f b8 ff ff ff 7f 84 db`) existe naturellement dans le binaire à une adresse différente (0x269fcf), déclenchant une fausse détection "déjà patché" avant même de chercher le pattern cible
-  - 21 paires `MOV reg, INT_MAX + MOV reg, INT_MAX` (valeur naturelle dans le binaire) déclenchaient une fausse détection globale
-  - La stratégie "(MOV 20 + MOV 20) + TEST" génère 56 faux positifs et était susceptible de patcher de mauvais emplacements sur un re-run
-  **Corrections** : suppression de toute recherche globale de "déjà patché" ; le check est uniquement effectué aux offsets précis trouvés par les stratégies ; suppression de la stratégie (20+20) et de la recherche en ordre inversé (10→20)
+- **Collabora binary patch — false positive "already_patched"** — two types of false positives prevented the patch from being applied on coolwsd 25.04.9.4:
+  - The `ORIG_PATCHED` sequence (`ba ff ff ff 7f b8 ff ff ff 7f 84 db`) naturally exists in the binary at a different address (0x269fcf), triggering a false "already patched" detection before even searching for the target pattern
+  - 21 pairs of `MOV reg, INT_MAX + MOV reg, INT_MAX` (a natural value in the binary) triggered a false global detection
+  - The "(MOV 20 + MOV 20) + TEST" strategy generates 56 false positives and was liable to patch wrong locations on re-run
+  **Fixes**: removed all global "already patched" searches; the check is only performed at the exact offsets found by strategies; removed the (20+20) strategy and the reversed search order (10→20)
 
 ## [2.1.12] — 2026-05-25
 
 ### Fixed
-- **Patch binaire Collabora non fonctionnel sur certaines versions de coolwsd** — l'algorithme de recherche était limité à un unique pattern d'octets codé en dur (`mov edx,20 / mov eax,10 / test bl,bl`), spécifique à un seul build. Remplacé par une approche à 4 stratégies successives, indépendante de la version :
-  1. Pattern exact original (rétro-compatibilité)
-  2. Toutes les combinaisons de registres x86-64 pour `(MOV r32, 20) + (MOV r32, 10)` avec vérification `TEST`/`CMP` à proximité
-  3. Idem pour `(MOV r32, 20) + (MOV r32, 20)` (quand les deux limites valent 20)
-  4. Ancrage sur la chaîne `"home_mode.enable"` dans le binaire puis recherche de paires de petites constantes dans le code voisin
-  La détection « déjà patché » est aussi généralisée (plus liée au pattern exact)
+- **Collabora binary patch not working on some versions of coolwsd** — the search algorithm was limited to a single hard-coded byte pattern (`mov edx,20 / mov eax,10 / test bl,bl`), specific to a single build. Replaced with a 4-strategy approach, independent of version:
+  1. Original exact pattern (backward compatibility)
+  2. All x86-64 register combinations for `(MOV r32, 20) + (MOV r32, 10)` with nearby `TEST`/`CMP` verification
+  3. Same for `(MOV r32, 20) + (MOV r32, 20)` (when both limits are 20)
+  4. Anchor on the `"home_mode.enable"` string in the binary then search for small constant pairs in adjacent code
+  The "already patched" detection is also generalized (no longer tied to the exact pattern)
 
 ## [2.1.11] — 2026-05-25
 
 ### Fixed
-- **Race condition Redis scale-up — replica non intégré** — après l'ajout d'un nœud master via `--cluster add-node`, le nœud n'était pas encore visible dans `cluster nodes` lors de l'appel immédiat suivant pour ajouter le replica (`--cluster-slave --cluster-master-id`), provoquant un échec silencieux (redis-node8 absent du cluster). `_redis_scale_up` attend désormais jusqu'à 30 s que le master soit visible dans `cluster nodes` avant d'ajouter le replica. Si `--cluster add-node --cluster-slave` échoue malgré tout, un fallback `MEET + REPLICATE` est tenté. Un contrôle final compare `cluster_known_nodes` au compte attendu et avertit en cas d'écart
+- **Redis scale-up race condition — replica not integrated** — after adding a master node via `--cluster add-node`, the node was not yet visible in `cluster nodes` during the immediately following call to add the replica (`--cluster-slave --cluster-master-id`), causing a silent failure (redis-node8 absent from the cluster). `_redis_scale_up` now waits up to 30 s for the master to be visible in `cluster nodes` before adding the replica. If `--cluster add-node --cluster-slave` still fails, a `MEET + REPLICATE` fallback is attempted. A final check compares `cluster_known_nodes` to the expected count and warns in case of discrepancy
 
 ## [2.1.10] — 2026-05-25
 
 ### Fixed
-- **MinIO crash loop sur scale répété** — `_minio_register_pool` n'avait pas de vérification de doublon ; si le cache de configuration était périmé, le même pool (`start:end`) était ajouté deux fois dans `.minio-pools`, ce qui provoquait un `FATAL Invalid command line arguments: duplicate endpoints found` au démarrage de MinIO. Un dedup par `grep -qF` empêche désormais l'ajout du même pool deux fois
-- **ORIG_MINIO_NODES périmé depuis le cache** — `scale_nodes()` charge le cache puis vérifie le nombre de containers réellement actifs ; si le count réel est supérieur au cache, MINIO_NODES est corrigé avant d'être mémorisé comme ORIG_MINIO_NODES (protection contre les double-registrations)
-- **HAProxy /stats perdu après reboot** — `HAPROXY_STATS` n'était pas écrit dans `.env` (seulement dans le cache transient `/tmp/`) ; après un reboot, la reconstruction depuis `.env` le fixait à `no` par défaut, désactivant la page de statistiques. `HAPROXY_STATS` est désormais persisté dans `.env` et relu dans le chemin de reconstruction
-- **`wait_healthy` bloqué sur containers en crash loop** — des containers en état `restarting` (ex. MinIO avec pool dupliqué) maintenaient `all_healthy=false` indéfiniment jusqu'au timeout. Après 3 redémarrages consécutifs, un container est désormais marqué « crash loop », exclu du wait et un avertissement est affiché ; les autres containers continuent d'être attendus normalement
+- **MinIO crash loop on repeated scale** — `_minio_register_pool` had no duplicate check; if the configuration cache was stale, the same pool (`start:end`) was added twice to `.minio-pools`, causing a `FATAL Invalid command line arguments: duplicate endpoints found` on MinIO startup. A `grep -qF` dedup now prevents adding the same pool twice
+- **Stale `ORIG_MINIO_NODES` from cache** — `scale_nodes()` loads the cache then checks the number of actually active containers; if the real count is higher than the cache, MINIO_NODES is corrected before being stored as ORIG_MINIO_NODES (protection against double-registrations)
+- **HAProxy /stats lost after reboot** — `HAPROXY_STATS` was not written to `.env` (only to the transient cache `/tmp/`); after a reboot, reconstruction from `.env` fixed it to `no` by default, disabling the statistics page. `HAPROXY_STATS` is now persisted to `.env` and reread in the reconstruction path
+- **`wait_healthy` stuck on containers in crash loop** — containers in `restarting` state (e.g. MinIO with duplicated pool) kept `all_healthy=false` indefinitely until timeout. After 3 consecutive restarts, a container is now flagged as "crash loop", excluded from the wait and a warning is displayed; other containers continue to be waited for normally
 
 ## [2.1.9] — 2026-05-25
 
 ### Added
-- **Scaling interactif** — `deploy.sh` propose un menu « Augmenter / réduire les nœuds » lorsqu'une stack est déjà déployée. Toutes les données sont préservées ; seuls les fichiers de configuration sont régénérés
-  - **Nextcloud FPM+nginx** — ajout/suppression de paires de nœuds en hot
-  - **MariaDB Galera** — scale-up via SST automatique, scale-down via `--remove-orphans` (quorum maintenu)
-  - **Redis Cluster** — scale-up avec intégration cluster (`add-node`, `--cluster-slave`, `rebalance`) et scale-down avec migration des slots avant retrait (`reshard`, `del-node`, `rebalance`)
-  - **Collabora CODE** — ajout/suppression de nœuds ; patch binaire `home_mode` automatiquement réappliqué sur les nouveaux nœuds
-  - **Whiteboard** — ajout/suppression de nœuds
-  - **MinIO** — scale-up par expansion de pool (multi-pool MNMD) via `.minio-pools` ; scale-down non supporté par MinIO (renvoi vers `mc admin decommission`)
-- Fonction `gen_minio_server_cmd()` — commande `server` MinIO construite dynamiquement depuis `.minio-pools` (multi-pool transparent)
-- Fichier `.minio-pools` — trace l'historique des pools MinIO (format `start:end` par ligne), utilisé pour reconstruire la commande `server` après un redémarrage
-- `MINIO_MODE` et `MINIO_BYPASS` persistés dans `.env` (étaient uniquement dans le cache transient `/tmp/`) — reconstruits correctement après un reboot sans cache
+- **Interactive scaling** — `deploy.sh` offers a "Scale up / down nodes" menu when a stack is already deployed. All data is preserved; only configuration files are regenerated
+  - **Nextcloud FPM+nginx** — hot addition/removal of node pairs
+  - **MariaDB Galera** — scale-up via automatic SST, scale-down via `--remove-orphans` (quorum maintained)
+  - **Redis Cluster** — scale-up with cluster integration (`add-node`, `--cluster-slave`, `rebalance`) and scale-down with slot migration before removal (`reshard`, `del-node`, `rebalance`)
+  - **Collabora CODE** — node addition/removal; `home_mode` binary patch automatically reapplied on new nodes
+  - **Whiteboard** — node addition/removal
+  - **MinIO** — scale-up via pool expansion (multi-pool MNMD) via `.minio-pools`; scale-down not supported by MinIO (redirected to `mc admin decommission`)
+- `gen_minio_server_cmd()` function — MinIO `server` command built dynamically from `.minio-pools` (transparent multi-pool)
+- `.minio-pools` file — tracks MinIO pool history (`start:end` format per line), used to rebuild the `server` command after a restart
+- `MINIO_MODE` and `MINIO_BYPASS` persisted to `.env` (previously only in the transient cache `/tmp/`) — correctly rebuilt after a reboot without cache
 
 ### Fixed
-- Healthcheck `nextcloud-cron` cassé — `pgrep` absent de l'image `nextcloud:33.0.3-fpm` ; remplacé par `grep -qa cron /proc/1/cmdline`
-- Redis scale-up : `master_id` via grep hostname échouait (`cluster nodes` affiche des IPs, pas des hostnames) — remplacé par `cluster myid` directement sur le nouveau nœud
-- Redis scale-up : slot en état `migrating` bloquait l'ajout de la réplica — ajout d'un `--cluster fix` avant `--cluster rebalance`
-- Redis scale-down : slots non rééquilibrés après retrait (un master héritait de tous les slots) — ajout de `--cluster fix` + `rebalance` en fin de `_redis_scale_down`
-- HAProxy reload après scaling : remplacé `kill -USR2 1` (graceful, nouveaux backends inactifs pour trafic en cours) par `docker compose restart haproxy` (nouveaux backends actifs immédiatement)
+- Broken `nextcloud-cron` healthcheck — `pgrep` absent from the `nextcloud:33.0.3-fpm` image; replaced by `grep -qa cron /proc/1/cmdline`
+- Redis scale-up: `master_id` via hostname grep failed (`cluster nodes` shows IPs, not hostnames) — replaced by `cluster myid` directly on the new node
+- Redis scale-up: slot in `migrating` state blocked replica addition — added `--cluster fix` before `--cluster rebalance`
+- Redis scale-down: slots not rebalanced after removal (one master inherited all slots) — added `--cluster fix` + `rebalance` at the end of `_redis_scale_down`
+- HAProxy reload after scaling: replaced `kill -USR2 1` (graceful, new backends inactive for in-flight traffic) with `docker compose restart haproxy` (new backends immediately active)
 
 ### Changed
-- Menu principal `deploy.sh` : 3 options sur stack existante — mise à jour rapide · scaling · déploiement complet
-- HAProxy reload après scaling : `docker compose restart haproxy` au lieu de `SIGUSR2`
+- `deploy.sh` main menu: 3 options on existing stack — quick update · scaling · full deployment
+- HAProxy reload after scaling: `docker compose restart haproxy` instead of `SIGUSR2`
 
 ---
 
 ## [2.1.8] — 2026-05-24
 
 ### Fixed
-- Ordre de configuration Redis dans `nextcloud-init.sh` corrigé — les seeds `redis.cluster` sont désormais définis **avant** `memcache.distributed` et `memcache.locking`, ce qui élimine les avertissements « Aucun cache mémoire » et « Verrouillage de fichiers transactionnels » dans l'interface d'administration Nextcloud
+- Redis configuration order in `nextcloud-init.sh` fixed — `redis.cluster` seeds are now defined **before** `memcache.distributed` and `memcache.locking`, eliminating "No memory cache" and "Transactional file locking" warnings in the Nextcloud admin interface
 
 ### Changed
-- README : tableau de persistance du patch Collabora mis à jour — le mode mise à jour rapide de `deploy.sh` réapplique le patch automatiquement après pull des images
+- README: Collabora patch persistence table updated — `deploy.sh` quick update mode automatically reapplies the patch after image pull
 
 ---
 
 ## [2.1.7] — 2026-05-24
 
 ### Added
-- Mode mise à jour rapide dans `deploy.sh` — si une stack est déjà active dans `$INSTALL_DIR`, le script propose en priorité de ne mettre à jour que les images (`docker compose pull` + `docker compose up -d`) sans régénérer la configuration, suivi d'un réapplication automatique du patch binaire Collabora et d'une vérification `wait_healthy`
-- Détection automatique du nombre de nœuds depuis les containers en cours si le cache de configuration est absent
+- Quick update mode in `deploy.sh` — if a stack is already active in `$INSTALL_DIR`, the script prioritizes offering to only update images (`docker compose pull` + `docker compose up -d`) without regenerating configuration, followed by automatic reapplication of the Collabora binary patch and a `wait_healthy` check
+- Automatic detection of node count from running containers when the configuration cache is absent
 
 ---
 
 ## [2.1.6] — 2026-05-24
 
 ### Fixed
-- Volumes `letsencrypt` et `certbot_webroot` déclarés `external: true` dans `docker-compose.yml` généré — supprime le warning `volume already exists but was not created by Docker Compose` au démarrage
-- En mode staging, `${COMPOSE_PROJECT_NAME}_letsencrypt` est désormais toujours pré-créé par `gen_certs()` pour que le container certbot de renouvellement trouve son volume
+- `letsencrypt` and `certbot_webroot` volumes declared `external: true` in the generated `docker-compose.yml` — removes the `volume already exists but was not created by Docker Compose` warning on startup
+- In staging mode, `${COMPOSE_PROJECT_NAME}_letsencrypt` is now always pre-created by `gen_certs()` so that the renewal certbot container finds its volume
 
 ### Changed
-- README : persistance du patch binaire Collabora documentée — tableau scénarios crash / `docker restart` / recreate / `down+up` / mise à jour image
+- README: Collabora binary patch persistence documented — scenario table for crash / `docker restart` / recreate / `down+up` / image update
 
 ---
 
 ## [2.1.5] — 2026-05-24
 
 ### Added
-- Patch binaire automatique de `coolwsd` dans `deploy.sh` — fonction `patch_collabora_binary()` qui supprime la limite `home_mode` (20 connexions / 10 documents par nœud) en recherchant dynamiquement le pattern `mov edx,20 / mov eax,10` dans le binaire et en le remplaçant par `INT_MAX` sur l'ensemble des nœuds Collabora configurés
+- Automatic binary patch of `coolwsd` in `deploy.sh` — `patch_collabora_binary()` function that removes the `home_mode` limit (20 connections / 10 documents per node) by dynamically searching for the `mov edx,20 / mov eax,10` pattern in the binary and replacing it with `INT_MAX` across all configured Collabora nodes
 
 ### Changed
-- Collabora ne limite plus le nombre de connexions et documents simultanés — le patch est appliqué automatiquement après `docker compose up -d`, sur tous les nœuds (`COLLAB_NODES`), sans toucher à `extra_params` ni à `home_mode.enable=true`
-- Estimation de charge `deploy.sh` : la ligne `home_mode N×20 / N×10` est remplacée par `connexions/documents illimités (patch binaire home_mode)`
-- Version du déployeur : v2.1.5
-- README : section Collabora CODE mise à jour pour refléter la suppression de la limite
+- Collabora no longer limits the number of simultaneous connections and documents — the patch is applied automatically after `docker compose up -d`, on all nodes (`COLLAB_NODES`), without touching `extra_params` or `home_mode.enable=true`
+- `deploy.sh` load estimation: the `home_mode N×20 / N×10` line is replaced by `unlimited connections/documents (home_mode binary patch)`
+- Deployer version: v2.1.5
+- README: Collabora CODE section updated to reflect limit removal
 
 ---
 
 ## [2.1.4] — 2026-05-22
 
 ### Fixed
-- Incohérence du nom de projet Docker Compose corrigée dans `deploy.sh` (le nom généré pouvait diverger selon le répertoire de travail)
+- Docker Compose project name inconsistency fixed in `deploy.sh` (the generated name could diverge depending on the working directory)
 
 ---
 
 ## [2.1.3] — 2026-05-22
 
 ### Fixed
-- `--post-hook` certbot cassé par une indentation YAML incorrecte dans le `docker-compose.yml` généré — le certificat HAProxy n'était pas reconstruit après renouvellement
+- certbot `--post-hook` broken by incorrect YAML indentation in the generated `docker-compose.yml` — the HAProxy certificate was not rebuilt after renewal
 
 ---
 
 ## [2.1.2] — 2026-05-22
 
 ### Added
-- Politique de divulgation responsable (`SECURITY.md`)
-- Monitoring des nœuds FPM Nextcloud dans la page de statistiques HAProxy (`listen nextcloud-fpm`)
-- Estimations Collabora `home_mode` (20 connexions / 10 documents par nœud) affichées dans le récapitulatif `deploy.sh`
+- Responsible disclosure policy (`SECURITY.md`)
+- Nextcloud FPM node monitoring in the HAProxy statistics page (`listen nextcloud-fpm`)
+- Collabora `home_mode` estimates (20 connections / 10 documents per node) displayed in the `deploy.sh` summary
 
 ### Fixed
-- `no option forwardfor` invalide sur `listen nextcloud-fpm` en mode TCP supprimé — erreur de démarrage HAProxy
-- Blocage au clonage Git dans `deploy.sh` résolu (conflit stdin/TTY lors du clone non-interactif)
-- OPcache preload supprimé — provoquait une `fatal error` au démarrage de Nextcloud
+- Invalid `no option forwardfor` on TCP-mode `listen nextcloud-fpm` removed — HAProxy startup error
+- Git clone blocking in `deploy.sh` resolved (stdin/TTY conflict during non-interactive clone)
+- OPcache preload removed — caused a `fatal error` on Nextcloud startup
 
 ### Changed
-- Badges README migrés de Simple Icons CDN (bloqué par le proxy camo de GitHub) vers shields.io `for-the-badge`
+- README badges migrated from Simple Icons CDN (blocked by GitHub's camo proxy) to shields.io `for-the-badge`
 
 ---
 
 ## [2.1.1] — 2026-05-21
 
 ### Added
-- Console web MinIO optionnelle accessible via `/s3-console` (image `ghcr.io/georgmangold/console`) — activable dans `deploy.sh`, sans port supplémentaire exposé
-- Thème de connexion MAXSCALE graphite : CSS personnalisé (`nxt-custom.css`), logo et fond d'écran
-- Estimation de capacité de charge affichée après le récapitulatif de configuration (modèle calé sur les mesures réelles)
-- Benchmarks de performance et tables de dimensionnement par profil d'usage dans le README
-- Résultats du test de charge PME 500 utilisateurs quotidiens (k6 v0.55, 34 VUs, 3 911 requêtes, 0 erreur 5xx)
+- Optional MinIO web console accessible via `/s3-console` (image `ghcr.io/georgmangold/console`) — enabled in `deploy.sh`, no additional port exposed
+- MAXSCALE graphite login theme: custom CSS (`nxt-custom.css`), logo and wallpaper
+- Load capacity estimation displayed after deployment summary (model calibrated on real measurements)
+- Performance benchmarks and sizing tables by usage profile in README
+- SME load test results 500 daily users (k6 v0.55, 34 VUs, 3,911 requests, 0 5xx errors)
 
 ### Fixed
-- Vérification du cluster Redis robustifiée — `fsockopen` au lieu de `OC::$server`, timeouts explicites, non-bloquant
-- Expiration JWT Whiteboard portée à 24 h (était 15 min — causait des déconnexions en session longue)
-- Gestion des fichiers stub MinIO 1 octet dans `WhiteboardContentService` (`patch_wb.py`)
-- Filtre WebDAV HAProxy étendu : `PUT` sur `/apps/whiteboard`, `PUT`/`DELETE` sur `/s3-console`
-- Redirection automatique `/s3-console` et `/s3-console/` vers `/s3-console/login`
-- Strip du préfixe `/s3-console` dans HAProxy avant forward vers `minio-console:9090` — corrigeait les erreurs MIME sur les assets React
-- Détection du cluster Redis corrigée avec la clé littérale `redis.cluster` dans `occ`
-- Crash de `nextcloud-setup` sur `Permission denied` lors de la purge de `nextcloud.log`
-- Bootstrap Galera : entrypoint compatible `mariadbd`, double-mysqld et syntaxe YAML `&&` corrigés
-- Alignement UTF-8 des bandeaux et résumés dans `deploy.sh` (caractères multi-octets)
-- Purge des cron orphelins après désactivation d'application dans `nextcloud-init.sh`
-- Détection d'application par `app:enable` (idempotent) au lieu du grep fragile sur `app:list`
-- Quatre ajustements de configuration Nextcloud appliqués automatiquement (log level, OPcache, etc.)
+- Redis cluster check made robust — `fsockopen` instead of `OC::$server`, explicit timeouts, non-blocking
+- Whiteboard JWT expiry extended to 24 h (was 15 min — caused disconnections in long sessions)
+- Handling of MinIO 1-byte stub files in `WhiteboardContentService` (`patch_wb.py`)
+- HAProxy WebDAV filter extended: `PUT` on `/apps/whiteboard`, `PUT`/`DELETE` on `/s3-console`
+- Automatic redirect of `/s3-console` and `/s3-console/` to `/s3-console/login`
+- `/s3-console` prefix stripped in HAProxy before forwarding to `minio-console:9090` — fixed MIME errors on React assets
+- Redis cluster detection fixed with literal key `redis.cluster` in `occ`
+- `nextcloud-setup` crash on `Permission denied` when purging `nextcloud.log`
+- Galera bootstrap: `mariadbd`-compatible entrypoint, double-mysqld and YAML `&&` syntax fixed
+- UTF-8 alignment of banners and summaries in `deploy.sh` (multi-byte characters)
+- Orphan cron job purge after app disable in `nextcloud-init.sh`
+- App detection via `app:enable` (idempotent) instead of fragile grep on `app:list`
+- Four Nextcloud configuration adjustments applied automatically (log level, OPcache, etc.)
 
 ### Changed
-- 6 améliorations de fiabilité non-destructives : OPcache, healthchecks Collabora, seeds Redis, autoheal HC
-- Largeur du résumé de déploiement calculée dynamiquement (s'adapte à la ligne la plus longue)
-- Couleur de marque Nextcloud alignée sur la palette graphite MAXSCALE
+- 6 non-destructive reliability improvements: OPcache, Collabora healthchecks, Redis seeds, autoheal HC
+- Deployment summary width calculated dynamically (adapts to the longest line)
+- Nextcloud brand color aligned with MAXSCALE graphite palette
 
 ---
 
 ## [2.1.0] — 2026-05-20
 
-Version majeure — refonte complète de l'architecture vers une stack FPM + MinIO.
+Major version — complete architecture redesign towards an FPM + MinIO stack.
 
 ### Added
-- **Nextcloud PHP-FPM** avec nginx en proxy FastCGI (remplacement du mode Apache)
-- **MinIO S3 distribué** en erasure coding (remplacement de RustFS) — versioning de bucket activé automatiquement
-- **Redis Cluster** distribué (≥ 6 nœuds masters + réplicas)
-- **Collabora CODE** — édition bureautique collaborative (Writer, Calc, Impress) en `home_mode`
-- **Whiteboard** — tableau blanc collaboratif temps réel (WebSocket + Redis Streams)
-- Service `galera-autoheal` — redémarrage automatique des nœuds Galera hors-sync
-- Service `nextcloud-perms` — correction des permissions sur les volumes avant installation
-- Service `nextcloud-setup` — auto-configuration post-installation (protégé par sentinel, one-shot)
-- `nextcloud-custom.config.php` monté en `:ro` dans tous les conteneurs — corrige `.well-known/caldav` et `.well-known/carddav`, force HTTPS permanent
-- Validation de la configuration HAProxy avant déploiement (dry-run)
-- Healthcheck `wsrep_ready` sur les nœuds Galera + `safe_to_bootstrap` géré automatiquement par `galera-bootstrap.sh`
-- Silençage des health checks dans les logs HAProxy (`/status.php`, `/robots.txt`, `/favicon.ico`) — ~80 % de réduction du bruit
-- Blocage de la console d'administration Collabora via HAProxy (HTTP 403)
-- Filtrage des méthodes WebDAV restreint aux chemins API (`/remote.php`, `/public.php`, `/ocs`)
-- Blocage des user-agents scanners (sqlmap, nikto, nmap, masscan, zgrab) et des paths de scan courants
-- Protection anti-Slowloris (abandon de requête après 10 s)
-- HSTS 2 ans avec `includeSubDomains` et `preload`
-- TLS 1.2 minimum, TLS 1.3 préféré, `no-tls-tickets` (Perfect Forward Secrecy)
+- **Nextcloud PHP-FPM** with nginx as FastCGI proxy (replacement of Apache mode)
+- **Distributed MinIO S3** with erasure coding (replacement of RustFS) — bucket versioning enabled automatically
+- **Distributed Redis Cluster** (≥ 6 master + replica nodes)
+- **Collabora CODE** — collaborative office editing (Writer, Calc, Impress) in `home_mode`
+- **Whiteboard** — real-time collaborative whiteboard (WebSocket + Redis Streams)
+- `galera-autoheal` service — automatic restart of out-of-sync Galera nodes
+- `nextcloud-perms` service — volume permission fix before installation
+- `nextcloud-setup` service — post-installation auto-configuration (sentinel-protected, one-shot)
+- `nextcloud-custom.config.php` mounted `:ro` in all containers — fixes `.well-known/caldav` and `.well-known/carddav`, enforces permanent HTTPS
+- HAProxy configuration validation before deployment (dry-run)
+- `wsrep_ready` healthcheck on Galera nodes + `safe_to_bootstrap` automatically managed by `galera-bootstrap.sh`
+- Health check silencing in HAProxy logs (`/status.php`, `/robots.txt`, `/favicon.ico`) — ~80% noise reduction
+- Collabora administration console blocked via HAProxy (HTTP 403)
+- WebDAV method filtering restricted to API paths (`/remote.php`, `/public.php`, `/ocs`)
+- Scanner user-agents blocked (sqlmap, nikto, nmap, masscan, zgrab) and common scan paths
+- Anti-Slowloris protection (request dropped after 10 s)
+- HSTS 2 years with `includeSubDomains` and `preload`
+- TLS 1.2 minimum, TLS 1.3 preferred, `no-tls-tickets` (Perfect Forward Secrecy)
 
 ### Fixed
-- Types MIME `mjs`, en-tête `X-Robots-Tag`, conteneur `nextcloud-cron` absent
-- CSP `unsafe-inline` et types MIME JS pour Collabora CODE
-- Règle MIME Collabora déplacée après la définition ACL (le parsing HAProxy est séquentiel)
-- `IFS` word-split sur l'installation des paquets dans `deploy.sh`
-- Variable `REDIS_NODES` superflue supprimée de l'environnement
+- `mjs` MIME types, `X-Robots-Tag` header, missing `nextcloud-cron` container
+- CSP `unsafe-inline` and JS MIME types for Collabora CODE
+- Collabora MIME rule moved after ACL definition (HAProxy parsing is sequential)
+- `IFS` word-split on package installation in `deploy.sh`
+- Superfluous `REDIS_NODES` variable removed from environment
 
 ---
 
