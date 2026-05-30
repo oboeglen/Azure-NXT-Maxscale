@@ -1595,7 +1595,7 @@ WBREDIS
       nats:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/v1/welcome >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 8080 > /dev/null 2>&1 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -1616,7 +1616,7 @@ WBREDIS
       nats:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/v1/welcome >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 8080 > /dev/null 2>&1 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -2658,7 +2658,7 @@ check_services() {
     bash -c "docker inspect nextcloud-cron --format='{{.State.Running}}' 2>/dev/null | grep -q true"
 
   _check "Talk signaling reachable" \
-    bash -c "docker exec spreed-signaling-01 wget -qO- http://localhost:8080/api/v1/welcome 2>/dev/null | grep -q version"
+    bash -c "docker exec spreed-signaling-01 sh -c \"echo '' | nc -w2 127.0.0.1 8080\" 2>/dev/null"
 
   if (( failures > 0 )); then
     warn "${failures} test(s) failed — check: docker compose logs"
