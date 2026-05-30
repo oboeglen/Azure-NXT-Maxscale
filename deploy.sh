@@ -520,6 +520,154 @@ ask_nodes() {
   ask_int "MinIO — disks per node"    "4" is_positive_int "Integer ≥ 1 required"                                       MINIO_DISKS
 }
 
+# ─── [MINIO] Disk wizard helpers ─────────────────────────────────────────────
+
+# Scans available block devices (excludes root disk, swap, loop).
+# Populates globals: DISK_COUNT, DISK_NAMES[], DISK_SIZES[], DISK_FSTYPES[],
+#                    DISK_MOUNTS[], DISK_MODELS[]
+_scan_available_disks() {
+  DISK_COUNT=0
+  DISK_NAMES=(); DISK_SIZES=(); DISK_FSTYPES=(); DISK_MOUNTS=(); DISK_MODELS=()
+
+  # Identify root disk to exclude it and all its partitions
+  local root_source root_disk
+  root_source=$(findmnt -n -o SOURCE / 2>/dev/null || df / 2>/dev/null | awk 'NR==2{print $1}')
+  root_disk=$(lsblk -no PKNAME "$root_source" 2>/dev/null | head -1 | tr -d '[:space:]')
+  [[ -z "$root_disk" ]] && root_disk=$(basename "$root_source" | sed 's/[0-9]*$//')
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    local name size fstype mount model
+    name=$(  awk '{print $1}' <<< "$line")
+    size=$(  awk '{print $2}' <<< "$line")
+    fstype=$(awk '{print $3}' <<< "$line")
+    mount=$( awk '{print $4}' <<< "$line")
+    model=$(awk '{for(i=5;i<=NF;i++) printf "%s%s",$i,(i<NF?" ":""); print ""}' <<< "$line")
+
+    # Skip root disk and its children
+    [[ -n "$root_disk" && "$name" == "/dev/${root_disk}"* ]] && continue
+    # Skip swap, loop, critical mounts
+    [[ "$fstype" == "swap" ]] && continue
+    [[ "$mount" == "/" || "$mount" =~ ^/boot ]] && continue
+    [[ "$name" =~ /loop ]] && continue
+
+    # Try blkid for filesystem type if lsblk returned nothing
+    if [[ -z "$fstype" ]]; then
+      fstype=$(blkid -s TYPE -o value "$name" 2>/dev/null || true)
+    fi
+
+    DISK_NAMES[$DISK_COUNT]="$name"
+    DISK_SIZES[$DISK_COUNT]="$size"
+    DISK_FSTYPES[$DISK_COUNT]="${fstype:--}"
+    DISK_MOUNTS[$DISK_COUNT]="${mount:--}"
+    DISK_MODELS[$DISK_COUNT]="${model:--}"
+    (( DISK_COUNT++ )) || true
+  done < <(lsblk -pno NAME,SIZE,FSTYPE,MOUNTPOINT,MODEL 2>/dev/null)
+}
+
+# Prints the candidate disk table
+_show_disk_table() {
+  echo ""
+  printf "  ${C_WHITE}%-5s  %-18s  %-7s  %-8s  %-22s  %s${C_RESET}\n" \
+    "No." "Device" "Size" "FS" "Mountpoint" "Model"
+  printf "  %-5s  %-18s  %-7s  %-8s  %-22s  %s\n" \
+    "---" "------" "----" "--" "----------" "-----"
+  local i
+  for i in $(seq 0 $(( DISK_COUNT - 1 ))); do
+    local fs="${DISK_FSTYPES[$i]}" mnt="${DISK_MOUNTS[$i]}" col="$C_GRAY"
+    [[ "$fs"  != "-" ]] && col="$C_YELLOW"
+    [[ "$mnt" != "-" ]] && col="$C_BGREEN"
+    printf "  ${C_CYAN}[%-2d]${C_RESET}  %-18s  %-7s  ${col}%-8s${C_RESET}  %-22s  %s\n" \
+      $(( i + 1 )) "${DISK_NAMES[$i]}" "${DISK_SIZES[$i]}" \
+      "$fs" "$mnt" "${DISK_MODELS[$i]}"
+  done
+  echo ""
+}
+
+# Checks / formats / mounts a disk and adds it to fstab if needed.
+# Args: dev mount_path current_fs preferred_fs
+_prepare_minio_disk() {
+  local dev="$1" mount_path="$2" current_fs="$3" preferred_fs="$4"
+
+  # Already mounted at target — nothing to do
+  if mountpoint -q "$mount_path" 2>/dev/null; then
+    info "$dev already mounted at $mount_path — using as-is"
+    return 0
+  fi
+
+  local chosen_fs="$preferred_fs"
+
+  # ── Format if no filesystem ──────────────────────────────────────────────
+  if [[ "$current_fs" == "-" || -z "$current_fs" ]]; then
+    echo ""
+    warn "No filesystem detected on $dev"
+    local alt_fs; [[ "$preferred_fs" == "xfs" ]] && alt_fs="ext4" || alt_fs="xfs"
+    echo -e "  ${C_WHITE}Filesystem to create on ${dev}?${C_RESET}"
+    echo -e "  ${C_CYAN}[1]${C_RESET} ${preferred_fs^^}  ${C_GRAY}(default — recommended for object storage)${C_RESET}"
+    echo -e "  ${C_CYAN}[2]${C_RESET} ${alt_fs^^}"
+    echo ""
+    prompt_input "Choice" "1"
+    [[ "$REPLY" == "2" ]] && chosen_fs="$alt_fs"
+    echo ""
+    warn "⚠  This will PERMANENTLY erase all data on ${dev}."
+    prompt_yn "Format ${dev} as ${chosen_fs^^}?" "N" || die "Format cancelled — aborting"
+
+    local label; label="minio-$(basename "$dev")"
+    start_spinner "Formatting $dev as ${chosen_fs^^}..."
+    if [[ "$chosen_fs" == "xfs" ]]; then
+      mkfs.xfs -f -L "$label" "$dev" &>/dev/null \
+        || { stop_spinner; die "mkfs.xfs failed on $dev"; }
+    else
+      mkfs.ext4 -F -L "$label" "$dev" &>/dev/null \
+        || { stop_spinner; die "mkfs.ext4 failed on $dev"; }
+    fi
+    stop_spinner "Formatted: $dev → ${chosen_fs^^}"
+  else
+    chosen_fs="$current_fs"
+    info "Existing filesystem on $dev: ${current_fs^^} — skipping format"
+  fi
+
+  # ── Create mount point ───────────────────────────────────────────────────
+  mkdir -p "$mount_path"
+
+  # ── Check / update /etc/fstab ────────────────────────────────────────────
+  local uuid
+  uuid=$(blkid -s UUID -o value "$dev" 2>/dev/null || true)
+  local in_fstab=false
+  if [[ -n "$uuid" ]] && grep -qsE "UUID=${uuid}" /etc/fstab 2>/dev/null; then
+    in_fstab=true
+    info "$dev (UUID=${uuid:0:8}…) already in /etc/fstab"
+  elif grep -qsE "^${dev}[[:space:]]" /etc/fstab 2>/dev/null; then
+    in_fstab=true; info "$dev already in /etc/fstab by device path"
+  elif grep -qsE "[[:space:]]${mount_path}[[:space:]]" /etc/fstab 2>/dev/null; then
+    in_fstab=true; info "$mount_path already in /etc/fstab"
+  fi
+
+  if ! $in_fstab; then
+    echo ""
+    if prompt_yn "Add $dev to /etc/fstab (auto-mount on reboot)?" "Y"; then
+      local entry
+      if [[ -n "$uuid" ]]; then
+        entry="UUID=${uuid}  ${mount_path}  ${chosen_fs}  defaults,noatime,nodiratime  0 2"
+      else
+        entry="${dev}  ${mount_path}  ${chosen_fs}  defaults,noatime,nodiratime  0 2"
+      fi
+      echo "$entry" >> /etc/fstab
+      info "Added to /etc/fstab"
+    fi
+  fi
+
+  # ── Mount ────────────────────────────────────────────────────────────────
+  start_spinner "Mounting $dev at $mount_path..."
+  if mount "$mount_path" 2>/dev/null \
+      || mount -t "$chosen_fs" "$dev" "$mount_path" 2>/dev/null; then
+    stop_spinner "Mounted: $dev → $mount_path"
+  else
+    stop_spinner
+    die "Failed to mount $dev at $mount_path — check filesystem and /etc/fstab entry"
+  fi
+}
+
 # --- ask_minio ---
 minio_fault_tolerance() {
   local nodes="$1" disks="$2"
@@ -544,8 +692,8 @@ ask_minio() {
   echo ""
   echo -e "  ${C_WHITE}How to configure MinIO disks?${C_RESET}"
   echo -e "  ${C_CYAN}[1]${C_RESET} Single-server test  — /data/minio/ (directories created automatically)"
-  echo -e "  ${C_CYAN}[2]${C_RESET} Manual paths        — enter each path manually"
-  echo -e "  ${C_CYAN}[3]${C_RESET} Auto-detection      — scan mounted disks"
+  echo -e "  ${C_CYAN}[2]${C_RESET} Manual paths        — enter mount points manually (disks already prepared)"
+  echo -e "  ${C_CYAN}[3]${C_RESET} Disk wizard         — detect disks, select, format and mount automatically"
   echo ""
 
   local choice
@@ -595,35 +743,86 @@ ask_minio() {
       ;;
     3)
       MINIO_MODE="auto"
-      box "Recommended disk format for MinIO" \
-        "Filesystem : XFS  (best for object storage — large sequential I/O)" \
-        "             ext4 also supported, but XFS recommended" \
-        "" \
-        "Format     : mkfs.xfs -f -L minio-node1-disk1 /dev/sdX" \
-        "Mount opts : noatime,nodiratime  (avoids access-time write overhead)" \
-        "" \
-        "/etc/fstab : /dev/sdX  /mnt/node1-disk1  xfs  defaults,noatime,nodiratime  0 2" \
-        "" \
-        "Rules      : 1 physical disk per path — no RAID (MinIO handles erasure coding)" \
-        "             Avoid bind-mounts, LVM stripes, or shared NAS mounts" \
-        "             All data disks must be the same size for optimal erasure coding"
-      echo ""
-      step "Detected available disks"
-      df -h --output=source,target,size 2>/dev/null \
-        | grep -vE '^(tmpfs|udev|/dev/loop|Filesystem|/dev/sr)' \
-        | grep -v ' /$' | grep -v '/boot' \
-        | tail -n +2 | nl -ba
-      echo ""
-      warn "Enter paths from the mount points listed above"
-      local n d
-      for n in $(seq 1 "$MINIO_NODES"); do
-        prompt_input "Node ${n} — metadata path" "/data/minio/node${n}"
-        MINIO_PATHS["${n}_path"]="$REPLY"
-        for d in $(seq 1 "$MINIO_DISKS"); do
-          prompt_input "Node ${n} — Disk ${d}" ""
-          MINIO_PATHS["${n}_${d}"]="$REPLY"
+      step "Scanning block devices..."
+      _scan_available_disks
+
+      if (( DISK_COUNT == 0 )); then
+        warn "No candidate disk found — falling back to manual path entry"
+        MINIO_MODE="manual"
+        local n d
+        for n in $(seq 1 "$MINIO_NODES"); do
+          prompt_input "Node ${n} — metadata path" "/data/minio/node${n}"
+          MINIO_PATHS["${n}_path"]="$REPLY"
+          for d in $(seq 1 "$MINIO_DISKS"); do
+            prompt_input "Node ${n} — Disk ${d}" "/mnt/node${n}-disk${d}"
+            MINIO_PATHS["${n}_${d}"]="$REPLY"
+          done
         done
-      done
+      else
+        info "${DISK_COUNT} disk(s)/partition(s) found"
+        _show_disk_table
+
+        # Legend
+        echo -e "  ${C_BGREEN}Green${C_RESET} = already mounted   ${C_YELLOW}Yellow${C_RESET} = formatted but not mounted   ${C_GRAY}Gray${C_RESET} = no filesystem"
+        echo ""
+
+        # Global filesystem preference for unformatted disks
+        local preferred_fs="xfs"
+        echo -e "  ${C_WHITE}Default filesystem for unformatted disks?${C_RESET}"
+        echo -e "  ${C_CYAN}[1]${C_RESET} XFS   ${C_GRAY}(recommended — optimal for object storage, large sequential I/O)${C_RESET}"
+        echo -e "  ${C_CYAN}[2]${C_RESET} EXT4  ${C_GRAY}(more universal, slightly lower throughput)${C_RESET}"
+        echo ""
+        prompt_input "Choice" "1"
+        [[ "$REPLY" == "2" ]] && preferred_fs="ext4"
+        info "Default filesystem: ${preferred_fs^^}"
+        echo ""
+
+        local total_slots=$(( MINIO_NODES * MINIO_DISKS ))
+        info "Assign ${total_slots} disk(s) — ${MINIO_NODES} nodes × ${MINIO_DISKS} disks/node"
+        echo ""
+
+        # Track already-selected devices to warn on duplicates
+        local -a _selected_devs=()
+
+        local n d ci
+        for n in $(seq 1 "$MINIO_NODES"); do
+          for d in $(seq 1 "$MINIO_DISKS"); do
+            echo ""
+            step "Assign: Node ${n} — Disk ${d}"
+            _show_disk_table
+
+            while true; do
+              prompt_input "Select disk [1-${DISK_COUNT}]" ""
+              if [[ "$REPLY" =~ ^[0-9]+$ ]] && (( REPLY >= 1 && REPLY <= DISK_COUNT )); then
+                ci=$(( REPLY - 1 ))
+                # Warn on duplicate selection (allowed but unusual)
+                if [[ " ${_selected_devs[*]} " == *" ${DISK_NAMES[$ci]} "* ]]; then
+                  warn "${DISK_NAMES[$ci]} is already assigned to another slot"
+                  prompt_yn "Use it anyway?" "N" || continue
+                fi
+                break
+              fi
+              error "Enter a number between 1 and ${DISK_COUNT}"
+            done
+
+            _selected_devs+=("${DISK_NAMES[$ci]}")
+
+            # Determine mount point (use existing if already mounted)
+            local target_mount="/mnt/minio-node${n}-disk${d}"
+            if [[ "${DISK_MOUNTS[$ci]}" != "-" && -n "${DISK_MOUNTS[$ci]}" ]]; then
+              target_mount="${DISK_MOUNTS[$ci]}"
+            fi
+
+            _prepare_minio_disk \
+              "${DISK_NAMES[$ci]}" "$target_mount" \
+              "${DISK_FSTYPES[$ci]}" "$preferred_fs"
+
+            MINIO_PATHS["${n}_${d}"]="$target_mount"
+          done
+          # Metadata path = mount point of first disk of this node
+          MINIO_PATHS["${n}_path"]="${MINIO_PATHS["${n}_1"]}"
+        done
+      fi
       ;;
   esac
 
