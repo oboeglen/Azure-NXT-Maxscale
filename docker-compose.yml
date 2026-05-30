@@ -982,7 +982,7 @@ services:
   # coturn: TURN/STUN server for WebRTC NAT traversal (opt-in, exposes UDP 3478)
   # ===========================================================================
   nats:
-    image: nats:2-alpine
+    image: nats:2.10-alpine
     container_name: nats
     restart: always
     expose:
@@ -1040,29 +1040,32 @@ services:
       start_period: 15s
 
   coturn:
-    image: coturn/coturn:latest
+    image: coturn/coturn:4.6
     container_name: coturn
     restart: always
-    ports:
-      - "3478:3478/udp"
-      - "3478:3478/tcp"
+    # network_mode: host — required for TURN relay UDP (port range 49152-65535).
+    # Bridge networking cannot map thousands of relay ports. Linux VPS only.
+    network_mode: host
     entrypoint: ["/bin/sh", "-c"]
     command: >
       "EXT_IP=$$(curl -sf --max-time 5 https://api.ipify.org || hostname -I | awk '{print $$1}');
-       exec turnserver -n --log-file=stdout
+       exec turnserver
          --external-ip=$$EXT_IP
          --listening-ip=0.0.0.0
          --listening-port=3478
          --use-auth-secret
          --static-auth-secret=$$COTURN_SECRET
          --realm=$$TALK_DOMAIN
+         --stale-nonce=600
+         --fingerprint
+         --no-software-attribute
+         --no-multicast-peers
          --no-tls
-         --no-dtls"
+         --no-dtls
+         --log-file=stdout"
     environment:
       - COTURN_SECRET=${COTURN_SECRET}
       - TALK_DOMAIN=${TALK_DOMAIN}
-    networks:
-      - talk-net
 
 # =============================================================================
 # Réseaux — Isolation par service, HAProxy sur tous les réseaux

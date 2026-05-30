@@ -25,9 +25,9 @@ IMG_MINIO_MC="minio/mc:RELEASE.2025-08-13T08-35-41Z"
 IMG_MINIO_CONSOLE="ghcr.io/georgmangold/console:v1.9.1"
 IMG_COLLABORA="collabora/code:25.04.9.4.1"
 IMG_WHITEBOARD="ghcr.io/nextcloud-releases/whiteboard:v1.5.8"
-IMG_NATS="nats:2-alpine"
+IMG_NATS="nats:2.10-alpine"
 IMG_SPREED_SIGNALING="strukturag/nextcloud-spreed-signaling:latest"
-IMG_COTURN="coturn/coturn:latest"
+IMG_COTURN="coturn/coturn:4.6"
 IMG_HAPROXY="haproxy:2.8-alpine"
 IMG_NGINX="nginx:1.27-alpine"
 IMG_REDIS="redis:7.4-alpine"
@@ -873,7 +873,9 @@ ask_talk() {
   echo ""
   if prompt_yn "Deploy coturn TURN server?" "N"; then
     COTURN_ENABLED="yes"
-    info "coturn enabled — will expose UDP+TCP port 3478"
+    warn "coturn uses network_mode: host (Linux VPS only)"
+    warn "Open UDP+TCP port 3478 in your cloud firewall / security group"
+    info "coturn enabled"
   else
     COTURN_ENABLED="no"
     info "coturn disabled — Talk will use public STUN (stun.nextcloud.com:443)"
@@ -1858,26 +1860,29 @@ TALKBASE
     image: ${IMG_COTURN}
     container_name: coturn
     restart: always
-    ports:
-      - "3478:3478/udp"
-      - "3478:3478/tcp"
+    # network_mode: host — required for TURN relay UDP (port range 49152-65535).
+    # Bridge networking cannot map thousands of relay ports. Linux VPS only.
+    network_mode: host
     entrypoint: ["/bin/sh", "-c"]
     command: >
       "EXT_IP=\$\$(curl -sf --max-time 5 https://api.ipify.org || hostname -I | awk '{print \$\$1}');
-       exec turnserver -n --log-file=stdout
+       exec turnserver
          --external-ip=\$\$EXT_IP
          --listening-ip=0.0.0.0
          --listening-port=3478
          --use-auth-secret
          --static-auth-secret=\$\$COTURN_SECRET
          --realm=\$\$TALK_DOMAIN
+         --stale-nonce=600
+         --fingerprint
+         --no-software-attribute
+         --no-multicast-peers
          --no-tls
-         --no-dtls"
+         --no-dtls
+         --log-file=stdout"
     environment:
       - COTURN_SECRET=\${COTURN_SECRET}
       - TALK_DOMAIN=\${TALK_DOMAIN}
-    networks:
-      - talk-net
 COTURNBLOCK
   fi
 
