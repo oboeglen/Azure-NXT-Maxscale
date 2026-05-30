@@ -20,6 +20,7 @@ sed \
   -e "s|\${NEXTCLOUD_DOMAIN}|${NEXTCLOUD_DOMAIN:?NEXTCLOUD_DOMAIN non défini}|g" \
   -e "s|\${COLLABORA_DOMAIN}|${COLLABORA_DOMAIN:?COLLABORA_DOMAIN non défini}|g" \
   -e "s|\${WHITEBOARD_DOMAIN}|${WHITEBOARD_DOMAIN:?WHITEBOARD_DOMAIN non défini}|g" \
+  -e "s|\${TALK_DOMAIN}|${TALK_DOMAIN:?TALK_DOMAIN non défini}|g" \
   -e "s|\${HAPROXY_STATS_PASSWORD}|${HAPROXY_STATS_PASSWORD:-changeme}|g" \
   "${TEMPLATE}" > "${OUTPUT}"
 
@@ -27,5 +28,6 @@ echo "[entrypoint] Configuration générée pour :"
 echo "  Nextcloud  : ${NEXTCLOUD_DOMAIN}"
 echo "  Collabora  : ${COLLABORA_DOMAIN}"
 echo "  Whiteboard : ${WHITEBOARD_DOMAIN}"
+echo "  Talk       : ${TALK_DOMAIN}"
 
 exec haproxy -f "${OUTPUT}" "$@"

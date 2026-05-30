@@ -43,6 +43,7 @@ services:
       - NEXTCLOUD_DOMAIN=${NEXTCLOUD_DOMAIN}
       - COLLABORA_DOMAIN=${COLLABORA_DOMAIN}
       - WHITEBOARD_DOMAIN=${WHITEBOARD_DOMAIN}
+      - TALK_DOMAIN=${TALK_DOMAIN}
       - HAPROXY_STATS_PASSWORD=${HAPROXY_STATS_PASSWORD}
     networks:
       next-net:
@@ -60,6 +61,7 @@ services:
         ipv4_address: 172.100.0.10
         aliases:
           - "${NEXTCLOUD_DOMAIN}"
+      talk-net: {}
     healthcheck:
       test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 80 > /dev/null 2>&1 || exit 1"]
       interval: 15s
@@ -95,6 +97,9 @@ services:
       - NEXTCLOUD_DOMAIN=${NEXTCLOUD_DOMAIN}
       - COLLABORA_DOMAIN=${COLLABORA_DOMAIN}
       - WHITEBOARD_DOMAIN=${WHITEBOARD_DOMAIN}
+      - TALK_DOMAIN=${TALK_DOMAIN}
+      - TALK_SIGNALING_SECRET=${TALK_SIGNALING_SECRET}
+      - COTURN_SECRET=${COTURN_SECRET}
       - WHITEBOARD_JWT_SECRET=${WHITEBOARD_JWT_SECRET}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
@@ -970,6 +975,95 @@ services:
       timeout: 5s
       retries: 5
 
+  # ===========================================================================
+  # Talk — Standalone signaling backend (nextcloud-spreed-signaling)
+  # NATS: internal message broker between signaling nodes
+  # spreed-signaling: WebSocket signaling server (2 nodes, load-balanced by HAProxy)
+  # coturn: TURN/STUN server for WebRTC NAT traversal (opt-in, exposes UDP 3478)
+  # ===========================================================================
+  nats:
+    image: nats:2-alpine
+    container_name: nats
+    restart: always
+    expose:
+      - "4222"
+    command: ["-m", "8222"]
+    networks:
+      - talk-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8222/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  spreed-signaling-01:
+    image: strukturag/nextcloud-spreed-signaling:latest
+    container_name: spreed-signaling-01
+    restart: always
+    expose:
+      - "8080"
+    volumes:
+      - ./signaling.conf:/config/server.conf:ro
+    networks:
+      - talk-net
+      - next-net
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/v1/welcome >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  spreed-signaling-02:
+    image: strukturag/nextcloud-spreed-signaling:latest
+    container_name: spreed-signaling-02
+    restart: always
+    expose:
+      - "8080"
+    volumes:
+      - ./signaling.conf:/config/server.conf:ro
+    networks:
+      - talk-net
+      - next-net
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/v1/welcome >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: coturn
+    restart: always
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "EXT_IP=$$(curl -sf --max-time 5 https://api.ipify.org || hostname -I | awk '{print $$1}');
+       exec turnserver -n --log-file=stdout
+         --external-ip=$$EXT_IP
+         --listening-ip=0.0.0.0
+         --listening-port=3478
+         --use-auth-secret
+         --static-auth-secret=$$COTURN_SECRET
+         --realm=$$TALK_DOMAIN
+         --no-tls
+         --no-dtls"
+    environment:
+      - COTURN_SECRET=${COTURN_SECRET}
+      - TALK_DOMAIN=${TALK_DOMAIN}
+    networks:
+      - talk-net
+
 # =============================================================================
 # Réseaux — Isolation par service, HAProxy sur tous les réseaux
 # =============================================================================
@@ -1015,6 +1109,13 @@ networks:
     ipam:
       config:
         - subnet: 172.50.0.0/24
+
+  talk-net:
+    name: talk-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.60.0.0/24
 
 # =============================================================================
 # Volumes — Données persistantes

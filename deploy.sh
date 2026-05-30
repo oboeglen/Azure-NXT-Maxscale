@@ -25,6 +25,9 @@ IMG_MINIO_MC="minio/mc:RELEASE.2025-08-13T08-35-41Z"
 IMG_MINIO_CONSOLE="ghcr.io/georgmangold/console:v1.9.1"
 IMG_COLLABORA="collabora/code:25.04.9.4.1"
 IMG_WHITEBOARD="ghcr.io/nextcloud-releases/whiteboard:v1.5.8"
+IMG_NATS="nats:2-alpine"
+IMG_SPREED_SIGNALING="strukturag/nextcloud-spreed-signaling:latest"
+IMG_COTURN="coturn/coturn:latest"
 IMG_HAPROXY="haproxy:2.8-alpine"
 IMG_NGINX="nginx:1.27-alpine"
 IMG_REDIS="redis:7.4-alpine"
@@ -474,6 +477,13 @@ ask_domains() {
   done
 
   while true; do
+    prompt_input "Talk signaling domain" "talk.example.tld"
+    TALK_DOMAIN="$REPLY"
+    validate_domain "$TALK_DOMAIN" && break
+    error "Invalid format"
+  done
+
+  while true; do
     prompt_input "Let's Encrypt email" "admin@example.tld"
     CERTBOT_EMAIL="$REPLY"
     [[ "$CERTBOT_EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]] && break
@@ -484,6 +494,7 @@ ask_domains() {
   check_dns_warn "$NC_DOMAIN"
   check_dns_warn "$COLLAB_DOMAIN"
   check_dns_warn "$WB_DOMAIN"
+  check_dns_warn "$TALK_DOMAIN"
 }
 
 # --- ask_versions ---
@@ -627,6 +638,23 @@ ask_minio_console() {
   fi
 }
 
+# --- ask_talk ---
+ask_talk() {
+  step "Nextcloud Talk — TURN server (coturn)"
+  echo ""
+  echo -e "  ${C_WHITE}A TURN server relays WebRTC media through NAT for remote users.${C_RESET}"
+  echo -e "  ${C_GRAY}Without it, Talk falls back to the public STUN server (stun.nextcloud.com:443).${C_RESET}"
+  echo -e "  ${C_GRAY}Requires exposing UDP/TCP port 3478 to the Internet.${C_RESET}"
+  echo ""
+  if prompt_yn "Deploy coturn TURN server?" "N"; then
+    COTURN_ENABLED="yes"
+    info "coturn enabled — will expose UDP+TCP port 3478"
+  else
+    COTURN_ENABLED="no"
+    info "coturn disabled — Talk will use public STUN (stun.nextcloud.com:443)"
+  fi
+}
+
 # --- show_recap ---
 show_load_estimate() {
   # Model calibrated on real tests (README):
@@ -696,6 +724,7 @@ show_recap() {
     "Nextcloud      : $NC_DOMAIN  (${NC_NODES} FPM nodes + ${NC_NODES} nginx, v${NC_VERSION})" \
     "Collabora      : $COLLAB_DOMAIN  (${COLLAB_NODES} nodes)" \
     "Whiteboard     : $WB_DOMAIN  (${WB_NODES} nodes)" \
+    "Talk signaling : $TALK_DOMAIN  (2 signaling nodes + NATS)  coturn: ${COTURN_ENABLED}" \
     "SSL Email      : $CERTBOT_EMAIL" \
     "MariaDB Galera : ${MARIADB_NODES} nodes" \
     "Redis Cluster  : ${REDIS_NODES} nodes" \
@@ -736,6 +765,7 @@ save_answers() {
     printf 'NC_DOMAIN="%s"\n'     "$NC_DOMAIN"
     printf 'COLLAB_DOMAIN="%s"\n' "$COLLAB_DOMAIN"
     printf 'WB_DOMAIN="%s"\n'     "$WB_DOMAIN"
+    printf 'TALK_DOMAIN="%s"\n'   "$TALK_DOMAIN"
     printf 'CERTBOT_EMAIL="%s"\n' "$CERTBOT_EMAIL"
     printf 'NC_VERSION="%s"\n'    "$NC_VERSION"
     printf 'NC_NODES="%s"\n'      "$NC_NODES"
@@ -749,6 +779,7 @@ save_answers() {
     printf 'MINIO_BYPASS="%s"\n' "$MINIO_BYPASS"
     printf 'HAPROXY_STATS="%s"\n' "$HAPROXY_STATS"
     printf 'MINIO_CONSOLE="%s"\n' "$MINIO_CONSOLE"
+    printf 'COTURN_ENABLED="%s"\n' "$COTURN_ENABLED"
     printf 'CERTBOT_STAGING="%s"\n' "$CERTBOT_STAGING"
     declare -p MINIO_PATHS | sed 's/^declare -A/declare -gA/'
   } > "$ANSWERS_CACHE"
@@ -805,6 +836,10 @@ gen_passwords() {
   GEN_MINIO_KEY=$(gen_pass 16 "hex")
   GEN_MINIO_SECRET=$(gen_pass 24 "base64")
   GEN_JWT_SECRET=$(gen_pass 36 "base64")
+  GEN_TALK_SECRET=$(gen_pass 32 "hex")
+  GEN_COTURN_SECRET=$(gen_pass 24 "base64")
+  GEN_SIGNALING_HASHKEY=$(gen_pass 32 "hex")
+  GEN_SIGNALING_BLOCKKEY=$(gen_pass 16 "hex")
   if [[ "$HAPROXY_STATS" == "yes" ]]; then
     GEN_HAPROXY_STATS_PASS=$(gen_pass 12 "base64")
   else
@@ -837,6 +872,7 @@ COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
 NEXTCLOUD_DOMAIN=${NC_DOMAIN}
 COLLABORA_DOMAIN=${COLLAB_DOMAIN}
 WHITEBOARD_DOMAIN=${WB_DOMAIN}
+TALK_DOMAIN=${TALK_DOMAIN}
 CERTBOT_EMAIL=${CERTBOT_EMAIL}
 
 HAPROXY_STATS_PASSWORD=${GEN_HAPROXY_STATS_PASS}
@@ -862,6 +898,10 @@ MINIO_BYPASS=${MINIO_BYPASS}
 HAPROXY_STATS=${HAPROXY_STATS}
 
 WHITEBOARD_JWT_SECRET=${GEN_JWT_SECRET}
+
+TALK_SIGNALING_SECRET=${GEN_TALK_SECRET}
+COTURN_SECRET=${GEN_COTURN_SECRET}
+COTURN_ENABLED=${COTURN_ENABLED}
 EOF
 
   chmod 600 "$dest"
@@ -918,6 +958,7 @@ HEADER
       - NEXTCLOUD_DOMAIN=${NEXTCLOUD_DOMAIN}
       - COLLABORA_DOMAIN=${COLLABORA_DOMAIN}
       - WHITEBOARD_DOMAIN=${WHITEBOARD_DOMAIN}
+      - TALK_DOMAIN=${TALK_DOMAIN}
       - HAPROXY_STATS_PASSWORD=${HAPROXY_STATS_PASSWORD}
     networks:
       next-net:
@@ -935,6 +976,7 @@ HEADER
         ipv4_address: 172.100.0.10
         aliases:
           - "${NEXTCLOUD_DOMAIN}"
+      talk-net: {}
     healthcheck:
       test: ["CMD-SHELL", "grep -q ':0050 ' /proc/net/tcp || grep -q ':0050 ' /proc/net/tcp6 || exit 1"]
       interval: 5s
@@ -968,6 +1010,9 @@ HAPROXY
       - NEXTCLOUD_DOMAIN=\${NEXTCLOUD_DOMAIN}
       - COLLABORA_DOMAIN=\${COLLABORA_DOMAIN}
       - WHITEBOARD_DOMAIN=\${WHITEBOARD_DOMAIN}
+      - TALK_DOMAIN=\${TALK_DOMAIN}
+      - TALK_SIGNALING_SECRET=\${TALK_SIGNALING_SECRET}
+      - COTURN_SECRET=\${COTURN_SECRET}
       - WHITEBOARD_JWT_SECRET=\${WHITEBOARD_JWT_SECRET}
       - MINIO_ACCESS_KEY=\${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=\${MINIO_SECRET_KEY}
@@ -1516,6 +1561,99 @@ WBNODE
       retries: 5
 WBREDIS
 
+  # ── Talk: NATS + spreed-signaling nodes ────────────────────────────────
+  cat >> "$dest" <<TALKBASE
+
+  nats:
+    image: ${IMG_NATS}
+    container_name: nats
+    restart: always
+    expose:
+      - "4222"
+    command: ["-m", "8222"]
+    networks:
+      - talk-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8222/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  spreed-signaling-01:
+    image: ${IMG_SPREED_SIGNALING}
+    container_name: spreed-signaling-01
+    restart: always
+    expose:
+      - "8080"
+    volumes:
+      - ./signaling.conf:/config/server.conf:ro
+    networks:
+      - talk-net
+      - next-net
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/v1/welcome >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  spreed-signaling-02:
+    image: ${IMG_SPREED_SIGNALING}
+    container_name: spreed-signaling-02
+    restart: always
+    expose:
+      - "8080"
+    volumes:
+      - ./signaling.conf:/config/server.conf:ro
+    networks:
+      - talk-net
+      - next-net
+    depends_on:
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/v1/welcome >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+TALKBASE
+
+  # ── Talk: coturn (opt-in) ───────────────────────────────────────────────
+  if [[ "$COTURN_ENABLED" == "yes" ]]; then
+    cat >> "$dest" <<COTURNBLOCK
+
+  coturn:
+    image: ${IMG_COTURN}
+    container_name: coturn
+    restart: always
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "EXT_IP=\$\$(curl -sf --max-time 5 https://api.ipify.org || hostname -I | awk '{print \$\$1}');
+       exec turnserver -n --log-file=stdout
+         --external-ip=\$\$EXT_IP
+         --listening-ip=0.0.0.0
+         --listening-port=3478
+         --use-auth-secret
+         --static-auth-secret=\$\$COTURN_SECRET
+         --realm=\$\$TALK_DOMAIN
+         --no-tls
+         --no-dtls"
+    environment:
+      - COTURN_SECRET=\${COTURN_SECRET}
+      - TALK_DOMAIN=\${TALK_DOMAIN}
+    networks:
+      - talk-net
+COTURNBLOCK
+  fi
+
   # ── Networks ────────────────────────────────────────────────────────────
   cat >> "$dest" <<'NETWORKS'
 
@@ -1556,6 +1694,12 @@ networks:
     ipam:
       config:
         - subnet: 172.50.0.0/24
+  talk-net:
+    name: talk-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.60.0.0/24
 NETWORKS
 
   # ── Volumes ─────────────────────────────────────────────────────────────
@@ -1588,6 +1732,45 @@ NETWORKS
   fi
 
   info "docker-compose.yml generated ($dest)"
+}
+
+gen_signaling_conf() {
+  local dest="${1:-$INSTALL_DIR/signaling.conf}"
+  step "Generating signaling.conf (nextcloud-spreed-signaling)"
+
+  cat > "$dest" <<EOF
+# Auto-generated by deploy.sh — $(date '+%Y-%m-%d %H:%M:%S')
+# DO NOT EDIT MANUALLY — regenerate with deploy.sh
+
+[http]
+listen = :8080
+
+[app]
+debug = false
+sessionlimit = 0
+
+[sessions]
+hashkey = ${GEN_SIGNALING_HASHKEY}
+blockkey = ${GEN_SIGNALING_BLOCKKEY}
+
+[clients]
+internalsecret = ${GEN_TALK_SECRET}
+
+[backend]
+backends = nc
+timeout = 10
+connectionsperhost = 8
+
+[backend "nc"]
+url = https://${NC_DOMAIN}
+secret = ${GEN_TALK_SECRET}
+
+[nats]
+url = nats://nats:4222
+EOF
+
+  chmod 600 "$dest"
+  info "signaling.conf generated: $dest"
 }
 
 gen_galera_cnf() {
@@ -1728,19 +1911,25 @@ patch_haproxy() {
     fpm_servers+="  server app-next-$(printf '%02d' "$i") app-next-$(printf '%02d' "$i"):9000 check"$'\n'
   done
 
+  # Signaling servers are fixed at 2 nodes (not dynamically scaled)
+  local signaling_servers=""
+  signaling_servers+="  server spreed-signaling-01 spreed-signaling-01:8080 check"$'\n'
+  signaling_servers+="  server spreed-signaling-02 spreed-signaling-02:8080 check"$'\n'
+
   # Apply patches sequentially using temp files
   local tmp tmp2
   tmp=$(mktemp)
   tmp2=$(mktemp)
   cp "$file" "$tmp"
 
-  _replace_servers "NEXTCLOUD"     "${nc_servers%$'\n'}"      "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "NEXTCLOUD_FPM" "${fpm_servers%$'\n'}"     "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "COLLABORA"     "${collab_servers%$'\n'}"  "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "WHITEBOARD"    "${wb_servers%$'\n'}"      "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "GALERA"        "${galera_servers%$'\n'}"  "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "MINIO"         "${minio_servers%$'\n'}"   "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "REDIS"         "${redis_servers%$'\n'}"   "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "NEXTCLOUD"     "${nc_servers%$'\n'}"        "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "NEXTCLOUD_FPM" "${fpm_servers%$'\n'}"       "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "COLLABORA"     "${collab_servers%$'\n'}"    "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "WHITEBOARD"    "${wb_servers%$'\n'}"        "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "GALERA"        "${galera_servers%$'\n'}"    "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "MINIO"         "${minio_servers%$'\n'}"     "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "REDIS"         "${redis_servers%$'\n'}"     "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "SIGNALING"     "${signaling_servers%$'\n'}" "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
 
   # Remove stats block from https frontend if disabled (between BEGIN/END_STATS markers)
   if [[ "$HAPROXY_STATS" == "no" ]]; then
@@ -2020,7 +2209,7 @@ gen_certs() {
   info "Public IP detected: ${my_ip:-unknown}"
 
   local domain
-  for domain in "$NC_DOMAIN" "$COLLAB_DOMAIN" "$WB_DOMAIN"; do
+  for domain in "$NC_DOMAIN" "$COLLAB_DOMAIN" "$WB_DOMAIN" "$TALK_DOMAIN"; do
     local resolved=""
     resolved=$(getent hosts "$domain" 2>/dev/null | awk '{print $1}' | head -1)
     [[ -z "$resolved" ]] && resolved=$(dig +short "$domain" A 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
@@ -2048,13 +2237,13 @@ gen_certs() {
 
   # ── Certbot call ──────────────────────────────────────────────────────────
   step "Generating Let's Encrypt certificates"
-  info "Domains: ${NC_DOMAIN}, ${COLLAB_DOMAIN}, ${WB_DOMAIN}"
+  info "Domains: ${NC_DOMAIN}, ${COLLAB_DOMAIN}, ${WB_DOMAIN}, ${TALK_DOMAIN}"
   info "Email  : ${CERTBOT_EMAIL}"
 
   local certbot_args=(
     certonly --standalone --non-interactive --keep-until-expiring
     --agree-tos --no-eff-email --email "$CERTBOT_EMAIL"
-    -d "$NC_DOMAIN" -d "$COLLAB_DOMAIN" -d "$WB_DOMAIN"
+    -d "$NC_DOMAIN" -d "$COLLAB_DOMAIN" -d "$WB_DOMAIN" -d "$TALK_DOMAIN"
     --cert-name stack
   )
   [[ "$CERTBOT_STAGING" == "yes" ]] && certbot_args+=(--staging)
@@ -2177,7 +2366,10 @@ run_deploy() {
     "${IMG_MINIO_MC}"
     "${IMG_COLLABORA}"
     "${IMG_WHITEBOARD}"
+    "${IMG_NATS}"
+    "${IMG_SPREED_SIGNALING}"
   )
+  [[ "$COTURN_ENABLED" == "yes" ]] && images+=("${IMG_COTURN}")
   local total=${#images[@]}
   local tmpdir; tmpdir=$(mktemp -d)
 
@@ -2465,6 +2657,9 @@ check_services() {
   _check "nextcloud-cron actif" \
     bash -c "docker inspect nextcloud-cron --format='{{.State.Running}}' 2>/dev/null | grep -q true"
 
+  _check "Talk signaling reachable" \
+    bash -c "docker exec spreed-signaling-01 wget -qO- http://localhost:8080/api/v1/welcome 2>/dev/null | grep -q version"
+
   if (( failures > 0 )); then
     warn "${failures} test(s) failed — check: docker compose logs"
   else
@@ -2500,6 +2695,8 @@ CREDS
   [[ "$MINIO_CONSOLE" == "yes" ]] && \
     console_line="MinIO Console  : https://${NC_DOMAIN}/s3-console  (login: MINIO_ACCESS_KEY / MINIO_SECRET_KEY)"
 
+  local talk_line="Talk signaling : https://${TALK_DOMAIN}  (2 nodes + NATS)  coturn: ${COTURN_ENABLED}"
+
   # Dynamic width: adapts to the longest line (password, domain, etc.)
   local I=0 _lw
   for _line in \
@@ -2508,6 +2705,7 @@ CREDS
       "Password : ${GEN_NC_ADMIN_PASS}" \
       "Collabora  : https://${COLLAB_DOMAIN}" \
       "Whiteboard : https://${WB_DOMAIN}" \
+      "$talk_line" \
       "$stats_line" \
       "$console_line" \
       "Nextcloud ${NC_NODES}×FPM + ${NC_NODES}×nginx  │  MariaDB ${MARIADB_NODES} nodes  │  Redis ${REDIS_NODES} nodes" \
@@ -2535,6 +2733,7 @@ CREDS
   _sl "SERVICES"
   _sl "Collabora  : https://${COLLAB_DOMAIN}"
   _sl "Whiteboard : https://${WB_DOMAIN}"
+  _sl "$talk_line"
   _sl "$stats_line"
   _sl "$console_line"
   echo "$_SEP"
@@ -2839,6 +3038,7 @@ scale_nodes() {
     NC_DOMAIN=$(grep    -m1 '^NEXTCLOUD_DOMAIN='    "$INSTALL_DIR/.env" | cut -d= -f2)
     COLLAB_DOMAIN=$(grep -m1 '^COLLABORA_DOMAIN='   "$INSTALL_DIR/.env" | cut -d= -f2)
     WB_DOMAIN=$(grep    -m1 '^WHITEBOARD_DOMAIN='   "$INSTALL_DIR/.env" | cut -d= -f2)
+    TALK_DOMAIN=$(grep   -m1 '^TALK_DOMAIN='         "$INSTALL_DIR/.env" | cut -d= -f2 || echo "talk.${NC_DOMAIN#*.}")
     CERTBOT_EMAIL=$(grep -m1 '^CERTBOT_EMAIL='       "$INSTALL_DIR/.env" | cut -d= -f2 || echo "")
     NC_NODES=$(_detect_node_count     "app-next-"       "^app-next-[0-9]")
     MARIADB_NODES=$(_detect_node_count "mariadb-node"   "^mariadb-node[0-9]")
@@ -2855,7 +3055,10 @@ scale_nodes() {
     MINIO_BYPASS="${MINIO_BYPASS:-true}"
     HAPROXY_STATS=$(grep -m1 '^HAPROXY_STATS=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
     HAPROXY_STATS="${HAPROXY_STATS:-no}"
+    MINIO_CONSOLE=$(grep -m1 '^MINIO_CONSOLE=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
     MINIO_CONSOLE="${MINIO_CONSOLE:-no}"
+    COTURN_ENABLED=$(grep -m1 '^COTURN_ENABLED=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
+    COTURN_ENABLED="${COTURN_ENABLED:-no}"
     CERTBOT_STAGING="${CERTBOT_STAGING:-no}"
     local n d
     for n in $(seq 1 "$MINIO_NODES"); do
@@ -3097,6 +3300,7 @@ main() {
     ask_minio
     ask_haproxy
     ask_minio_console
+    ask_talk
     ask_cert_mode
   fi
   show_recap
@@ -3106,6 +3310,7 @@ main() {
   gen_passwords
   gen_env
   gen_compose
+  gen_signaling_conf
   gen_galera_cnf
   patch_haproxy
   patch_nextcloud_init
