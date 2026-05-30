@@ -522,6 +522,78 @@ ask_nodes() {
 
 # ─── [MINIO] Disk wizard helpers ─────────────────────────────────────────────
 
+# Returns "nvme", "ssd", or "hdd" for a given block device
+_detect_disk_type() {
+  local dev="$1"
+  local base; base=$(basename "$dev" | sed 's/[0-9]*p\?[0-9]*$//' | sed 's/[0-9]*$//')
+  [[ "$base" =~ ^nvme ]] && echo "nvme" && return
+  local rot
+  rot=$(cat "/sys/block/${base}/queue/rotational" 2>/dev/null || echo "1")
+  [[ "$rot" == "0" ]] && echo "ssd" || echo "hdd"
+}
+
+# Returns disk size in GB (integer)
+_disk_size_gb() {
+  local dev="$1"
+  local bytes
+  bytes=$(lsblk -bdno SIZE "$dev" 2>/dev/null | head -1 || true)
+  [[ -z "$bytes" || "$bytes" == "0" ]] && echo "0" && return
+  echo $(( bytes / 1024 / 1024 / 1024 ))
+}
+
+# Sets globals XFS_MKFS_OPTS, XFS_MOUNT_OPTS, XFS_PROFILE_DESC
+# based on disk type and size — tuned for MinIO object storage workloads
+_xfs_profile() {
+  local disk_type="$1" size_gb="$2"
+
+  # Log size: XFS write-ahead log — default 10MB is far too small for MinIO.
+  # Larger log reduces per-write latency by amortising commits over more data.
+  # Allocation groups: parallelism units. More AGs benefit multi-threaded I/O.
+  # HDDs are sequential-bound so fewer AGs are better (less head seeking).
+  local log_size agcount
+  if   (( size_gb >= 8000 )); then log_size="256m"; agcount=32
+  elif (( size_gb >= 2000 )); then log_size="256m"; agcount=16
+  elif (( size_gb >= 500  )); then log_size="128m"; agcount=8
+  else                              log_size="64m";  agcount=4
+  fi
+
+  # HDDs: halve agcount (sequential workload — fewer AGs reduces head travel)
+  if [[ "$disk_type" == "hdd" ]]; then
+    agcount=$(( agcount / 2 ))
+    (( agcount < 2 )) && agcount=2
+  fi
+
+  # Skip agcount on very small disks to avoid mkfs minimum-AG-size errors
+  local agcount_opt=""
+  (( size_gb >= 10 )) && agcount_opt="-d agcount=${agcount}"
+
+  XFS_MKFS_OPTS="-l size=${log_size},lazy-count=1 ${agcount_opt}"
+
+  # allocsize: preallocate on write to reduce fragmentation for large objects
+  # logbsize:  in-memory log buffer (256k = max; cuts expensive log flushes)
+  # largeio:   HDD hint — suggests kernel uses larger I/O units
+  case "$disk_type" in
+    nvme) XFS_MOUNT_OPTS="noatime,nodiratime,allocsize=64m,logbsize=256k"
+          XFS_PROFILE_DESC="NVMe — log=${log_size}, ${agcount} AGs, allocsize=64m, logbsize=256k" ;;
+    ssd)  XFS_MOUNT_OPTS="noatime,nodiratime,allocsize=64m,logbsize=256k"
+          XFS_PROFILE_DESC="SSD — log=${log_size}, ${agcount} AGs, allocsize=64m, logbsize=256k" ;;
+    hdd)  XFS_MOUNT_OPTS="noatime,nodiratime,allocsize=64m,logbsize=256k,largeio"
+          XFS_PROFILE_DESC="HDD — log=${log_size}, ${agcount} AGs, allocsize=64m, logbsize=256k, largeio" ;;
+  esac
+}
+
+# Sets globals EXT4_MKFS_OPTS, EXT4_MOUNT_OPTS, EXT4_PROFILE_DESC
+_ext4_profile() {
+  local disk_type="$1" size_gb="$2"
+  # Journal size: larger = fewer forced commits per second under write load
+  local journal_size
+  (( size_gb >= 500 )) && journal_size="256" || journal_size="128"
+  # lazy_itable_init=0: initialise inode tables immediately (no background init)
+  EXT4_MKFS_OPTS="-b 4096 -E lazy_itable_init=0,lazy_journal_init=0 -J size=${journal_size}"
+  EXT4_MOUNT_OPTS="noatime,nodiratime,data=ordered"
+  EXT4_PROFILE_DESC="journal=${journal_size}MB, data=ordered"
+}
+
 # Scans available block devices (excludes root disk, swap, loop).
 # Populates globals: DISK_COUNT, DISK_NAMES[], DISK_SIZES[], DISK_FSTYPES[],
 #                    DISK_MOUNTS[], DISK_MODELS[]
@@ -597,6 +669,15 @@ _prepare_minio_disk() {
 
   local chosen_fs="$preferred_fs"
 
+  # ── Detect disk profile (type + size) ───────────────────────────────────
+  local disk_type size_gb
+  disk_type=$(_detect_disk_type "$dev")
+  size_gb=$(_disk_size_gb "$dev")
+
+  # Pre-compute tuning params (globals XFS_*/EXT4_* set by profile functions)
+  _xfs_profile  "$disk_type" "$size_gb"
+  _ext4_profile "$disk_type" "$size_gb"
+
   # ── Format if no filesystem ──────────────────────────────────────────────
   if [[ "$current_fs" == "-" || -z "$current_fs" ]]; then
     echo ""
@@ -613,19 +694,37 @@ _prepare_minio_disk() {
     prompt_yn "Format ${dev} as ${chosen_fs^^}?" "N" || die "Format cancelled — aborting"
 
     local label; label="minio-$(basename "$dev")"
-    start_spinner "Formatting $dev as ${chosen_fs^^}..."
+
     if [[ "$chosen_fs" == "xfs" ]]; then
-      mkfs.xfs -f -L "$label" "$dev" &>/dev/null \
+      # shellcheck disable=SC2086
+      info "XFS profile: ${XFS_PROFILE_DESC}"
+      start_spinner "Formatting $dev as XFS (${size_gb}GB ${disk_type^^})..."
+      # shellcheck disable=SC2086
+      mkfs.xfs -f -L "$label" ${XFS_MKFS_OPTS} "$dev" &>/dev/null \
         || { stop_spinner; die "mkfs.xfs failed on $dev"; }
     else
-      mkfs.ext4 -F -L "$label" "$dev" &>/dev/null \
+      info "EXT4 profile: ${EXT4_PROFILE_DESC}"
+      start_spinner "Formatting $dev as EXT4 (${size_gb}GB ${disk_type^^})..."
+      # shellcheck disable=SC2086
+      mkfs.ext4 -F -L "$label" ${EXT4_MKFS_OPTS} "$dev" &>/dev/null \
         || { stop_spinner; die "mkfs.ext4 failed on $dev"; }
     fi
     stop_spinner "Formatted: $dev → ${chosen_fs^^}"
   else
     chosen_fs="$current_fs"
     info "Existing filesystem on $dev: ${current_fs^^} — skipping format"
+    # Show profile for informational purposes even when not formatting
+    [[ "$chosen_fs" == "xfs"  ]] && info "XFS mount profile: ${XFS_PROFILE_DESC}"
+    [[ "$chosen_fs" == "ext4" ]] && info "EXT4 mount profile: ${EXT4_PROFILE_DESC}"
   fi
+
+  # ── Select mount options based on detected FS and disk profile ───────────
+  local mount_opts
+  case "$chosen_fs" in
+    xfs)  mount_opts="$XFS_MOUNT_OPTS"  ;;
+    ext4) mount_opts="$EXT4_MOUNT_OPTS" ;;
+    *)    mount_opts="noatime,nodiratime" ;;
+  esac
 
   # ── Create mount point ───────────────────────────────────────────────────
   mkdir -p "$mount_path"
@@ -648,12 +747,12 @@ _prepare_minio_disk() {
     if prompt_yn "Add $dev to /etc/fstab (auto-mount on reboot)?" "Y"; then
       local entry
       if [[ -n "$uuid" ]]; then
-        entry="UUID=${uuid}  ${mount_path}  ${chosen_fs}  defaults,noatime,nodiratime  0 2"
+        entry="UUID=${uuid}  ${mount_path}  ${chosen_fs}  ${mount_opts}  0 2"
       else
-        entry="${dev}  ${mount_path}  ${chosen_fs}  defaults,noatime,nodiratime  0 2"
+        entry="${dev}  ${mount_path}  ${chosen_fs}  ${mount_opts}  0 2"
       fi
       echo "$entry" >> /etc/fstab
-      info "Added to /etc/fstab"
+      info "Added to /etc/fstab: ${mount_opts}"
     fi
   fi
 
