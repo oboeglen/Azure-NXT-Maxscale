@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Déployeur automatique v2.2.1
-# Usage : sudo bash deploy.sh
+# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.2.1
+# Usage: sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
 IFS=$'\n\t'
 
-# Guard : _SOURCE_ONLY=1 doit être défini AVANT de sourcer ce fichier (tests).
-# Par défaut 0 — fonctionne dans tous les contextes (bash -c, curl|bash, fichier).
+# Guard: _SOURCE_ONLY=1 must be set BEFORE sourcing this file (tests).
+# Defaults to 0 — works in all contexts (bash -c, curl|bash, file).
 : "${_SOURCE_ONLY:=0}"
 
 INSTALL_DIR="/opt/nxt-maxscale"
@@ -17,7 +17,7 @@ ANSWERS_CACHE="/tmp/.nxt-maxscale-config.env"
 LOG_FILE="/var/log/nxt-maxscale-deploy.log"
 CERTBOT_STAGING="no"
 
-# ─── Images — versions figées ─────────────────────────────────────────────────
+# ─── Images — pinned versions ─────────────────────────────────────────────────
 IMG_CERTBOT="certbot/certbot:v5.6.0"
 IMG_AUTOHEAL="willfarrell/autoheal:latest"
 IMG_MINIO="minio/minio:RELEASE.2025-09-07T16-13-09Z"
@@ -30,7 +30,7 @@ IMG_NGINX="nginx:1.27-alpine"
 IMG_REDIS="redis:7.4-alpine"
 IMG_MARIADB="maxscale-mariadb-galera:11.4"
 
-# ─── Couleurs ────────────────────────────────────────────────────────────────
+# ─── Colors ──────────────────────────────────────────────────────────────────
 C_RESET='\033[0m'
 C_CYAN='\033[0;36m';  C_BCYAN='\033[1;36m'
 C_GREEN='\033[0;32m'; C_BGREEN='\033[1;32m'
@@ -45,14 +45,14 @@ error()   { echo -e " ${C_BRED}✗${C_RESET}  $*" >&2; }
 die()     { error "$*"; exit 1; }
 step()    { echo -e "\n${C_BCYAN}  ▸ $*${C_RESET}"; }
 
-# Largeur visuelle d'une chaîne : supprime les codes ANSI, compte les caractères (pas les octets)
+# Visual width of a string: strips ANSI codes, counts characters (not bytes)
 _vlen() {
   local s
   s=$(printf '%s' "$1" | sed 's/\x1b\[[0-9;]*[mK]//g')
   echo ${#s}
 }
 
-# Remplit $1 avec des espaces jusqu'à la largeur visuelle $2
+# Pads $1 with spaces to visual width $2
 _rpad() {
   local s="$1" w="$2" vw n
   vw=$(_vlen "$s")
@@ -77,18 +77,18 @@ phase() {
 box() {
   local title="$1"; shift
 
-  # Largeur automatique : s'adapte à la ligne de contenu la plus longue
+  # Auto width: adapts to the longest content line
   local max_content=0 line lw
   for line in "$@"; do
     lw=$(_vlen "$line")
     (( lw > max_content )) && max_content=$lw
   done
 
-  # Géométrie : total = │(1) + 2sp + inner + │(1) = inner + 4
+  # Geometry: total = │(1) + 2sp + inner + │(1) = inner + 4
   local title_len; title_len=$(_vlen "$title")
   local inner=$max_content
   local total=$(( inner + 4 ))
-  local min_total=$(( title_len + 6 ))   # ┌─ T ─┐ : minimum 1 tiret
+  local min_total=$(( title_len + 6 ))   # ┌─ T ─┐ : at least 1 dash
   if (( total < min_total )); then total=$min_total; inner=$(( total - 4 )); fi
 
   printf "\n${C_CYAN}┌─ %s " "$title"
@@ -107,41 +107,41 @@ box() {
 setup_logging() {
   touch "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/nxt-maxscale-deploy.log"
   chmod 600 "$LOG_FILE" 2>/dev/null || true
-  # Dupliquer stdout+stderr vers le log sans perturber l'affichage
+  # Duplicate stdout+stderr to log without disturbing output
   exec > >(tee -a "$LOG_FILE") 2>&1
-  info "Journal : $LOG_FILE"
+  info "Log file: $LOG_FILE"
 }
 
 check_requirements() {
-  step "Vérification des prérequis système"
+  step "Checking system requirements"
 
   # RAM
   local ram_kb ram_gb
   ram_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
   ram_gb=$(( ram_kb / 1024 / 1024 ))
   if (( ram_kb < 14680064 )); then
-    warn "RAM : ${ram_gb} Go détectés (minimum recommandé : 16 Go)"
-    prompt_yn "Continuer quand même ?" "Y" || die "Annulé — ajoutez de la RAM puis relancez."
+    warn "RAM: ${ram_gb} GB detected (recommended minimum: 16 GB)"
+    prompt_yn "Continue anyway?" "Y" || die "Aborted — add more RAM and retry."
   else
-    info "RAM : ${ram_gb} Go ✓"
+    info "RAM: ${ram_gb} GB ✓"
   fi
 
-  # Disque
+  # Disk
   local disk_kb disk_gb
   disk_kb=$(df -k "$(dirname "$INSTALL_DIR")" 2>/dev/null | awk 'NR==2{print $4}' || df -k / | awk 'NR==2{print $4}')
   disk_gb=$(( disk_kb / 1024 / 1024 ))
   if (( disk_kb < 52428800 )); then
-    warn "Espace libre : ${disk_gb} Go (minimum recommandé : 50 Go)"
-    prompt_yn "Continuer quand même ?" "N" || die "Annulé — libérez de l'espace disque puis relancez."
+    warn "Free space: ${disk_gb} GB (recommended minimum: 50 GB)"
+    prompt_yn "Continue anyway?" "N" || die "Aborted — free up disk space and retry."
   else
-    info "Disque : ${disk_gb} Go disponibles ✓"
+    info "Disk: ${disk_gb} GB available ✓"
   fi
 
-  # Version Docker
+  # Docker version
   local docker_ver
   docker_ver=$(docker version --format '{{.Server.Version}}' 2>/dev/null | grep -oE '^[0-9]+' || echo "0")
   if (( docker_ver < 20 )); then
-    die "Docker ${docker_ver} trop ancien — version ≥ 20 requise. Relancez le script pour le mettre à jour."
+    die "Docker ${docker_ver} is too old — version ≥ 20 required. Re-run the script to update it."
   fi
   info "Docker ${docker_ver} ✓"
 
@@ -149,7 +149,7 @@ check_requirements() {
   local compose_maj
   compose_maj=$(docker compose version --short 2>/dev/null | grep -oE '[0-9]+' | head -1 || echo "0")
   if (( compose_maj < 2 )); then
-    die "Docker Compose v${compose_maj} trop ancien — version ≥ 2 requise."
+    die "Docker Compose v${compose_maj} is too old — version ≥ 2 required."
   fi
   info "Docker Compose v2 ✓"
 }
@@ -206,7 +206,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Déployeur automatique v2.2.1"; do
+    "        NXT Maxscale — Automatic Deployer v2.2.1"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -229,14 +229,14 @@ prompt_input() {
 prompt_yn() {
   local question="$1" default="${2:-N}"
   local hint
-  [[ "${default^^}" == "Y" ]] && hint="O/n" || hint="o/N"
+  [[ "${default^^}" == "Y" ]] && hint="Y/n" || hint="y/N"
   printf "  ${C_WHITE}%s${C_RESET} ${C_GRAY}[%s]${C_RESET} : " "$question" "$hint"
   read -r REPLY
   [[ -z "$REPLY" ]] && REPLY="$default"
   [[ "${REPLY,,}" == "o" || "${REPLY,,}" == "y" ]]
 }
 
-# ─── [OS] Détection et installation ──────────────────────────────────────────
+# ─── [OS] Detection and installation ─────────────────────────────────────────
 
 # Internal: pure logic, testable without /etc/os-release
 # Args: $1=ID $2=ID_LIKE $3=VERSION_ID
@@ -248,23 +248,23 @@ _detect_os_logic() {
 
   case "$id" in
     debian)
-      [[ "$version" =~ ^(11|12|13)$ ]] || die "Debian $version non supporté (11, 12 ou 13 requis)"
+      [[ "$version" =~ ^(11|12|13)$ ]] || die "Debian $version not supported (11, 12 or 13 required)"
       OS_ID="debian"; PKG_MGR="apt"
       ;;
     ubuntu)
-      [[ "$version" =~ ^(22\.04|24\.04)$ ]] || die "Ubuntu $version non supporté (22.04 ou 24.04 requis)"
+      [[ "$version" =~ ^(22\.04|24\.04)$ ]] || die "Ubuntu $version not supported (22.04 or 24.04 required)"
       OS_ID="ubuntu"; PKG_MGR="apt"
       ;;
     rhel|centos|rocky|almalinux)
-      [[ "$version" =~ ^[89] ]] || die "RHEL/Rocky/Alma $version non supporté (8.x ou 9.x requis)"
+      [[ "$version" =~ ^[89] ]] || die "RHEL/Rocky/Alma $version not supported (8.x or 9.x required)"
       OS_ID="rhel"; PKG_MGR="dnf"
       ;;
     *)
       if echo "$id_like" | grep -qE "rhel|fedora"; then
-        [[ "$version" =~ ^[89] ]] || die "RHEL-like $version non supporté (8.x ou 9.x requis)"
+        [[ "$version" =~ ^[89] ]] || die "RHEL-like $version not supported (8.x or 9.x required)"
         OS_ID="rhel"; PKG_MGR="dnf"
       else
-        die "OS '$id' non supporté. Distributions acceptées : Debian 11/12/13, Ubuntu 22.04/24.04, RHEL/Rocky/AlmaLinux 8/9"
+        die "OS '$id' not supported. Accepted distributions: Debian 11/12/13, Ubuntu 22.04/24.04, RHEL/Rocky/AlmaLinux 8/9"
       fi
       ;;
   esac
@@ -272,57 +272,57 @@ _detect_os_logic() {
 }
 
 detect_os() {
-  phase 1 7 "Détection du système"
-  [[ -f /etc/os-release ]] || die "/etc/os-release introuvable — OS non détectable"
+  phase 1 7 "System Detection"
+  [[ -f /etc/os-release ]] || die "/etc/os-release not found — OS cannot be detected"
 
   local ID="" ID_LIKE="" VERSION_ID=""
   # shellcheck source=/dev/null
   source /etc/os-release
   _detect_os_logic "$ID" "${ID_LIKE:-}" "$VERSION_ID" > /dev/null
 
-  info "Système détecté : ${OS_ID} ${OS_VERSION} (gestionnaire : ${PKG_MGR})"
-  [[ "$(uname -m)" == "x86_64" ]] || die "Architecture x86_64 requise (détecté: $(uname -m))"
-  [[ $EUID -eq 0 ]] || die "Ce script doit être exécuté en root : sudo bash deploy.sh"
+  info "Detected OS: ${OS_ID} ${OS_VERSION} (package manager: ${PKG_MGR})"
+  [[ "$(uname -m)" == "x86_64" ]] || die "x86_64 architecture required (detected: $(uname -m))"
+  [[ $EUID -eq 0 ]] || die "This script must be run as root: sudo bash deploy.sh"
 }
 
 install_deps() {
-  phase 2 7 "Installation des dépendances"
+  phase 2 7 "Installing Dependencies"
 
   local pkgs_apt=(git curl wget openssl python3 ca-certificates gnupg lsb-release netcat-openbsd)
   local pkgs_dnf=(git curl wget openssl python3 ca-certificates gnupg2)
 
-  step "Mise à jour des sources et installation des paquets essentiels"
-  start_spinner "Mise à jour des paquets..."
+  step "Updating sources and installing essential packages"
+  start_spinner "Updating packages..."
   if [[ "$PKG_MGR" == "apt" ]]; then
     DEBIAN_FRONTEND=noninteractive apt-get update -qq
-    stop_spinner "Sources mises à jour"
-    start_spinner "Installation des paquets essentiels..."
+    stop_spinner "Package sources updated"
+    start_spinner "Installing essential packages..."
     DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${pkgs_apt[@]}"
   else
     dnf makecache -q
-    stop_spinner "Sources mises à jour"
-    start_spinner "Installation des paquets essentiels..."
+    stop_spinner "Package sources updated"
+    start_spinner "Installing essential packages..."
     dnf install -y -q "${pkgs_dnf[@]}"
   fi
-  stop_spinner "Paquets essentiels installés"
+  stop_spinner "Essential packages installed"
 
   # Docker Engine
   if ! command -v docker &>/dev/null; then
-    step "Installation de Docker Engine"
-    start_spinner "Téléchargement du script d'installation Docker..."
+    step "Installing Docker Engine"
+    start_spinner "Downloading Docker installation script..."
     curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-    stop_spinner "Script Docker téléchargé"
-    start_spinner "Installation de Docker (peut prendre quelques minutes)..."
+    stop_spinner "Docker script downloaded"
+    start_spinner "Installing Docker (this may take a few minutes)..."
     bash /tmp/get-docker.sh -q
-    stop_spinner "Docker installé"
+    stop_spinner "Docker installed"
     systemctl enable --now docker
   else
-    info "Docker $(docker --version | cut -d' ' -f3 | tr -d ',') déjà installé"
+    info "Docker $(docker --version | cut -d' ' -f3 | tr -d ',') already installed"
   fi
 
   # Docker Compose plugin
   if ! docker compose version &>/dev/null 2>&1; then
-    step "Installation du plugin Docker Compose"
+    step "Installing Docker Compose plugin"
     local os_name compose_arch
     os_name=$(uname -s)
     compose_arch=$(uname -m)
@@ -330,12 +330,12 @@ install_deps() {
     mkdir -p /usr/local/lib/docker/cli-plugins
     curl -fsSL "$compose_url" -o /usr/local/lib/docker/cli-plugins/docker-compose
     chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-    info "Docker Compose $(docker compose version --short) installé"
+    info "Docker Compose $(docker compose version --short) installed"
   else
-    info "Docker Compose $(docker compose version --short) déjà installé"
+    info "Docker Compose $(docker compose version --short) already installed"
   fi
 
-  # Rotation des logs Docker — 100 Mo × 3 fichiers par container (~300 Mo max)
+  # Docker log rotation — 100 MB × 3 files per container (~300 MB max)
   local daemon_json="/etc/docker/daemon.json"
   if [[ ! -f "$daemon_json" ]] || ! grep -q "max-size" "$daemon_json" 2>/dev/null; then
     cat > "$daemon_json" <<'DAEMON'
@@ -348,39 +348,39 @@ install_deps() {
 }
 DAEMON
     systemctl reload docker 2>/dev/null || true
-    info "Rotation des logs Docker configurée (100 Mo × 3 fichiers)"
+    info "Docker log rotation configured (100 MB × 3 files)"
   else
-    info "Rotation des logs Docker déjà configurée"
+    info "Docker log rotation already configured"
   fi
 
-  # Vérifier accès docker pour l'utilisateur non-root
+  # Check docker access for non-root user
   local real_user="${SUDO_USER:-}"
   if [[ -n "$real_user" ]] && ! groups "$real_user" | grep -q docker; then
     usermod -aG docker "$real_user" 2>/dev/null || true
-    warn "L'utilisateur '$real_user' a été ajouté au groupe docker — reconnectez-vous pour que ça prenne effet"
+    warn "User '$real_user' was added to the docker group — log out and back in for this to take effect"
   fi
 }
 
-# ─── [CLONE] Récupération du projet ──────────────────────────────────────────
+# ─── [CLONE] Project retrieval ───────────────────────────────────────────────
 
 clone_repo() {
-  phase 3 7 "Récupération du projet"
+  phase 3 7 "Project Retrieval"
 
   if [[ -d "$INSTALL_DIR/.git" ]]; then
-    warn "Le répertoire $INSTALL_DIR existe déjà"
-    if prompt_yn "Mettre à jour le repo (git pull) ?" "Y"; then
-      start_spinner "Mise à jour du repo..."
+    warn "Directory $INSTALL_DIR already exists"
+    if prompt_yn "Update repository (git pull)?" "Y"; then
+      start_spinner "Updating repository..."
       GIT_TERMINAL_PROMPT=0 timeout 120 git -C "$INSTALL_DIR" fetch origin || {
         stop_spinner
-        die "Impossible de joindre $REPO_URL — vérifiez la connectivité réseau"
+        die "Cannot reach $REPO_URL — check network connectivity"
       }
       git -C "$INSTALL_DIR" reset --hard origin/main
-      stop_spinner "Repo mis à jour"
+      stop_spinner "Repository updated"
     else
-      info "Utilisation du repo existant"
+      info "Using existing repository"
     fi
   else
-    # Détection du répertoire source local (script lancé depuis une copie du projet)
+    # Detect local source directory (script launched from a project copy)
     local SCRIPT_DIR
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local _sentinel_files=(haproxy.cfg nextcloud-init.sh galera-bootstrap.sh)
@@ -390,26 +390,26 @@ clone_repo() {
     done
 
     if $_all_present && [[ "$SCRIPT_DIR" != "$INSTALL_DIR" ]]; then
-      step "Fichiers locaux détectés dans $SCRIPT_DIR — copie locale (pas de clonage Git)"
-      start_spinner "Copie des fichiers vers $INSTALL_DIR..."
+      step "Local files detected in $SCRIPT_DIR — local copy (no Git clone)"
+      start_spinner "Copying files to $INSTALL_DIR..."
       mkdir -p "$INSTALL_DIR"
       cp -a "$SCRIPT_DIR/." "$INSTALL_DIR/"
-      stop_spinner "Fichiers copiés dans $INSTALL_DIR"
+      stop_spinner "Files copied to $INSTALL_DIR"
     else
-      start_spinner "Clonage depuis $REPO_URL..."
+      start_spinner "Cloning from $REPO_URL..."
       if ! GIT_TERMINAL_PROMPT=0 timeout 120 git clone --depth=1 "$REPO_URL" "$INSTALL_DIR"; then
         stop_spinner
-        die "Clonage échoué — vérifiez :\n  • Connectivité : curl -sf https://github.com\n  • Repo public : $REPO_URL\n  • Alternative : copiez les fichiers dans $INSTALL_DIR et relancez"
+        die "Clone failed — check:\n  • Connectivity: curl -sf https://github.com\n  • Public repo: $REPO_URL\n  • Alternative: copy files to $INSTALL_DIR and retry"
       fi
-      stop_spinner "Projet cloné dans $INSTALL_DIR"
+      stop_spinner "Project cloned into $INSTALL_DIR"
     fi
   fi
 
   cd "$INSTALL_DIR"
-  info "Répertoire de travail : $INSTALL_DIR"
+  info "Working directory: $INSTALL_DIR"
 }
 
-# ─── [CONFIG] Questions utilisateur ──────────────────────────────────────────
+# ─── [CONFIG] User questions ─────────────────────────────────────────────────
 
 # --- Validation helpers ---
 validate_domain() {
@@ -422,7 +422,7 @@ is_odd()          { is_positive_int "$1" && (( $1 % 2 == 1 )); }
 is_even_min6()    { is_positive_int "$1" && (( $1 % 2 == 0 )) && (( $1 >= 6 )); }
 
 # ask_int "question" "default" validator_fn "error message" VARNAME
-# Stocke le résultat dans VARNAME (pas de subshell, pas de capture stdout)
+# Stores result in VARNAME (no subshell, no stdout capture)
 ask_int() {
   local question="$1" default="$2" validator="$3" errmsg="$4" __var="${5:-_ASK_INT_RESULT}"
   while true; do
@@ -439,9 +439,9 @@ ask_int() {
 check_dns_warn() {
   local domain="$1"
   if ! host "$domain" &>/dev/null 2>&1; then
-    warn "DNS : $domain ne résout pas encore"
-    if ! prompt_yn "Continuer quand même ?" "N"; then
-      die "Annulé — configurez votre DNS puis relancez"
+    warn "DNS: $domain does not resolve yet"
+    if ! prompt_yn "Continue anyway?" "N"; then
+      die "Aborted — configure your DNS and retry"
     fi
   else
     info "DNS $domain → OK"
@@ -450,37 +450,37 @@ check_dns_warn() {
 
 # --- ask_domains ---
 ask_domains() {
-  step "Domaines et email"
+  step "Domains and email"
 
   while true; do
-    prompt_input "Domaine Nextcloud" "nextcloud.exemple.tld"
+    prompt_input "Nextcloud domain" "nextcloud.example.tld"
     NC_DOMAIN="$REPLY"
     validate_domain "$NC_DOMAIN" && break
-    error "Format invalide (ex: nextcloud.mon-site.fr)"
+    error "Invalid format (e.g.: nextcloud.my-site.com)"
   done
 
   while true; do
-    prompt_input "Domaine Collabora" "collabora.exemple.tld"
+    prompt_input "Collabora domain" "collabora.example.tld"
     COLLAB_DOMAIN="$REPLY"
     validate_domain "$COLLAB_DOMAIN" && break
-    error "Format invalide"
+    error "Invalid format"
   done
 
   while true; do
-    prompt_input "Domaine Whiteboard" "whiteboard.exemple.tld"
+    prompt_input "Whiteboard domain" "whiteboard.example.tld"
     WB_DOMAIN="$REPLY"
     validate_domain "$WB_DOMAIN" && break
-    error "Format invalide"
+    error "Invalid format"
   done
 
   while true; do
-    prompt_input "Email Let's Encrypt" "admin@exemple.tld"
+    prompt_input "Let's Encrypt email" "admin@example.tld"
     CERTBOT_EMAIL="$REPLY"
     [[ "$CERTBOT_EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]] && break
-    error "Email invalide"
+    error "Invalid email"
   done
 
-  step "Vérification DNS"
+  step "DNS Check"
   check_dns_warn "$NC_DOMAIN"
   check_dns_warn "$COLLAB_DOMAIN"
   check_dns_warn "$WB_DOMAIN"
@@ -488,25 +488,25 @@ ask_domains() {
 
 # --- ask_versions ---
 ask_versions() {
-  step "Version Nextcloud"
-  prompt_input "Version Nextcloud" "33.0.3-fpm"
+  step "Nextcloud Version"
+  prompt_input "Nextcloud version" "33.0.3-fpm"
   NC_VERSION="$REPLY"
   [[ "$NC_VERSION" == *"-fpm" ]] || NC_VERSION="${NC_VERSION}-fpm"
-  info "Image : nextcloud:${NC_VERSION}"
+  info "Image: nextcloud:${NC_VERSION}"
 }
 
 # --- ask_nodes ---
 ask_nodes() {
   phase 4 7 "Configuration"
-  step "Nombre de nœuds par service"
+  step "Number of nodes per service"
 
-  ask_int "Nextcloud — nœuds FPM+nginx  (1 nœud = 1 container FPM + 1 nginx)" "3" is_positive_int "Entier ≥ 1 requis" NC_NODES
-  ask_int "MariaDB Galera — nœuds"     "3" is_odd          "Nombre impair requis (quorum Galera — évite le split-brain)" MARIADB_NODES
-  ask_int "Redis Cluster — nœuds"      "6" is_even_min6    "Nombre pair ≥ 6 requis (masters + replicas)"                 REDIS_NODES
-  ask_int "Collabora — nœuds"          "3" is_positive_int "Entier ≥ 1 requis"                                           COLLAB_NODES
-  ask_int "Whiteboard — nœuds"         "2" is_positive_int "Entier ≥ 1 requis"                                           WB_NODES
-  ask_int "MinIO — nœuds"             "4" is_positive_int "Entier ≥ 1 requis"                                           MINIO_NODES
-  ask_int "MinIO — disques par nœud"  "4" is_positive_int "Entier ≥ 1 requis"                                           MINIO_DISKS
+  ask_int "Nextcloud — FPM+nginx nodes  (1 node = 1 FPM container + 1 nginx)" "3" is_positive_int "Integer ≥ 1 required" NC_NODES
+  ask_int "MariaDB Galera — nodes"     "3" is_odd          "Odd number required (Galera quorum — prevents split-brain)" MARIADB_NODES
+  ask_int "Redis Cluster — nodes"      "6" is_even_min6    "Even number ≥ 6 required (masters + replicas)"              REDIS_NODES
+  ask_int "Collabora — nodes"          "3" is_positive_int "Integer ≥ 1 required"                                       COLLAB_NODES
+  ask_int "Whiteboard — nodes"         "2" is_positive_int "Integer ≥ 1 required"                                       WB_NODES
+  ask_int "MinIO — nodes"             "4" is_positive_int "Integer ≥ 1 required"                                       MINIO_NODES
+  ask_int "MinIO — disks per node"    "4" is_positive_int "Integer ≥ 1 required"                                       MINIO_DISKS
 }
 
 # --- ask_minio ---
@@ -515,34 +515,34 @@ minio_fault_tolerance() {
   local total=$(( nodes * disks ))
   local tol_read=$(( total / 2 ))
   local tol_write=$(( total / 2 - 1 ))
-  echo "Configuration : ${nodes} nœuds × ${disks} disques = ${total} drives"
-  echo "Erasure coding : $((total/2)) données + $((total/2)) parité"
-  echo "→ Perte jusqu'à ${tol_read} drives tolérée en lecture"
-  echo "→ Perte jusqu'à ${tol_write} drives tolérée en écriture"
+  echo "Configuration: ${nodes} nodes × ${disks} disks = ${total} drives"
+  echo "Erasure coding: $((total/2)) data + $((total/2)) parity"
+  echo "→ Up to ${tol_read} drive losses tolerated for reads"
+  echo "→ Up to ${tol_write} drive losses tolerated for writes"
   if (( nodes >= 2 )); then
-    echo "→ Perte d'un nœud entier (${disks} drives) : service maintenu"
+    echo "→ Loss of an entire node (${disks} drives): service maintained"
   else
-    echo "→ Nœud unique : aucune tolérance nœud (mode test uniquement)"
+    echo "→ Single node: no node-level tolerance (testing mode only)"
   fi
 }
 
 ask_minio() {
-  step "Configuration des disques MinIO (${MINIO_NODES} nœuds × ${MINIO_DISKS} disques)"
+  step "MinIO disk configuration (${MINIO_NODES} nodes × ${MINIO_DISKS} disks)"
   declare -gA MINIO_PATHS
 
   echo ""
-  echo -e "  ${C_WHITE}Comment configurer les disques MinIO ?${C_RESET}"
-  echo -e "  ${C_CYAN}[1]${C_RESET} Test mono-serveur  — /data/minio/ (répertoires créés automatiquement)"
-  echo -e "  ${C_CYAN}[2]${C_RESET} Chemins manuels    — je saisis chaque chemin"
-  echo -e "  ${C_CYAN}[3]${C_RESET} Détection auto     — scanner les disques montés"
+  echo -e "  ${C_WHITE}How to configure MinIO disks?${C_RESET}"
+  echo -e "  ${C_CYAN}[1]${C_RESET} Single-server test  — /data/minio/ (directories created automatically)"
+  echo -e "  ${C_CYAN}[2]${C_RESET} Manual paths        — enter each path manually"
+  echo -e "  ${C_CYAN}[3]${C_RESET} Auto-detection      — scan mounted disks"
   echo ""
 
   local choice
   while true; do
-    prompt_input "Choix" "1"
+    prompt_input "Choice" "1"
     choice="$REPLY"
     [[ "$choice" =~ ^[123]$ ]] && break
-    error "Entrez 1, 2 ou 3"
+    error "Enter 1, 2 or 3"
   done
 
   MINIO_MODE="test"
@@ -561,29 +561,29 @@ ask_minio() {
       MINIO_MODE="manual"
       local n d
       for n in $(seq 1 "$MINIO_NODES"); do
-        prompt_input "Nœud ${n} — chemin métadonnées" "/data/minio/node${n}"
+        prompt_input "Node ${n} — metadata path" "/data/minio/node${n}"
         MINIO_PATHS["${n}_path"]="$REPLY"
         for d in $(seq 1 "$MINIO_DISKS"); do
-          prompt_input "Nœud ${n} — Disque ${d}" "/mnt/node${n}-disk${d}"
+          prompt_input "Node ${n} — Disk ${d}" "/mnt/node${n}-disk${d}"
           MINIO_PATHS["${n}_${d}"]="$REPLY"
         done
       done
       ;;
     3)
       MINIO_MODE="auto"
-      step "Disques disponibles détectés"
+      step "Detected available disks"
       df -h --output=source,target,size 2>/dev/null \
         | grep -vE '^(tmpfs|udev|/dev/loop|Filesystem|/dev/sr)' \
         | grep -v ' /$' | grep -v '/boot' \
         | tail -n +2 | nl -ba
       echo ""
-      warn "Saisissez les chemins à partir des points de montage ci-dessus"
+      warn "Enter paths from the mount points listed above"
       local n d
       for n in $(seq 1 "$MINIO_NODES"); do
-        prompt_input "Nœud ${n} — chemin métadonnées" "/data/minio/node${n}"
+        prompt_input "Node ${n} — metadata path" "/data/minio/node${n}"
         MINIO_PATHS["${n}_path"]="$REPLY"
         for d in $(seq 1 "$MINIO_DISKS"); do
-          prompt_input "Nœud ${n} — Disque ${d}" ""
+          prompt_input "Node ${n} — Disk ${d}" ""
           MINIO_PATHS["${n}_${d}"]="$REPLY"
         done
       done
@@ -596,67 +596,67 @@ ask_minio() {
   echo ""
   local ft_lines
   mapfile -t ft_lines < <(minio_fault_tolerance "$MINIO_NODES" "$MINIO_DISKS")
-  box "Tolérance aux pannes MinIO" "${ft_lines[@]}"
+  box "MinIO Fault Tolerance" "${ft_lines[@]}"
 }
 
 # --- ask_haproxy ---
 ask_haproxy() {
-  step "Page de statistiques HAProxy (accessible via https://DOMAINE/stats)"
-  if prompt_yn "Activer les stats HAProxy ?" "N"; then
+  step "HAProxy statistics page (accessible via https://DOMAIN/stats)"
+  if prompt_yn "Enable HAProxy stats?" "N"; then
     HAPROXY_STATS="yes"
-    info "Stats activées — mot de passe généré automatiquement"
+    info "Stats enabled — password generated automatically"
   else
     HAPROXY_STATS="no"
-    info "Stats désactivées"
+    info "Stats disabled"
   fi
 }
 
 # --- ask_minio_console ---
 ask_minio_console() {
-  step "Console MinIO (accessible via https://DOMAINE/s3-console)"
+  step "MinIO Console (accessible via https://DOMAIN/s3-console)"
   echo ""
-  echo -e "  ${C_WHITE}Interface web pour gérer les buckets, utilisateurs et versioning MinIO.${C_RESET}"
-  echo -e "  ${C_GRAY}Authentification : identifiants MinIO (MINIO_ACCESS_KEY / MINIO_SECRET_KEY).${C_RESET}"
+  echo -e "  ${C_WHITE}Web interface to manage MinIO buckets, users and versioning.${C_RESET}"
+  echo -e "  ${C_GRAY}Authentication: MinIO credentials (MINIO_ACCESS_KEY / MINIO_SECRET_KEY).${C_RESET}"
   echo ""
-  if prompt_yn "Activer la console MinIO ?" "N"; then
+  if prompt_yn "Enable MinIO console?" "N"; then
     MINIO_CONSOLE="yes"
-    info "Console MinIO activée — accessible via /s3-console"
+    info "MinIO console enabled — accessible via /s3-console"
   else
     MINIO_CONSOLE="no"
-    info "Console MinIO désactivée"
+    info "MinIO console disabled"
   fi
 }
 
 # --- show_recap ---
 show_load_estimate() {
-  # Modèle calibré sur tests réels (README) :
-  #   6 FPM → 44 req/s PHP · 34 VUs → 500 DAU · P99 1 154 ms · 0 erreur / 1 900 req
-  # Rendement décroissant à 88 % par nœud (ressources partagées : DB, Redis, HAProxy).
+  # Model calibrated on real tests (README):
+  #   6 FPM → 44 req/s PHP · 34 VUs → 500 DAU · P99 1,154 ms · 0 errors / 1,900 req
+  # Diminishing returns at 88% per node (shared resources: DB, Redis, HAProxy).
   local req_s_php req_s_light concurrent total p99_php ram_total
 
-  # req/s PHP : somme géométrique de raison 0.88 à partir de 10 req/s pour 1 nœud
+  # PHP req/s: geometric series with ratio 0.88 starting from 10 req/s for 1 node
   req_s_php=$(awk -v n="$NC_NODES" \
     'BEGIN{s=0; for(i=0;i<n;i++) s+=10*0.88^i; printf "%.0f", s}')
 
-  # req/s léger (/status.php, statiques) ≈ 4.15× le débit PHP
+  # Light req/s (/status.php, statics) ≈ 4.15× PHP throughput
   req_s_light=$(( req_s_php * 415 / 100 ))
 
-  # VUs peak (sessions simultanées) : req_s_php × 0.77
-  # Calibré sur test PME : 6 FPM → 44 req/s → 34 VUs  (34/44 = 0.773)
+  # Peak VUs (concurrent sessions): req_s_php × 0.77
+  # Calibrated on SMB test: 6 FPM → 44 req/s → 34 VUs  (34/44 = 0.773)
   concurrent=$(awk -v r="$req_s_php" 'BEGIN{printf "%.0f", r * 0.77}')
   [[ $concurrent -lt 1 ]] && concurrent=1
 
-  # DAU estimés : 1 VU ≈ 15 DAU (ratio mesuré : 34 VUs pour 500 DAU en test PME)
+  # Estimated DAU: 1 VU ≈ 15 DAU (measured ratio: 34 VUs for 500 DAU in SMB test)
   total=$(( concurrent * 15 ))
 
-  # P99 PHP estimé : 3 381 ms × n^-0.6 (calé sur mesures réelles)
+  # Estimated PHP P99: 3,381 ms × n^-0.6 (calibrated on real measurements)
   p99_php=$(awk -v n="$NC_NODES" 'BEGIN{printf "%.0f", 3381 * n^(-0.6)}')
 
-  # RAM : 3 Go/nœud FPM + overhead dynamique (1.5 Go/Galera, 0.125/Redis,
-  #        0.375/MinIO, 0.75/Collabora, 0.1/Whiteboard)
-  #        + 0.7 Go fixe (HAProxy 0.05 + nginx-acme 0.03 + certbot 0.03
+  # RAM: 3 GB/FPM node + dynamic overhead (1.5 GB/Galera, 0.125/Redis,
+  #       0.375/MinIO, 0.75/Collabora, 0.1/Whiteboard)
+  #       + 0.7 GB fixed (HAProxy 0.05 + nginx-acme 0.03 + certbot 0.03
   #                       + nextcloud-cron 0.5 + galera-autoheal 0.02 + OS 0.07)
-  # Vérifié : 6 FPM + 5 Galera + 6 Redis + 4 MinIO + 3 Collab + 3 WB = 31 Go (README)
+  # Verified: 6 FPM + 5 Galera + 6 Redis + 4 MinIO + 3 Collab + 3 WB = 31 GB (README)
   ram_total=$(awk \
     -v nc="$NC_NODES" -v db="$MARIADB_NODES" -v redis="$REDIS_NODES" \
     -v minio="$MINIO_NODES" -v collab="$COLLAB_NODES" -v wb="$WB_NODES" \
@@ -664,75 +664,75 @@ show_load_estimate() {
        nc*3 + db*1.5 + redis*0.125 + minio*0.375 + collab*0.75 + wb*0.1 + 0.7}')
 
   local write_tps=1500
-  (( MARIADB_NODES >= 5 )) && write_tps=2500   # mesuré : 5 nœuds → ~2 500 TPS
+  (( MARIADB_NODES >= 5 )) && write_tps=2500   # measured: 5 nodes → ~2,500 TPS
   (( MARIADB_NODES >= 7 )) && write_tps=3500
 
   local redis_masters=$(( REDIS_NODES / 2 ))
 
   local minio_total=$(( MINIO_NODES * MINIO_DISKS ))
-  # Tolérance écriture (quorum N/2+1 drives) = minio_total/2 - 1
-  # Ex. 4 nœuds × 2 drives = 8 → écriture tolère 3 drives perdus (README : "Perte de 3 drives")
+  # Write tolerance (quorum N/2+1 drives) = minio_total/2 - 1
+  # Ex. 4 nodes × 2 drives = 8 → write tolerates 3 lost drives (README: "Loss of 3 drives")
   local minio_tol_drives=$(( minio_total / 2 - 1 ))
   local minio_tol_nodes=$(( MINIO_NODES / 2 ))
 
-  box "Estimation de charge" \
-    "Sessions simultanées     : ~${concurrent} VUs  (réf. : 34 VUs mesurés à 6 nœuds)" \
-    "Utilisateurs quotidiens  : ~${total} DAU  (ratio 1 VU : 15 DAU mesuré)" \
-    "Débit PHP (login/API)    : ~${req_s_php} req/s  (réf. : 44 req/s à 6 nœuds)" \
-    "Débit léger (/status…)   : ~${req_s_light} req/s" \
-    "P99 PHP estimé           : ~${p99_php} ms" \
-    "RAM recommandée          : ~${ram_total} Go" \
-    "Écritures MariaDB        : ~${write_tps} TPS  (Galera ${MARIADB_NODES} nœuds)" \
-    "Cache Redis              : ${redis_masters} masters  > 500 000 ops/s" \
-    "Tolérance MinIO          : ${minio_tol_nodes} nœud(s) ou ${minio_tol_drives} disques perdables (écriture)" \
-    "Collabora                : ${COLLAB_NODES} nœud(s) — connexions/documents illimités (patch binaire home_mode)" \
+  box "Load Estimate" \
+    "Concurrent sessions      : ~${concurrent} VUs  (ref: 34 VUs measured at 6 nodes)" \
+    "Daily active users       : ~${total} DAU  (ratio 1 VU : 15 DAU measured)" \
+    "PHP throughput (login/API): ~${req_s_php} req/s  (ref: 44 req/s at 6 nodes)" \
+    "Light throughput (/status…): ~${req_s_light} req/s" \
+    "Estimated PHP P99        : ~${p99_php} ms" \
+    "Recommended RAM          : ~${ram_total} GB" \
+    "MariaDB writes           : ~${write_tps} TPS  (Galera ${MARIADB_NODES} nodes)" \
+    "Redis cache              : ${redis_masters} masters  > 500,000 ops/s" \
+    "MinIO tolerance          : ${minio_tol_nodes} node(s) or ${minio_tol_drives} drives losable (writes)" \
+    "Collabora                : ${COLLAB_NODES} node(s) — unlimited connections/documents (home_mode binary patch)" \
     "" \
-    "Données réelles : 0 erreur / 1 900 req · 150 concurrent · max 247 req/s"
+    "Real data: 0 errors / 1,900 req · 150 concurrent · max 247 req/s"
 }
 
 show_recap() {
   echo ""
-  box "Récapitulatif de votre configuration" \
-    "Nextcloud      : $NC_DOMAIN  (${NC_NODES} nœuds FPM + ${NC_NODES} nginx, v${NC_VERSION})" \
-    "Collabora      : $COLLAB_DOMAIN  (${COLLAB_NODES} nœuds)" \
-    "Whiteboard     : $WB_DOMAIN  (${WB_NODES} nœuds)" \
-    "Email SSL      : $CERTBOT_EMAIL" \
-    "MariaDB Galera : ${MARIADB_NODES} nœuds" \
-    "Redis Cluster  : ${REDIS_NODES} nœuds" \
-    "MinIO         : ${MINIO_NODES} nœuds × ${MINIO_DISKS} disques (mode: ${MINIO_MODE})" \
-    "Stats HAProxy  : ${HAPROXY_STATS}" \
-    "Console MinIO  : ${MINIO_CONSOLE}"
+  box "Configuration Summary" \
+    "Nextcloud      : $NC_DOMAIN  (${NC_NODES} FPM nodes + ${NC_NODES} nginx, v${NC_VERSION})" \
+    "Collabora      : $COLLAB_DOMAIN  (${COLLAB_NODES} nodes)" \
+    "Whiteboard     : $WB_DOMAIN  (${WB_NODES} nodes)" \
+    "SSL Email      : $CERTBOT_EMAIL" \
+    "MariaDB Galera : ${MARIADB_NODES} nodes" \
+    "Redis Cluster  : ${REDIS_NODES} nodes" \
+    "MinIO          : ${MINIO_NODES} nodes × ${MINIO_DISKS} disks (mode: ${MINIO_MODE})" \
+    "HAProxy Stats  : ${HAPROXY_STATS}" \
+    "MinIO Console  : ${MINIO_CONSOLE}"
 
   show_load_estimate
 
   echo ""
-  prompt_yn "Confirmer et lancer la génération ?" "Y" || die "Annulé par l'utilisateur"
+  prompt_yn "Confirm and start generation?" "Y" || die "Cancelled by user"
 }
 
 # --- ask_cert_mode ---
 ask_cert_mode() {
-  step "Environnement des certificats SSL"
+  step "SSL Certificate Environment"
   echo ""
-  echo -e "  ${C_WHITE}[1]${C_RESET} ${C_BGREEN}Production${C_RESET}  — Let's Encrypt réel (domaines DNS valides requis)"
-  echo -e "  ${C_WHITE}[2]${C_RESET} ${C_YELLOW}Staging/Test${C_RESET} — Let's Encrypt staging (sans limite de taux, certificats non fiables)"
+  echo -e "  ${C_WHITE}[1]${C_RESET} ${C_BGREEN}Production${C_RESET}  — Real Let's Encrypt (valid DNS domains required)"
+  echo -e "  ${C_WHITE}[2]${C_RESET} ${C_YELLOW}Staging/Test${C_RESET} — Let's Encrypt staging (no rate limit, untrusted certificates)"
   echo ""
   local choice
-  prompt_input "Votre choix" "1"
+  prompt_input "Your choice" "1"
   choice="$REPLY"
   if [[ "$choice" == "2" ]]; then
     CERTBOT_STAGING="yes"
-    warn "Mode STAGING activé — les certificats ne seront pas reconnus par les navigateurs"
-    warn "Utilisez ce mode uniquement pour tester l'infrastructure, jamais en production"
+    warn "STAGING mode enabled — certificates will not be trusted by browsers"
+    warn "Use this mode only to test infrastructure, never in production"
   else
     CERTBOT_STAGING="no"
-    info "Mode Production — certificats Let's Encrypt réels"
+    info "Production mode — real Let's Encrypt certificates"
   fi
 }
 
 # --- save_answers / load_answers ---
 save_answers() {
   {
-    echo "# NXT Maxscale — Config sauvegardée le $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "# NXT Maxscale — Config saved on $(date '+%Y-%m-%d %H:%M:%S')"
     printf 'NC_DOMAIN="%s"\n'     "$NC_DOMAIN"
     printf 'COLLAB_DOMAIN="%s"\n' "$COLLAB_DOMAIN"
     printf 'WB_DOMAIN="%s"\n'     "$WB_DOMAIN"
@@ -758,22 +758,22 @@ save_answers() {
 load_answers() {
   [[ -f "$ANSWERS_CACHE" ]] || return 1
   local saved_date
-  saved_date=$(grep '^#' "$ANSWERS_CACHE" | head -1 | sed 's/# NXT Maxscale — Config sauvegardée le //')
+  saved_date=$(grep '^#' "$ANSWERS_CACHE" | head -1 | sed 's/# NXT Maxscale — Config saved on //')
   echo ""
-  warn "Configuration précédente trouvée (${saved_date}) :"
+  warn "Previous configuration found (${saved_date}):"
   grep -v '^#\|^declare' "$ANSWERS_CACHE" | while IFS= read -r line; do
     printf "  ${C_GRAY}%s${C_RESET}\n" "$line"
   done
   echo ""
-  prompt_yn "Réutiliser cette configuration ?" "Y" || return 1
+  prompt_yn "Reuse this configuration?" "Y" || return 1
   declare -gA MINIO_PATHS 2>/dev/null || true
   # shellcheck source=/dev/null
   source "$ANSWERS_CACHE"
-  info "Configuration rechargée."
+  info "Configuration reloaded."
   return 0
 }
 
-# ─── [GENERATE] Génération des fichiers ──────────────────────────────────────
+# ─── [GENERATE] File generation ──────────────────────────────────────────────
 
 # gen_pass <length> <"hex"|"base64"> → stdout, guaranteed no # char
 gen_pass() {
@@ -794,8 +794,8 @@ gen_pass() {
 }
 
 gen_passwords() {
-  phase 5 7 "Génération des mots de passe"
-  start_spinner "Génération des secrets cryptographiques..."
+  phase 5 7 "Password Generation"
+  start_spinner "Generating cryptographic secrets..."
 
   GEN_NC_ADMIN_PASS=$(gen_pass 18 "base64")
   GEN_DB_ROOT_PASS=$(gen_pass 18 "base64")
@@ -811,12 +811,12 @@ gen_passwords() {
     GEN_HAPROXY_STATS_PASS="disabled"
   fi
 
-  stop_spinner "Mots de passe générés"
+  stop_spinner "Passwords generated"
 }
 
 gen_env() {
   local dest="${1:-$INSTALL_DIR/.env}"
-  step "Génération du fichier .env"
+  step "Generating .env file"
 
   # Build MinIO path lines dynamically
   local minio_lines="" n d
@@ -829,8 +829,8 @@ gen_env() {
   done
 
   cat > "$dest" <<EOF
-# Généré automatiquement par deploy.sh — $(date '+%Y-%m-%d %H:%M:%S')
-# NE PAS MODIFIER MANUELLEMENT — regénérer avec deploy.sh
+# Auto-generated by deploy.sh — $(date '+%Y-%m-%d %H:%M:%S')
+# DO NOT EDIT MANUALLY — regenerate with deploy.sh
 
 COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
 
@@ -865,11 +865,11 @@ WHITEBOARD_JWT_SECRET=${GEN_JWT_SECRET}
 EOF
 
   chmod 600 "$dest"
-  info ".env généré : $dest"
+  info ".env generated: $dest"
 }
 
-# gen_minio_server_cmd — construit la commande MinIO server depuis le fichier de pools
-# Si .minio-pools existe : multi-pool (expansion); sinon : comportement d'origine
+# gen_minio_server_cmd — builds the MinIO server command from the pools file
+# If .minio-pools exists: multi-pool (expansion); otherwise: original behavior
 gen_minio_server_cmd() {
   local pools_file="$INSTALL_DIR/.minio-pools"
   if [[ -f "$pools_file" ]]; then
@@ -890,12 +890,12 @@ gen_minio_server_cmd() {
 
 gen_compose() {
   local dest="${1:-$INSTALL_DIR/docker-compose.yml}"
-  step "Génération du docker-compose.yml"
+  step "Generating docker-compose.yml"
 
 
   # ── Header ──────────────────────────────────────────────────────────────
   cat > "$dest" <<'HEADER'
-# Généré automatiquement par deploy.sh
+# Auto-generated by deploy.sh
 services:
 HEADER
 
@@ -980,7 +980,7 @@ HAPROXY
 NCSETUP
 
   # ── nextcloud-cron (fixed) ──────────────────────────────────────────────
-  # Exécute cron.php toutes les 5 min — remplace le mode ajax (background:cron)
+  # Runs cron.php every 5 min — replaces ajax mode (background:cron)
   cat >> "$dest" <<NCCRON
 
   nextcloud-cron:
@@ -1105,9 +1105,9 @@ NCPERMS
     if (( i == 1 )); then
       admin_env="      - NEXTCLOUD_ADMIN_USER=\${NEXTCLOUD_ADMIN_USER}
       - NEXTCLOUD_ADMIN_PASSWORD=\${NEXTCLOUD_ADMIN_PASSWORD}"
-      # Verification WSREP via PDO PHP (mariadb-client absent dans limage nextcloud).
-      # php -r "new PDO(...)" leve une exception si WSREP 1047 -> exit non-zero.
-      # Pas de variable $ dans le YAML -> pas d'interpolation Docker Compose.
+      # WSREP verification via PHP PDO (mariadb-client absent from nextcloud image).
+      # php -r "new PDO(...)" throws an exception on WSREP 1047 -> non-zero exit.
+      # No $ variable in YAML -> no Docker Compose interpolation.
       entrypoint_override='    entrypoint: ["/bin/bash", "-c", "until php -r \"new PDO('"'"'mysql:host=haproxy;port=3306'"'"', getenv('"'"'MYSQL_USER'"'"'), getenv('"'"'MYSQL_PASSWORD'"'"')); echo '"'"'ok'"'"';\" 2>/dev/null | grep -q ok; do echo waiting for Galera WSREP...; sleep 3; done; exec /entrypoint.sh php-fpm"]'
     fi
 
@@ -1158,7 +1158,7 @@ ${depends_block}
 NCNODE
   done
 
-  # ── nginx containers (1 par nœud Nextcloud FPM) ────────────────────────
+  # ── nginx containers (1 per Nextcloud FPM node) ───────────────────────
   for i in $(seq 1 "$NC_NODES"); do
     local fpm_name; fpm_name="app-next-$(printf '%02d' "$i")"
     local nginx_name; nginx_name="nginx-next-$(printf '%02d' "$i")"
@@ -1205,15 +1205,15 @@ NGNX
     fi
 
     if (( i > 1 )); then
-      # Tous les nodes non-bootstrap dépendent directement de node1 (pas du précédent).
-      # Cela permet un démarrage parallèle — Galera sérialise les SST lui-même.
+      # All non-bootstrap nodes depend directly on node1 (not the previous one).
+      # This allows parallel startup — Galera serializes SST itself.
       db_depends="    depends_on:
       mariadb-node1:
         condition: service_healthy"
     fi
 
-    # node1 : laisse le temps au bootstrap + init schema
-    # nodes 2+ : 180s pour absorber un SST complet avant qu'autoheal intervienne
+    # node1: allows time for bootstrap + schema init
+    # nodes 2+: 180s to absorb a full SST before autoheal intervenes
     local start_period_db="180s"
     (( i == 1 )) && start_period_db="120s"
 
@@ -1335,14 +1335,14 @@ RNODE
       - REDIS_PASSWORD=\${REDIS_PASSWORD}
     command: >
       sh -c "
-        echo 'Attente des noeuds Redis...';
+        echo 'Waiting for Redis nodes...';
 ${redis_wait_block}
         CLUSTER_STATE=\$\$(redis-cli -h redis-node1 -a \$\$REDIS_PASSWORD --no-auth-warning cluster info 2>/dev/null | grep cluster_state | cut -d: -f2 | tr -d '[:space:]');
         if [ \"\$\$CLUSTER_STATE\" = \"ok\" ]; then
-          echo 'Cluster Redis deja initialise.';
+          echo 'Redis cluster already initialized.';
         else
           redis-cli --cluster create${redis_addr_list} --cluster-replicas 1 -a \$\$REDIS_PASSWORD --no-auth-warning --cluster-yes;
-          echo 'Cluster Redis cree.';
+          echo 'Redis cluster created.';
         fi"
     networks:
       - next-net
@@ -1352,7 +1352,7 @@ ${redis_deps_block}
 RCINIT
 
   # ── MinIO nodes (dynamic) ──────────────────────────────────────────────
-  # Commande server : SNMD / MNMD single-pool / MNMD multi-pool (expansion)
+  # Server command: SNMD / MNMD single-pool / MNMD multi-pool (expansion)
   local minio_server_cmd
   minio_server_cmd=$(gen_minio_server_cmd)
 
@@ -1561,7 +1561,7 @@ NETWORKS
   # ── Volumes ─────────────────────────────────────────────────────────────
   echo "" >> "$dest"
   echo "volumes:" >> "$dest"
-  # Pré-créés par gen_certs() avant docker compose up → external: true évite le warning
+  # Pre-created by gen_certs() before docker compose up → external: true avoids the warning
   echo "  letsencrypt:" >> "$dest"
   echo "    external: true" >> "$dest"
   echo "    name: ${COMPOSE_PROJECT_NAME}_letsencrypt" >> "$dest"
@@ -1581,18 +1581,18 @@ NETWORKS
   done
   echo "  redis_whiteboard_data:" >> "$dest"
 
-  # Initialiser le fichier de pools MinIO lors du premier déploiement
+  # Initialize the MinIO pools file on first deployment
   local _pools_file="$INSTALL_DIR/.minio-pools"
   if [[ ! -f "$_pools_file" ]] && (( MINIO_NODES > 1 )); then
     echo "1:${MINIO_NODES}" > "$_pools_file"
   fi
 
-  info "docker-compose.yml généré ($dest)"
+  info "docker-compose.yml generated ($dest)"
 }
 
 gen_galera_cnf() {
   local dir="${1:-$INSTALL_DIR/mariadb}"
-  step "Génération des fichiers de configuration Galera"
+  step "Generating Galera configuration files"
   mkdir -p "$dir"
 
   # Build comma-separated cluster node list
@@ -1636,9 +1636,9 @@ CNF
 
 patch_nextcloud_init() {
   local file="${1:-$INSTALL_DIR/nextcloud-init.sh}"
-  step "Mise à jour de nextcloud-init.sh (Redis ${REDIS_NODES} nœuds)"
+  step "Updating nextcloud-init.sh (Redis ${REDIS_NODES} nodes)"
 
-  [[ -f "$file" ]] || die "nextcloud-init.sh introuvable : $file"
+  [[ -f "$file" ]] || die "nextcloud-init.sh not found: $file"
 
   # Rebuild seed lines dynamically for all REDIS_NODES nodes
   local seed_lines="" i
@@ -1658,12 +1658,12 @@ open(path, 'w').write(txt2)
 PYEOF
 
   local masters=$(( REDIS_NODES / 2 ))
-  info "nextcloud-init.sh prêt : ${REDIS_NODES} seeds (redis-node1..${REDIS_NODES}) — ${masters} masters + ${masters} replicas"
+  info "nextcloud-init.sh ready: ${REDIS_NODES} seeds (redis-node1..${REDIS_NODES}) — ${masters} masters + ${masters} replicas"
 }
 
 create_minio_dirs() {
-  step "Création des répertoires MinIO"
-  start_spinner "Préparation des répertoires..."
+  step "Creating MinIO directories"
+  start_spinner "Preparing directories..."
   local n d
   for n in $(seq 1 "$MINIO_NODES"); do
     for d in $(seq 1 "$MINIO_DISKS"); do
@@ -1672,14 +1672,14 @@ create_minio_dirs() {
       find "${path:?}" -mindepth 1 -delete 2>/dev/null || true
     done
   done
-  stop_spinner "Répertoires MinIO prêts"
+  stop_spinner "MinIO directories ready"
 }
 
 patch_haproxy() {
   local file="${1:-$INSTALL_DIR/haproxy.cfg}"
-  step "Mise à jour des backends HAProxy"
+  step "Updating HAProxy backends"
 
-  [[ -f "$file" ]] || die "haproxy.cfg introuvable : $file"
+  [[ -f "$file" ]] || die "haproxy.cfg not found: $file"
 
   # Replace server lines between BEGIN/END markers
   _replace_servers() {
@@ -1742,13 +1742,13 @@ patch_haproxy() {
   _replace_servers "MINIO"         "${minio_servers%$'\n'}"   "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
   _replace_servers "REDIS"         "${redis_servers%$'\n'}"   "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
 
-  # Supprimer le bloc stats de frontend https si désactivé (entre les markers BEGIN/END_STATS)
+  # Remove stats block from https frontend if disabled (between BEGIN/END_STATS markers)
   if [[ "$HAPROXY_STATS" == "no" ]]; then
     awk '/# BEGIN_STATS/{skip=1} /# END_STATS/{skip=0; next} !skip{print}' \
       "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
   fi
 
-  # Supprimer les blocs console MinIO si désactivée
+  # Remove MinIO console blocks if disabled
   if [[ "$MINIO_CONSOLE" != "yes" ]]; then
     awk '/# BEGIN_MINIO_CONSOLE$/{skip=1} /# END_MINIO_CONSOLE$/{skip=0; next} !skip{print}' \
       "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
@@ -1757,20 +1757,20 @@ patch_haproxy() {
   fi
 
   mv "$tmp" "$file"
-  info "haproxy.cfg patché (NC:${NC_NODES} Collab:${COLLAB_NODES} WB:${WB_NODES} DB:${MARIADB_NODES} MinIO:${MINIO_NODES})"
+  info "haproxy.cfg patched (NC:${NC_NODES} Collab:${COLLAB_NODES} WB:${WB_NODES} DB:${MARIADB_NODES} MinIO:${MINIO_NODES})"
 }
 
-# ─── [PATCH] Patch binaire Collabora — suppression limite home_mode ──────────
+# ─── [PATCH] Collabora binary patch — removing home_mode limit ───────────────
 
 patch_collabora_binary() {
-  # $1 optionnel : premier nœud à préférer pour l'extraction (ex. premier nouveau nœud
-  #   lors d'un scale-up, qui a un binaire non patché). Défaut = 1.
+  # $1 optional: first node preferred for extraction (e.g. first new node
+  #   during scale-up, which has an unpatched binary). Default = 1.
   local first_src="${1:-1}"
-  step "Patch binaire Collabora — suppression de la limite home_mode"
+  step "Collabora binary patch — removing home_mode limit"
 
-  # Attendre que les containers Collabora soient running (max 120 s)
+  # Wait for Collabora containers to be running (max 120 s)
   local max_wait=120 elapsed=0
-  start_spinner "Attente des containers Collabora..."
+  start_spinner "Waiting for Collabora containers..."
   while (( elapsed < max_wait )); do
     local all_up=true i
     for i in $(seq 1 "$COLLAB_NODES"); do
@@ -1784,7 +1784,7 @@ patch_collabora_binary() {
   stop_spinner
 
   if (( elapsed >= max_wait )); then
-    warn "Containers Collabora non disponibles après ${max_wait}s — patch ignoré"
+    warn "Collabora containers unavailable after ${max_wait}s — patch skipped"
     return 0
   fi
 
@@ -1792,8 +1792,8 @@ patch_collabora_binary() {
   bin_tmp=$(mktemp)
   patched_tmp=$(mktemp)
 
-  # Extraire le binaire depuis first_src en priorité (nouveau nœud = binaire non patché),
-  # puis fallback sur les autres nœuds si first_src n'est pas disponible.
+  # Extract binary from first_src preferentially (new node = unpatched binary),
+  # then fall back to other nodes if first_src is not available.
   local src_node=""
   for i in $(seq "$first_src" "$COLLAB_NODES") $(seq 1 $(( first_src - 1 ))); do
     if docker cp "collabora-node${i}:/usr/bin/coolwsd" "$bin_tmp" 2>/dev/null; then
@@ -1803,29 +1803,29 @@ patch_collabora_binary() {
   done
 
   if [[ -z "$src_node" ]]; then
-    warn "Impossible d'extraire coolwsd — patch ignoré"
+    warn "Cannot extract coolwsd — patch skipped"
     rm -f "$bin_tmp" "$patched_tmp"
     return 0
   fi
 
-  # Appliquer le patch via recherche dynamique du pattern dans le binaire
+  # Apply patch via dynamic pattern search in the binary
   local patch_result
   patch_result=$(python3 - "$bin_tmp" "$patched_tmp" <<'PATCHPY'
 import sys, struct
 
 INT_MAX  = b"\xff\xff\xff\x7f"
-MAX_GAP  = 64   # octets max entre les deux MOV
-TEST_WIN = 24   # fenêtre après le 2e MOV pour chercher TEST/CMP
+MAX_GAP  = 64   # max bytes between the two MOV instructions
+TEST_WIN = 24   # window after the 2nd MOV to search for TEST/CMP
 
 data = bytearray(open(sys.argv[1], "rb").read())
 
-# ── Génération de tous les encodages MOV r32, <val> (x86-64) ─────────────────
+# ── Generate all MOV r32, <val> encodings (x86-64) ───────────────────────────
 # Opcodes B8..BF = eax/ecx/edx/ebx/esp/ebp/esi/edi
 # 41 B8..BF = r8d..r15d  (REX.B prefix)
 _base = list(range(0xB8, 0xC0))
 
 def all_mov(val):
-    """Retourne liste de (pattern_bytes, offset_de_l'immédiat_dans_le_pattern)."""
+    """Returns list of (pattern_bytes, offset_of_immediate_in_pattern)."""
     r = []
     v = struct.pack("<I", val)
     for op in _base:
@@ -1835,7 +1835,7 @@ def all_mov(val):
     return r
 
 def find_pair(data, list_a, list_b, max_gap, require_test=True):
-    """Cherche (MOV A, MOV B) avec TEST/CMP facultatif dans la fenêtre suivante."""
+    """Searches for (MOV A, MOV B) with optional TEST/CMP in the following window."""
     for pa, off_a in list_a:
         start = 0
         while True:
@@ -1860,9 +1860,9 @@ def find_pair(data, list_a, list_b, max_gap, require_test=True):
 mov20 = all_mov(20)
 mov10 = all_mov(10)
 
-# ── Stratégie 1 : pattern exact original ─────────────────────────────────────
-# Pas de recherche globale ORIG_PATCHED — des faux positifs existent dans le binaire.
-# La détection "déjà patché" se fait uniquement à l'offset trouvé.
+# ── Strategy 1: exact original pattern ───────────────────────────────────────
+# No global ORIG_PATCHED search — false positives exist in the binary.
+# "Already patched" detection is done only at the found offset.
 ORIG = b"\xba\x14\x00\x00\x00\xb8\x0a\x00\x00\x00\x84\xdb"
 idx = data.find(ORIG)
 if idx != -1:
@@ -1875,12 +1875,12 @@ if idx != -1:
     print(f"patched_exact_at_0x{idx:x}")
     sys.exit(0)
 
-# ── Stratégie 2 : MOV r32,20 + MOV r32,10 (n'importe quel registre) + TEST ──
-# Ordre fixe (20 puis 10) : l'ordre inversé génère des faux positifs sur binaire patché
+# ── Strategy 2: MOV r32,20 + MOV r32,10 (any register) + TEST ────────────────
+# Fixed order (20 then 10): reversed order generates false positives on patched binary
 result = find_pair(data, mov20, mov10, MAX_GAP)
 
-# ── Stratégie 3 : ancrage sur la chaîne "home_mode.enable" dans le binaire ───
-# (Stratégie (20+20) supprimée : 56+ faux positifs dans le binaire)
+# ── Strategy 3: anchor on "home_mode.enable" string in the binary ────────────
+# (Strategy (20+20) removed: 56+ false positives in the binary)
 if result is None:
     anchor = b"home_mode.enable"
     str_pos = data.find(anchor)
@@ -1916,7 +1916,7 @@ if result is None:
     sys.exit(2)
 
 pos_a, off_a, pos_b, off_b = result
-# Détection déjà patché aux offsets précis trouvés (pas de faux positif global)
+# Already-patched detection at precise found offsets (no global false positive)
 if (data[pos_a + off_a : pos_a + off_a + 4] == INT_MAX and
         data[pos_b + off_b : pos_b + off_b + 4] == INT_MAX):
     print("already_patched")
@@ -1931,29 +1931,29 @@ PATCHPY
   local py_rc=$?
 
   if [[ "$patch_result" == "already_patched" ]]; then
-    info "Patch Collabora déjà présent dans l'image — aucune action"
+    info "Collabora patch already present in image — no action taken"
     rm -f "$bin_tmp" "$patched_tmp"
     return 0
   fi
 
   if (( py_rc != 0 )) || [[ "$patch_result" == "pattern_not_found" ]]; then
-    warn "Limite home_mode introuvable dans coolwsd — 3 stratégies tentées (exact, multi-registre 20/10, ancrage chaîne 'home_mode.enable')"
-    warn "Le binaire a peut-être changé ses valeurs limites ou son encodage. Si le patch est déjà appliqué sur ce container, ignorez ce message."
+    warn "home_mode limit not found in coolwsd — 3 strategies attempted (exact, multi-register 20/10, 'home_mode.enable' string anchor)"
+    warn "The binary may have changed its limit values or encoding. If the patch is already applied on this container, ignore this message."
     rm -f "$bin_tmp" "$patched_tmp"
     return 0
   fi
 
   chmod 755 "$patched_tmp"
 
-  # Déployer sur tous les nœuds et redémarrer
+  # Deploy to all nodes and restart
   local failed=0
   for i in $(seq 1 "$COLLAB_NODES"); do
     if docker cp "$patched_tmp" "collabora-node${i}:/usr/bin/coolwsd" 2>/dev/null; then
       docker exec "collabora-node${i}" chmod 755 /usr/bin/coolwsd 2>/dev/null || true
       docker restart "collabora-node${i}" &>/dev/null || true
-      info "Patch appliqué + redémarrage : collabora-node${i}  (${patch_result})"
+      info "Patch applied + restart: collabora-node${i}  (${patch_result})"
     else
-      warn "Impossible de patcher collabora-node${i}"
+      warn "Cannot patch collabora-node${i}"
       (( failed++ )) || true
     fi
   done
@@ -1961,43 +1961,43 @@ PATCHPY
   rm -f "$bin_tmp" "$patched_tmp"
 
   if (( failed > 0 )); then
-    warn "${failed} nœud(s) non patchés — limite home_mode toujours active"
+    warn "${failed} node(s) not patched — home_mode limit still active"
   else
-    info "Collabora : limite home_mode supprimée sur ${COLLAB_NODES} nœud(s) — connexions/documents illimités"
+    info "Collabora: home_mode limit removed on ${COLLAB_NODES} node(s) — unlimited connections/documents"
   fi
 }
 
-# ─── [DEPLOY] Certificats et déploiement ─────────────────────────────────────
+# ─── [DEPLOY] Certificates and deployment ────────────────────────────────────
 
 gen_certs() {
-  phase 6 7 "Génération des certificats SSL"
+  phase 6 7 "SSL Certificate Generation"
 
-  # Préfixe = nom du projet Docker Compose (doit correspondre aux volumes docker-compose.yml)
+  # Prefix = Docker Compose project name (must match volumes in docker-compose.yml)
   local prefix; prefix="$COMPOSE_PROJECT_NAME"
-  # En staging, on utilise un volume séparé pour ne pas polluer le volume prod
+  # In staging, use a separate volume to avoid polluting the prod volume
   local le_vol="${prefix}_letsencrypt"
   [[ "$CERTBOT_STAGING" == "yes" ]] && le_vol="${prefix}_letsencrypt_staging"
 
   if [[ "$CERTBOT_STAGING" == "yes" ]]; then
-    warn "Mode STAGING — certificats non reconnus par les navigateurs (tests uniquement)"
+    warn "STAGING mode — certificates not trusted by browsers (testing only)"
   fi
 
-  # ── Skip si stack.pem déjà valide ─────────────────────────────────────────
+  # ── Skip if stack.pem already valid ──────────────────────────────────────
   if [[ -s "$INSTALL_DIR/certs/stack.pem" ]]; then
-    info "Certificat existant valide trouvé — génération ignorée"
+    info "Valid existing certificate found — generation skipped"
     return 0
   fi
   rm -f "$INSTALL_DIR/certs/stack.pem"
 
-  # ── Réutiliser depuis le volume Let's Encrypt si disponible ───────────────
-  step "Recherche d'un certificat existant dans le volume"
-  docker volume create "${prefix}_letsencrypt" &>/dev/null || true   # toujours créé (utilisé par le certbot de renouvellement dans compose)
-  docker volume create "${le_vol}" &>/dev/null || true               # idem en prod ; crée _staging en mode staging
+  # ── Reuse from Let's Encrypt volume if available ──────────────────────────
+  step "Searching for existing certificate in volume"
+  docker volume create "${prefix}_letsencrypt" &>/dev/null || true   # always created (used by renewal certbot in compose)
+  docker volume create "${le_vol}" &>/dev/null || true               # same in prod; creates _staging in staging mode
   docker volume create "${prefix}_certbot_webroot" &>/dev/null || true
 
   if docker run --rm -v "${le_vol}:/etc/letsencrypt" alpine \
       test -f /etc/letsencrypt/live/stack/fullchain.pem 2>/dev/null; then
-    info "Certificat trouvé dans le volume — recombination sans appel Let's Encrypt"
+    info "Certificate found in volume — recombining without calling Let's Encrypt"
     mkdir -p "$INSTALL_DIR/certs"
     docker run --rm \
       -v "${le_vol}:/etc/letsencrypt:ro" \
@@ -2006,18 +2006,18 @@ gen_certs() {
         /etc/letsencrypt/live/stack/privkey.pem > /certs/stack.pem.tmp \
         && mv /certs/stack.pem.tmp /certs/stack.pem && chmod 644 /certs/stack.pem"
     [[ -s "$INSTALL_DIR/certs/stack.pem" ]] && {
-      info "Certificat recombinéstack.pem ($(wc -c < "$INSTALL_DIR/certs/stack.pem") octets)"
+      info "Certificate recombined: stack.pem ($(wc -c < "$INSTALL_DIR/certs/stack.pem") bytes)"
       return 0
     }
   fi
 
-  # ── Vérification DNS ──────────────────────────────────────────────────────
-  step "Vérification DNS des domaines"
+  # ── DNS verification ──────────────────────────────────────────────────────
+  step "Domain DNS verification"
   local my_ip dns_ok=true
   my_ip=$(curl -sf --max-time 5 https://api.ipify.org 2>/dev/null || \
           curl -sf --max-time 5 https://ifconfig.me 2>/dev/null || \
           hostname -I 2>/dev/null | awk '{print $1}')
-  info "IP publique détectée : ${my_ip:-inconnue}"
+  info "Public IP detected: ${my_ip:-unknown}"
 
   local domain
   for domain in "$NC_DOMAIN" "$COLLAB_DOMAIN" "$WB_DOMAIN"; do
@@ -2027,29 +2027,29 @@ gen_certs() {
     if [[ -n "$my_ip" && "$resolved" == "$my_ip" ]]; then
       info "$domain → $resolved ✓"
     elif [[ -z "$resolved" ]]; then
-      warn "$domain → non résolu (DNS manquant ?)"
+      warn "$domain → not resolved (DNS missing?)"
       dns_ok=false
     else
-      warn "$domain → $resolved  (IP serveur : ${my_ip:-?}) — divergence !"
+      warn "$domain → $resolved  (server IP: ${my_ip:-?}) — mismatch!"
       dns_ok=false
     fi
   done
 
   if ! $dns_ok; then
-    warn "Certains domaines ne pointent pas vers ce serveur."
-    warn "Let's Encrypt vérifie le DNS — les certificats échoueront si les entrées sont incorrectes."
-    prompt_yn "Continuer quand même ?" "N" || die "Annulé — corrigez le DNS puis relancez."
+    warn "Some domains do not point to this server."
+    warn "Let's Encrypt verifies DNS — certificates will fail if entries are incorrect."
+    prompt_yn "Continue anyway?" "N" || die "Aborted — fix DNS and retry."
   fi
 
-  # ── Vérification des ports ────────────────────────────────────────────────
+  # ── Port check ───────────────────────────────────────────────────────────
   local port80_free=true port443_free=true
   ss -tlnp 2>/dev/null | grep -q ':80 '  && port80_free=false
   ss -tlnp 2>/dev/null | grep -q ':443 ' && port443_free=false
 
-  # ── Appel Certbot ─────────────────────────────────────────────────────────
-  step "Génération des certificats Let's Encrypt"
-  info "Domaines : ${NC_DOMAIN}, ${COLLAB_DOMAIN}, ${WB_DOMAIN}"
-  info "Email    : ${CERTBOT_EMAIL}"
+  # ── Certbot call ──────────────────────────────────────────────────────────
+  step "Generating Let's Encrypt certificates"
+  info "Domains: ${NC_DOMAIN}, ${COLLAB_DOMAIN}, ${WB_DOMAIN}"
+  info "Email  : ${CERTBOT_EMAIL}"
 
   local certbot_args=(
     certonly --standalone --non-interactive --keep-until-expiring
@@ -2062,7 +2062,7 @@ gen_certs() {
   local cert_ok=false certbot_output=""
 
   # challenge = "http-01" | "tls-alpn-01"  port = "80:80" | "443:443"
-  # NOTE : --preferred-challenges doit aller dans les args certbot, pas docker run
+  # NOTE: --preferred-challenges must go in certbot args, not docker run
   _run_certbot() {
     local challenge="$1" port="$2"
     certbot_output=$(docker run --rm -p "$port" \
@@ -2071,45 +2071,45 @@ gen_certs() {
       --preferred-challenges "$challenge" 2>&1) && return 0 || return 1
   }
 
-  # Tentative 1 : HTTP-01 port 80
+  # Attempt 1: HTTP-01 port 80
   if $port80_free; then
-    info "Tentative HTTP-01 (port 80)..."
+    info "Attempting HTTP-01 (port 80)..."
     if _run_certbot "http-01" "80:80"; then
       cert_ok=true
     else
-      warn "HTTP-01 (port 80) a échoué."
+      warn "HTTP-01 (port 80) failed."
       echo "$certbot_output" | grep -iE 'error|detail|challenge|timeout|connection' | head -5 >&2 || true
     fi
   else
-    warn "Port 80 occupé — HTTP-01 ignoré."
+    warn "Port 80 in use — HTTP-01 skipped."
   fi
 
-  # Tentative 2 : TLS-ALPN-01 port 443
+  # Attempt 2: TLS-ALPN-01 port 443
   if ! $cert_ok; then
     if $port443_free; then
-      info "Tentative TLS-ALPN-01 (port 443)..."
+      info "Attempting TLS-ALPN-01 (port 443)..."
       if _run_certbot "tls-alpn-01" "443:443"; then
         cert_ok=true
       else
-        warn "TLS-ALPN-01 (port 443) a également échoué."
+        warn "TLS-ALPN-01 (port 443) also failed."
         echo "$certbot_output" | grep -iE 'error|detail|challenge|timeout|connection' | head -5 >&2 || true
       fi
     else
-      warn "Port 443 occupé — TLS-ALPN-01 ignoré."
+      warn "Port 443 in use — TLS-ALPN-01 skipped."
     fi
   fi
 
   if ! $cert_ok; then
-    error "Certbot a échoué sur les deux méthodes. Sortie complète :"
+    error "Certbot failed on both methods. Full output:"
     echo "$certbot_output" | tail -20 >&2
-    # Détecter rate limit et afficher l'heure de déblocage
+    # Detect rate limit and show unlock time
     local retry_after=""
     retry_after=$(echo "$certbot_output" | grep -oE 'until [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z' | head -1 | sed 's/until //')
-    [[ -n "$retry_after" ]] && error "Rate limit — réessayez après : $retry_after"
-    die "Vérifiez :\n  • DNS : les domaines pointent vers ce serveur\n  • Ports 80/443 accessibles depuis Internet\n  • Rate limit : max 5 certificats / 7 jours (utilisez le mode Staging pour tester)"
+    [[ -n "$retry_after" ]] && error "Rate limit — retry after: $retry_after"
+    die "Check:\n  • DNS: domains point to this server\n  • Ports 80/443 accessible from the Internet\n  • Rate limit: max 5 certificates / 7 days (use Staging mode for testing)"
   fi
 
-  step "Combinaison fullchain + privkey pour HAProxy"
+  step "Combining fullchain + privkey for HAProxy"
   mkdir -p "$INSTALL_DIR/certs"
   docker run --rm \
     -v "${le_vol}:/etc/letsencrypt:ro" \
@@ -2118,12 +2118,12 @@ gen_certs() {
       /etc/letsencrypt/live/stack/privkey.pem > /certs/stack.pem.tmp \
       && mv /certs/stack.pem.tmp /certs/stack.pem && chmod 644 /certs/stack.pem"
 
-  [[ -s "$INSTALL_DIR/certs/stack.pem" ]] || die "Échec : stack.pem absent ou vide"
-  info "Certificat disponible : $INSTALL_DIR/certs/stack.pem ($(wc -c < "$INSTALL_DIR/certs/stack.pem") octets)"
+  [[ -s "$INSTALL_DIR/certs/stack.pem" ]] || die "Failed: stack.pem is missing or empty"
+  info "Certificate ready: $INSTALL_DIR/certs/stack.pem ($(wc -c < "$INSTALL_DIR/certs/stack.pem") bytes)"
 }
 
 fix_galera_bootstrap() {
-  # Si mariadb-node1 tourne déjà, on ne touche à rien
+  # If mariadb-node1 is already running, do nothing
   local status
   status=$(docker inspect --format='{{.State.Status}}' mariadb-node1 2>/dev/null || echo "absent")
   [[ "$status" == "running" ]] && return 0
@@ -2131,15 +2131,15 @@ fix_galera_bootstrap() {
   local project_name; project_name="$COMPOSE_PROJECT_NAME"
   local vol1="${project_name}_mariadb_n1_data"
 
-  # Pas de volume → premier démarrage propre, rien à faire
+  # No volume → clean first start, nothing to do
   docker volume inspect "$vol1" &>/dev/null || return 0
 
-  # Pas de grastate.dat → MariaDB n'a jamais tourné, rien à faire
+  # No grastate.dat → MariaDB has never run, nothing to do
   docker run --rm -v "${vol1}:/data" alpine test -f /data/grastate.dat 2>/dev/null || return 0
 
-  info "Volumes MariaDB existants détectés — correction du bootstrap Galera..."
+  info "Existing MariaDB volumes detected — fixing Galera bootstrap..."
 
-  # Remettre safe_to_bootstrap à 0 sur tous les nœuds existants
+  # Reset safe_to_bootstrap to 0 on all existing nodes
   local n
   for n in $(seq 1 "$MARIADB_NODES"); do
     local vol="${project_name}_mariadb_n${n}_data"
@@ -2150,23 +2150,23 @@ fix_galera_bootstrap() {
       2>/dev/null || true
   done
 
-  # Forcer node1 comme nœud de bootstrap (correspond au --wsrep-new-cluster du compose)
+  # Force node1 as bootstrap node (matches --wsrep-new-cluster in compose)
   docker run --rm -v "${vol1}:/data" alpine \
     sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/' /data/grastate.dat \
     2>/dev/null
-  info "Galera : mariadb-node1 défini comme nœud de bootstrap"
+  info "Galera: mariadb-node1 set as bootstrap node"
 }
 
 run_deploy() {
   cd "$INSTALL_DIR"
 
-  # Vérification explicite du cert avant tout démarrage
+  # Explicit certificate check before any startup
   if [[ ! -s "./certs/stack.pem" ]]; then
-    die "Certificat SSL absent : $(pwd)/certs/stack.pem\nRelancez le script pour regénérer le certificat."
+    die "SSL certificate missing: $(pwd)/certs/stack.pem\nRe-run the script to regenerate the certificate."
   fi
-  info "Certificat SSL OK : $(pwd)/certs/stack.pem ($(wc -c < "./certs/stack.pem") octets)"
+  info "SSL certificate OK: $(pwd)/certs/stack.pem ($(wc -c < "./certs/stack.pem") bytes)"
 
-  step "Pull des images Docker (parallèle)"
+  step "Pulling Docker images (parallel)"
   local images=(
     "${IMG_HAPROXY}"
     "${IMG_NGINX}"
@@ -2181,8 +2181,8 @@ run_deploy() {
   local total=${#images[@]}
   local tmpdir; tmpdir=$(mktemp -d)
 
-  # Lancer tous les pulls en parallèle — on garde les PIDs pour wait ciblé
-  # (wait sans args bloquerait sur le processus tee de setup_logging)
+  # Launch all pulls in parallel — keep PIDs for targeted wait
+  # (wait without args would block on the tee process from setup_logging)
   local img pids=()
   for img in "${images[@]}"; do
     local safe; safe=$(echo "$img" | tr '/.:' '_')
@@ -2190,76 +2190,76 @@ run_deploy() {
     pids+=($!)
   done
 
-  # Affichage temps réel
+  # Real-time display
   local done_count=0
   while (( done_count < total )); do
     done_count=$(ls "$tmpdir" 2>/dev/null | wc -l)
-    progress_bar "$done_count" "$total" "Images téléchargées en parallèle..."
+    progress_bar "$done_count" "$total" "Images being downloaded in parallel..."
     sleep 0.4
   done
-  # Attendre uniquement les jobs de pull (pas le processus tee du journal)
+  # Wait only for pull jobs (not the tee process from the log)
   wait "${pids[@]}" 2>/dev/null || true
   echo ""
 
-  # Vérifier les échecs
+  # Check for failures
   local img_failed=0
   for img in "${images[@]}"; do
     local safe; safe=$(echo "$img" | tr '/.:' '_')
     if [[ -f "$tmpdir/${safe}.fail" ]]; then
-      error "Échec du pull : $img"
+      error "Pull failed: $img"
       (( img_failed++ )) || true
     fi
   done
   rm -rf "$tmpdir"
-  (( img_failed > 0 )) && die "${img_failed} image(s) n'ont pas pu être téléchargées"
-  info "Toutes les images téléchargées"
+  (( img_failed > 0 )) && die "${img_failed} image(s) could not be downloaded"
+  info "All images downloaded"
 
-  step "Build de l'image MariaDB Galera"
+  step "Building MariaDB Galera image"
   start_spinner "docker compose build..."
   docker compose build --quiet
-  stop_spinner "Image MariaDB Galera construite"
+  stop_spinner "MariaDB Galera image built"
 
-  step "Démarrage de l'infrastructure"
+  step "Starting infrastructure"
 
-  # Démarrer HAProxy en premier et attendre qu'il soit healthy
-  # avant de lancer les services qui en dépendent
+  # Start HAProxy first and wait for it to be healthy
+  # before launching services that depend on it
   docker compose up -d haproxy nginx-acme certbot
-  info "En attente que HAProxy réponde sur le port 80..."
+  info "Waiting for HAProxy to respond on port 80..."
   local elapsed=0 max_wait=60
   while (( elapsed < max_wait )); do
-    # Test depuis l'hôte via /dev/tcp bash (plus fiable que nc dans alpine)
+    # Test from host via bash /dev/tcp (more reliable than nc in alpine)
     if timeout 3 bash -c '</dev/tcp/127.0.0.1/80' 2>/dev/null; then
-      info "HAProxy répond sur le port 80 ✓"
+      info "HAProxy responds on port 80 ✓"
       break
     fi
-    # Vérifier que le container n'a pas crashé
+    # Check that the container has not crashed
     local state
     state=$(docker inspect --format='{{.State.Status}}' haproxy 2>/dev/null || echo "absent")
     if [[ "$state" != "running" ]]; then
-      error "Le container HAProxy s'est arrêté (état: $state). Logs :"
+      error "HAProxy container stopped (state: $state). Logs:"
       docker logs haproxy --tail 20 >&2
-      die "HAProxy a planté — vérifiez les logs ci-dessus."
+      die "HAProxy crashed — check logs above."
     fi
-    printf "\r  ${C_YELLOW}⟳${C_RESET}  HAProxy démarrage... (%ds/%ds)   " "$elapsed" "$max_wait"
+    printf "\r  ${C_YELLOW}⟳${C_RESET}  HAProxy starting... (%ds/%ds)   " "$elapsed" "$max_wait"
     sleep 3
     (( elapsed += 3 )) || true
   done
   if (( elapsed >= max_wait )); then
     echo ""
-    error "HAProxy ne répond pas après ${max_wait}s. Logs :"
+    error "HAProxy not responding after ${max_wait}s. Logs:"
     docker logs haproxy --tail 20 >&2
-    die "HAProxy inaccessible — vérifiez les logs ci-dessus."
+    die "HAProxy unreachable — check logs above."
   fi
   echo ""
 
-  # Corriger grastate.dat si des volumes MariaDB existent d'un déploiement précédent
+  # Fix grastate.dat if MariaDB volumes exist from a previous deployment
   fix_galera_bootstrap
 
-  # Lancer tous les autres services en arrière-plan
-  start_spinner "Démarrage de tous les services..."
+  # Launch all other services in the background
+  start_spinner "Starting all services..."
   docker compose up -d 2>&1 | grep -E '^\s*(✔|✘|Error)' || true
-  stop_spinner "Services lancés"
-  info "Services démarrés — attente de l'installation Nextcloud (max 15 min)..."
+  stop_spinner "Services started"
+  info "Services started — waiting for Nextcloud installation (max 15 min)..."
   local deadline=$(( $(date +%s) + 900 )) elapsed_setup=0
   while (( $(date +%s) < deadline )); do
     local setup_status
@@ -2268,9 +2268,9 @@ run_deploy() {
       local exit_code
       exit_code=$(docker inspect --format='{{.State.ExitCode}}' nextcloud-setup 2>/dev/null || echo "1")
       if [[ "$exit_code" == "0" ]]; then
-        info "nextcloud-setup terminé avec succès ✓"
-        # Activer le versioning MinIO — le bucket existe forcément à ce stade
-        start_spinner "Activation du versioning MinIO..."
+        info "nextcloud-setup completed successfully ✓"
+        # Enable MinIO versioning — bucket necessarily exists at this point
+        start_spinner "Enabling MinIO versioning..."
         if docker run --rm \
             --network storage-net \
             --entrypoint sh "${IMG_MINIO_MC}" -c \
@@ -2278,12 +2278,12 @@ run_deploy() {
              && mc version enable r/${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null \
              && mc ilm rule add --expire-delete-marker r/${NEXTCLOUD_S3_BUCKET:-nextcloud} 2>/dev/null || true" \
             &>/dev/null; then
-          stop_spinner "Versioning MinIO activé ✓"
+          stop_spinner "MinIO versioning enabled ✓"
         else
-          stop_spinner "Versioning MinIO : échec (activable depuis /s3-console)"
+          stop_spinner "MinIO versioning: failed (can be enabled from /s3-console)"
         fi
       else
-        warn "nextcloud-setup terminé avec erreur (code $exit_code)"
+        warn "nextcloud-setup completed with error (code $exit_code)"
         docker logs nextcloud-setup --tail 20
       fi
       break
@@ -2293,19 +2293,19 @@ run_deploy() {
     last_log=$(docker logs nextcloud-setup --tail 1 2>/dev/null \
       | sed 's/\x1b\[[0-9;]*[mK]//g' | tr -d '\r' | xargs)
     printf "\r\033[K  ${C_YELLOW}⟳${C_RESET}  [%ds]  %s" \
-      "$elapsed_setup" "${last_log:-Installation Nextcloud en cours...}"
+      "$elapsed_setup" "${last_log:-Nextcloud installation in progress...}"
     sleep 10
   done
   echo ""
 }
 
-# ─── [CHECK] Vérification et résumé ──────────────────────────────────────────
+# ─── [CHECK] Verification and summary ───────────────────────────────────────
 
 wait_healthy() {
-  phase 7 7 "Vérification de l'infrastructure"
-  step "Attente que tous les services soient healthy"
+  phase 7 7 "Infrastructure Verification"
+  step "Waiting for all services to be healthy"
 
-  # Timeout adaptatif selon le nombre de nœuds (base 600s + 60s/NC + 20s/DB + 20s/MinIO + 30s/Collab)
+  # Adaptive timeout based on node count (base 600s + 60s/NC + 20s/DB + 20s/MinIO + 30s/Collab)
   local timeout interval=10
   timeout=$(( 600 + NC_NODES * 60 + MARIADB_NODES * 20 + MINIO_NODES * 20 + COLLAB_NODES * 30 ))
   (( timeout > 1800 )) && timeout=1800
@@ -2320,23 +2320,23 @@ wait_healthy() {
   containers+=("redis-node1")
   for i in $(seq 1 "$MINIO_NODES");  do containers+=("minio-node${i}"); done
 
-  info "Timeout calculé : ${timeout}s (${NC_NODES} NC + ${MARIADB_NODES} DB + ${MINIO_NODES} MinIO + ${COLLAB_NODES} Collabora)"
+  info "Calculated timeout: ${timeout}s (${NC_NODES} NC + ${MARIADB_NODES} DB + ${MINIO_NODES} MinIO + ${COLLAB_NODES} Collabora)"
 
-  # Compteurs de redémarrages consécutifs par container (détection crash loop)
+  # Consecutive restart counters per container (crash loop detection)
   declare -A _restart_counts=()
   local _crash_loop=()
 
   while (( elapsed < timeout )); do
     local remaining=$(( timeout - elapsed ))
     local eta_min=$(( remaining / 60 )) eta_sec=$(( remaining % 60 ))
-    printf "\n  ${C_GRAY}[ $(date '+%H:%M:%S') — %ds écoulées — ETA %dm%02ds ]${C_RESET}\n" \
+    printf "\n  ${C_GRAY}[ $(date '+%H:%M:%S') — %ds elapsed — ETA %dm%02ds ]${C_RESET}\n" \
       "$elapsed" "$eta_min" "$eta_sec"
     local all_healthy=true
 
     for name in "${containers[@]}"; do
-      # Containers confirmés en crash loop : afficher et ignorer (ne bloquent plus le wait)
+      # Containers confirmed in crash loop: display and ignore (no longer block the wait)
       if [[ " ${_crash_loop[*]:-} " == *" ${name} "* ]]; then
-        printf "  ${C_BRED}✗${C_RESET}  %s  ${C_RED}(crash loop — exclu)${C_RESET}\n" "$name"
+        printf "  ${C_BRED}✗${C_RESET}  %s  ${C_RED}(crash loop — excluded)${C_RESET}\n" "$name"
         continue
       fi
 
@@ -2372,7 +2372,7 @@ wait_healthy() {
           _restart_counts["$name"]=$(( ${_restart_counts["$name"]:-0} + 1 ))
           local rc=${_restart_counts["$name"]}
           if (( rc >= 3 )); then
-            warn "${name} en crash loop (${rc} redémarrages) — exclu du wait"
+            warn "${name} in crash loop (${rc} restarts) — excluded from wait"
             warn "  docker logs ${name}"
             _crash_loop+=("$name")
           else
@@ -2389,9 +2389,9 @@ wait_healthy() {
 
     if $all_healthy; then
       if (( ${#_crash_loop[@]} > 0 )); then
-        warn "Services en crash loop (non bloquants) : ${_crash_loop[*]}"
+        warn "Services in crash loop (non-blocking): ${_crash_loop[*]}"
       fi
-      info "Tous les services surveillés sont healthy ✓"
+      info "All monitored services are healthy ✓"
       return 0
     fi
     sleep "$interval"
@@ -2399,18 +2399,18 @@ wait_healthy() {
   done
 
   if (( ${#_crash_loop[@]} > 0 )); then
-    warn "Containers en crash loop détectés : ${_crash_loop[*]}"
-    warn "Vérifiez : docker logs ${_crash_loop[0]}"
+    warn "Crash loop containers detected: ${_crash_loop[*]}"
+    warn "Check: docker logs ${_crash_loop[0]}"
   fi
-  die "Timeout — certains services ne sont pas healthy après ${timeout}s.\nVérifiez : docker compose logs"
+  die "Timeout — some services are not healthy after ${timeout}s.\nCheck: docker compose logs"
 }
 
 reset_bruteforce() {
   local redis_pass
   redis_pass=$(grep -m1 '^REDIS_PASSWORD=' "$INSTALL_DIR/.env" | cut -d= -f2)
-  [[ -z "$redis_pass" ]] && { warn "REDIS_PASSWORD introuvable — skip reset bruteforce"; return 0; }
+  [[ -z "$redis_pass" ]] && { warn "REDIS_PASSWORD not found — skipping bruteforce reset"; return 0; }
 
-  step "Nettoyage des entrées brute force Nextcloud (Redis)"
+  step "Cleaning Nextcloud brute force entries (Redis)"
   local deleted=0 i key keys
 
   for i in $(seq 1 "$REDIS_NODES"); do
@@ -2426,12 +2426,12 @@ reset_bruteforce() {
   done
 
   (( deleted > 0 )) \
-    && info "Brute force reset : ${deleted} entrée(s) supprimée(s) de Redis" \
-    || info "Brute force reset : aucune entrée à supprimer"
+    && info "Brute force reset: ${deleted} key(s) deleted from Redis" \
+    || info "Brute force reset: no entries to delete"
 }
 
 check_services() {
-  step "Tests fonctionnels"
+  step "Functional tests"
   local failures=0
 
   _check() {
@@ -2447,7 +2447,7 @@ check_services() {
   _check "HAProxy HTTP→HTTPS redirect" \
     bash -c "curl -sf -o /dev/null -w '%{http_code}' http://localhost/ | grep -qE '301|302'"
 
-  _check "Nextcloud installé" \
+  _check "Nextcloud installed" \
     bash -c "curl -skf https://${NC_DOMAIN}/status.php | grep -q '\"installed\":true'"
 
   _check "MariaDB Galera actif" \
@@ -2459,16 +2459,16 @@ check_services() {
   _check "MinIO S3 health" \
     bash -c "docker exec minio-node1 curl -sf http://localhost:9000/minio/health/live 2>/dev/null"
 
-  _check "nextcloud-setup terminé" \
+  _check "nextcloud-setup completed" \
     bash -c "docker logs nextcloud-setup 2>&1 | grep -q 'Setup Nextcloud terminé'"
 
   _check "nextcloud-cron actif" \
     bash -c "docker inspect nextcloud-cron --format='{{.State.Running}}' 2>/dev/null | grep -q true"
 
   if (( failures > 0 )); then
-    warn "${failures} test(s) en échec — vérifiez : docker compose logs"
+    warn "${failures} test(s) failed — check: docker compose logs"
   else
-    info "Tous les tests fonctionnels passent ✓"
+    info "All functional tests pass ✓"
   fi
 }
 
@@ -2492,28 +2492,28 @@ CREDS
   local host_ip
   host_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
 
-  local stats_line="Stats HAProxy  : désactivées"
+  local stats_line="HAProxy Stats  : disabled"
   [[ "$HAPROXY_STATS" == "yes" ]] && \
-    stats_line="Stats HAProxy  : https://${NC_DOMAIN}/stats  (admin / ${GEN_HAPROXY_STATS_PASS})"
+    stats_line="HAProxy Stats  : https://${NC_DOMAIN}/stats  (admin / ${GEN_HAPROXY_STATS_PASS})"
 
-  local console_line="Console MinIO  : désactivée"
+  local console_line="MinIO Console  : disabled"
   [[ "$MINIO_CONSOLE" == "yes" ]] && \
-    console_line="Console MinIO  : https://${NC_DOMAIN}/s3-console  (login: MINIO_ACCESS_KEY / MINIO_SECRET_KEY)"
+    console_line="MinIO Console  : https://${NC_DOMAIN}/s3-console  (login: MINIO_ACCESS_KEY / MINIO_SECRET_KEY)"
 
-  # Largeur dynamique : s'adapte à la ligne la plus longue (mot de passe, domaine, etc.)
+  # Dynamic width: adapts to the longest line (password, domain, etc.)
   local I=0 _lw
   for _line in \
-      "✓  DÉPLOIEMENT TERMINÉ AVEC SUCCÈS" \
+      "✓  DEPLOYMENT COMPLETED SUCCESSFULLY" \
       "URL      : https://${NC_DOMAIN}" \
       "Password : ${GEN_NC_ADMIN_PASS}" \
       "Collabora  : https://${COLLAB_DOMAIN}" \
       "Whiteboard : https://${WB_DOMAIN}" \
       "$stats_line" \
       "$console_line" \
-      "Nextcloud ${NC_NODES}×FPM + ${NC_NODES}×nginx  │  MariaDB ${MARIADB_NODES} nœuds  │  Redis ${REDIS_NODES} nœuds" \
-      "MinIO ${MINIO_NODES}×${MINIO_DISKS}  │  Collabora ${COLLAB_NODES} nœuds  │  Whiteboard ${WB_NODES} nœuds" \
+      "Nextcloud ${NC_NODES}×FPM + ${NC_NODES}×nginx  │  MariaDB ${MARIADB_NODES} nodes  │  Redis ${REDIS_NODES} nodes" \
+      "MinIO ${MINIO_NODES}×${MINIO_DISKS}  │  Collabora ${COLLAB_NODES} nodes  │  Whiteboard ${WB_NODES} nodes" \
       "Credentials : ${creds_file}" \
-      "APRÈS UNE PANNE NŒUD MINIO — commande de réparation :" \
+      "AFTER A MINIO NODE FAILURE — repair command:" \
       "docker run --rm --network storage-net --entrypoint sh minio/mc \\"; do
     _lw=$(_vlen "$_line")
     (( _lw > I )) && I=$_lw
@@ -2525,9 +2525,9 @@ CREDS
   echo ""
   echo -e "${C_BGREEN}"
   echo "$_TOP"
-  _sl "✓  DÉPLOIEMENT TERMINÉ AVEC SUCCÈS"
+  _sl "✓  DEPLOYMENT COMPLETED SUCCESSFULLY"
   echo "$_SEP"
-  _sl "ACCÈS NEXTCLOUD"
+  _sl "NEXTCLOUD ACCESS"
   _sl "URL      : https://${NC_DOMAIN}"
   _sl "Login    : admin"
   _sl "Password : ${GEN_NC_ADMIN_PASS}"
@@ -2539,12 +2539,12 @@ CREDS
   _sl "$console_line"
   echo "$_SEP"
   _sl "INFRASTRUCTURE"
-  _sl "Nextcloud ${NC_NODES}×FPM + ${NC_NODES}×nginx  │  MariaDB ${MARIADB_NODES} nœuds  │  Redis ${REDIS_NODES} nœuds"
-  _sl "MinIO ${MINIO_NODES}×${MINIO_DISKS}  │  Collabora ${COLLAB_NODES} nœuds  │  Whiteboard ${WB_NODES} nœuds"
+  _sl "Nextcloud ${NC_NODES}×FPM + ${NC_NODES}×nginx  │  MariaDB ${MARIADB_NODES} nodes  │  Redis ${REDIS_NODES} nodes"
+  _sl "MinIO ${MINIO_NODES}×${MINIO_DISKS}  │  Collabora ${COLLAB_NODES} nodes  │  Whiteboard ${WB_NODES} nodes"
   echo "$_SEP"
   _sl "Credentials : ${creds_file}"
   echo "$_SEP"
-  _sl "APRÈS UNE PANNE NŒUD MINIO — commande de réparation :"
+  _sl "AFTER A MINIO NODE FAILURE — repair command:"
   _sl "docker run --rm --network storage-net --entrypoint sh minio/mc \\"
   _sl "  -c \"mc alias set r http://minio-node1:9000 KEY SECRET --quiet"
   _sl "        && mc admin heal -r r/nextcloud\""
@@ -2553,23 +2553,23 @@ CREDS
 }
 
 final_check() {
-  step "Test d'accès Nextcloud"
+  step "Nextcloud access test"
   local max_wait=90 elapsed=0
   while (( elapsed < max_wait )); do
     if curl -skf --max-time 10 "https://${NC_DOMAIN}/status.php" 2>/dev/null \
         | grep -q '"installed":true'; then
-      info "Nextcloud répond ✓  →  https://${NC_DOMAIN}"
+      info "Nextcloud responds ✓  →  https://${NC_DOMAIN}"
       return 0
     fi
     sleep 5; (( elapsed += 5 )) || true
-    printf "\r\033[K  ${C_YELLOW}⟳${C_RESET}  Test accès Nextcloud... (%ds/%ds)" "$elapsed" "$max_wait"
+    printf "\r\033[K  ${C_YELLOW}⟳${C_RESET}  Testing Nextcloud access... (%ds/%ds)" "$elapsed" "$max_wait"
   done
   echo ""
-  warn "Nextcloud ne répond pas encore à https://${NC_DOMAIN}/status.php"
-  warn "Vérifiez dans quelques secondes ou consultez : docker logs app-next-01"
+  warn "Nextcloud is not responding yet at https://${NC_DOMAIN}/status.php"
+  warn "Check again in a few seconds or run: docker logs app-next-01"
 }
 
-# ─── [UPDATE] Détection et mise à jour sur stack existante ──────────────────
+# ─── [UPDATE] Detection and update on existing stack ────────────────────────
 
 detect_existing_stack() {
   [[ -d "$INSTALL_DIR" ]] || return 1
@@ -2589,82 +2589,82 @@ _detect_node_count() {
 }
 
 update_images() {
-  step "Mise à jour de la stack NXT Maxscale"
+  step "Updating NXT Maxscale stack"
   cd "$INSTALL_DIR"
 
-  # Charger les nœuds depuis le cache ou détecter depuis les containers
+  # Load nodes from cache or detect from containers
   if [[ -f "$ANSWERS_CACHE" ]]; then
     declare -gA MINIO_PATHS 2>/dev/null || true
     # shellcheck source=/dev/null
     source "$ANSWERS_CACHE"
-    info "Configuration rechargée (${NC_NODES} NC · ${MARIADB_NODES} DB · ${REDIS_NODES} Redis · ${COLLAB_NODES} Collab · ${MINIO_NODES} MinIO)"
+    info "Configuration reloaded (${NC_NODES} NC · ${MARIADB_NODES} DB · ${REDIS_NODES} Redis · ${COLLAB_NODES} Collab · ${MINIO_NODES} MinIO)"
   else
-    warn "Cache absent — détection automatique depuis les containers en cours"
+    warn "Cache missing — auto-detecting from running containers"
     NC_NODES=$(_detect_node_count     "app-next-"       "^app-next-[0-9]")
     MARIADB_NODES=$(_detect_node_count "mariadb-node"   "^mariadb-node[0-9]")
     REDIS_NODES=$(_detect_node_count   "redis-node"     "^redis-node[0-9]")
     COLLAB_NODES=$(_detect_node_count  "collabora-node" "^collabora-node[0-9]")
     WB_NODES=$(_detect_node_count      "whiteboard-node" "^whiteboard-node[0-9]")
     MINIO_NODES=$(_detect_node_count   "minio-node"     "^minio-node[0-9]")
-    info "Nœuds détectés : NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES}"
+    info "Detected nodes: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES}"
   fi
 
-  step "Pull des nouvelles images Docker"
-  start_spinner "Téléchargement des images..."
+  step "Pulling new Docker images"
+  start_spinner "Downloading images..."
   docker compose pull -q 2>/dev/null || true
-  stop_spinner "Images téléchargées"
+  stop_spinner "Images downloaded"
 
-  step "Recréation des containers dont l'image a changé"
-  start_spinner "Application des mises à jour..."
+  step "Recreating containers with updated images"
+  start_spinner "Applying updates..."
   docker compose up -d 2>&1 | grep -E '^\s*(✔|✘|Recreated|Started|Error)' || true
-  stop_spinner "Containers mis à jour"
+  stop_spinner "Containers updated"
 
-  # Réappliquer le patch si l'image Collabora a changé (recreate = binaire original restauré)
+  # Re-apply patch if Collabora image changed (recreate = original binary restored)
   patch_collabora_binary
 
   wait_healthy
 
   local nc_url
-  nc_url=$(grep -m1 '^NEXTCLOUD_DOMAIN=' "${INSTALL_DIR}/.env" 2>/dev/null | cut -d= -f2 || echo "votre-domaine")
-  info "Mise à jour terminée ✓  →  https://${nc_url}"
+  nc_url=$(grep -m1 '^NEXTCLOUD_DOMAIN=' "${INSTALL_DIR}/.env" 2>/dev/null | cut -d= -f2 || echo "your-domain")
+  info "Update complete ✓  →  https://${nc_url}"
 }
 
-# ─── [REDIS] Opérations cluster (scale-up / scale-down) ─────────────────────
+# ─── [REDIS] Cluster operations (scale-up / scale-down) ─────────────────────
 
 _redis_scale_up() {
   local new_count="$1" old_count="$2"
   local redis_pass
   redis_pass=$(grep -m1 '^REDIS_PASSWORD=' "$INSTALL_DIR/.env" | cut -d= -f2)
-  [[ -z "$redis_pass" ]] && die "REDIS_PASSWORD introuvable dans .env"
+  [[ -z "$redis_pass" ]] && die "REDIS_PASSWORD not found in .env"
 
   local add_pairs=$(( (new_count - old_count) / 2 ))
 
   for i in $(seq $((old_count+1)) $new_count); do
-    start_spinner "Attente de redis-node${i}..."
+    start_spinner "Waiting for redis-node${i}..."
     local elapsed=0
     while (( elapsed < 120 )); do
       docker exec redis-node1 redis-cli -h "redis-node${i}" \
         -a "$redis_pass" --no-auth-warning ping 2>/dev/null | grep -q PONG && break
       sleep 3; (( elapsed+=3 )) || true
     done
-    stop_spinner "redis-node${i} prêt"
+    stop_spinner "redis-node${i} ready"
   done
 
   for p in $(seq 1 $add_pairs); do
     local mi=$(( old_count + (p-1)*2 + 1 ))
     local ri=$(( old_count + (p-1)*2 + 2 ))
-    step "Intégration : redis-node${mi} (master) + redis-node${ri} (replica)"
+    step "Integrating: redis-node${mi} (master) + redis-node${ri} (replica)"
 
     docker exec redis-node1 redis-cli --cluster add-node \
       "redis-node${mi}:6379" "redis-node1:6379" \
       -a "$redis_pass" --no-auth-warning
 
-    # Attendre que le nouveau master soit visible dans cluster nodes avant d'ajouter le replica
+    # Wait for the new master to be visible in cluster nodes before adding the replica
     local master_id="" wait_master=0
     while (( wait_master < 30 )); do
       master_id=$(docker exec "redis-node${mi}" redis-cli \
         -a "$redis_pass" --no-auth-warning cluster myid 2>/dev/null | tr -d '[:space:]')
-      # Vérifier que ce node est bien vu comme master par redis-node1
+      # Verify this node is seen as master by redis-node1
       if [[ -n "$master_id" ]] && docker exec redis-node1 redis-cli \
           -a "$redis_pass" --no-auth-warning cluster nodes 2>/dev/null \
           | grep -q "^${master_id}.*master"; then
@@ -2674,7 +2674,7 @@ _redis_scale_up() {
     done
 
     if [[ -z "$master_id" ]]; then
-      warn "Impossible d'obtenir le master_id de redis-node${mi} — replica redis-node${ri} ignoré"
+      warn "Cannot get master_id for redis-node${mi} — replica redis-node${ri} skipped"
       continue
     fi
 
@@ -2683,7 +2683,7 @@ _redis_scale_up() {
       -a "$redis_pass" --no-auth-warning \
       --cluster-slave --cluster-master-id "$master_id"
 
-    # Vérifier que le replica a bien rejoint le cluster
+    # Verify the replica has joined the cluster
     sleep 3
     local replica_id
     replica_id=$(docker exec "redis-node${ri}" redis-cli \
@@ -2691,7 +2691,7 @@ _redis_scale_up() {
     if [[ -n "$replica_id" ]] && ! docker exec redis-node1 redis-cli \
         -a "$redis_pass" --no-auth-warning cluster nodes 2>/dev/null \
         | grep -q "^${replica_id}"; then
-      warn "redis-node${ri} non intégré via add-node — tentative MEET+REPLICATE"
+      warn "redis-node${ri} not integrated via add-node — attempting MEET+REPLICATE"
       local ri_ip
       ri_ip=$(docker inspect "redis-node${ri}" \
         --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null | head -1)
@@ -2708,34 +2708,34 @@ _redis_scale_up() {
     -a "$redis_pass" --no-auth-warning 2>/dev/null || true
   sleep 3
 
-  step "Rééquilibrage des slots Redis sur tous les masters"
+  step "Rebalancing Redis slots across all masters"
   docker exec redis-node1 redis-cli --cluster rebalance "redis-node1:6379" \
     -a "$redis_pass" --no-auth-warning --cluster-use-empty-masters
 
-  # Vérification finale : tous les nodes attendus sont dans le cluster
+  # Final check: all expected nodes are in the cluster
   local expected_nodes="$new_count"
   local known_nodes
   known_nodes=$(docker exec redis-node1 redis-cli \
     -a "$redis_pass" --no-auth-warning cluster info 2>/dev/null \
     | grep 'cluster_known_nodes' | cut -d: -f2 | tr -d '[:space:]')
   if [[ "$known_nodes" != "$expected_nodes" ]]; then
-    warn "cluster_known_nodes=${known_nodes} ≠ attendu=${expected_nodes} — vérifiez manuellement"
+    warn "cluster_known_nodes=${known_nodes} ≠ expected=${expected_nodes} — verify manually"
   fi
-  info "Redis : ${new_count} nœuds ($((new_count/2)) masters + $((new_count/2)) replicas)"
+  info "Redis: ${new_count} nodes ($((new_count/2)) masters + $((new_count/2)) replicas)"
 }
 
 _redis_scale_down() {
   local new_count="$1" old_count="$2"
   local redis_pass
   redis_pass=$(grep -m1 '^REDIS_PASSWORD=' "$INSTALL_DIR/.env" | cut -d= -f2)
-  [[ -z "$redis_pass" ]] && die "REDIS_PASSWORD introuvable dans .env"
+  [[ -z "$redis_pass" ]] && die "REDIS_PASSWORD not found in .env"
 
   for n in $(seq $old_count -1 $((new_count + 1))); do
     local node_line
     node_line=$(docker exec "redis-node${n}" redis-cli \
       -a "$redis_pass" --no-auth-warning cluster nodes 2>/dev/null | grep myself || true)
     if [[ -z "$node_line" ]]; then
-      warn "redis-node${n} inaccessible — ignoré"; continue
+      warn "redis-node${n} unreachable — skipped"; continue
     fi
 
     local node_id; node_id=$(echo "$node_line" | cut -d' ' -f1)
@@ -2755,7 +2755,7 @@ _redis_scale_down() {
         target_id=$(docker exec redis-node1 redis-cli \
           -a "$redis_pass" --no-auth-warning cluster nodes 2>/dev/null \
           | awk -v skip="$node_id" '!/myself/ && /master/ && $1!=skip {print $1; exit}')
-        step "Migration de ${slot_count} slots depuis redis-node${n}"
+        step "Migrating ${slot_count} slots from redis-node${n}"
         docker exec redis-node1 redis-cli --cluster reshard "redis-node1:6379" \
           -a "$redis_pass" --no-auth-warning \
           --cluster-from "$node_id" --cluster-to "$target_id" \
@@ -2763,43 +2763,43 @@ _redis_scale_down() {
       fi
     fi
 
-    info "Retrait de redis-node${n} du cluster"
+    info "Removing redis-node${n} from cluster"
     docker exec redis-node1 redis-cli --cluster del-node \
       "redis-node1:6379" "$node_id" \
       -a "$redis_pass" --no-auth-warning
   done
 
   # Rebalance slots evenly after all removals
-  step "Rééquilibrage des slots Redis après scale-down"
+  step "Rebalancing Redis slots after scale-down"
   docker exec redis-node1 redis-cli --cluster fix "redis-node1:6379" \
     -a "$redis_pass" --no-auth-warning 2>/dev/null || true
   sleep 2
   docker exec redis-node1 redis-cli --cluster rebalance "redis-node1:6379" \
     -a "$redis_pass" --no-auth-warning 2>/dev/null || true
-  info "Redis : ${new_count} nœuds ($((new_count/2)) masters + $((new_count/2)) replicas)"
+  info "Redis: ${new_count} nodes ($((new_count/2)) masters + $((new_count/2)) replicas)"
 }
 
-# ─── [MINIO] Enregistrement d'un nouveau pool ────────────────────────────────
+# ─── [MINIO] Registering a new pool ──────────────────────────────────────────
 
 _minio_register_pool() {
   local old_count="$1" new_count="$2"
   local pools_file="$INSTALL_DIR/.minio-pools"
   local new_start=$(( old_count + 1 ))
 
-  # Rétrocompatibilité : créer le fichier si absent
+  # Backward compatibility: create file if absent
   if [[ ! -f "$pools_file" ]]; then
     echo "1:${old_count}" > "$pools_file"
-    info "Fichier de pools MinIO initialisé (pool 1 : nœuds 1–${old_count})"
+    info "MinIO pools file initialized (pool 1: nodes 1–${old_count})"
   fi
 
-  # Dédup : ne pas enregistrer deux fois le même pool
+  # Dedup: do not register the same pool twice
   if grep -qF "${new_start}:${new_count}" "$pools_file" 2>/dev/null; then
-    warn "Pool MinIO ${new_start}:${new_count} déjà présent dans .minio-pools — doublon ignoré"
+    warn "MinIO pool ${new_start}:${new_count} already present in .minio-pools — duplicate ignored"
     return 0
   fi
 
   echo "${new_start}:${new_count}" >> "$pools_file"
-  info "Nouveau pool MinIO enregistré : nœuds ${new_start}–${new_count}"
+  info "New MinIO pool registered: nodes ${new_start}–${new_count}"
 
   local n d
   for n in $(seq $new_start $new_count); do
@@ -2810,32 +2810,32 @@ _minio_register_pool() {
         echo "MINIO_NODE${n}_DATA${d}=${MINIO_PATHS[${n}_${d}]}" >> "$INSTALL_DIR/.env"
     done
   done
-  info "Chemins des nouveaux nœuds MinIO ajoutés au .env"
+  info "New MinIO node paths added to .env"
 }
 
-# ─── [SCALE] Modification du nombre de nœuds sur stack existante ─────────────
+# ─── [SCALE] Modifying node count on existing stack ──────────────────────────
 
 scale_nodes() {
-  step "Mode scaling — modification du nombre de nœuds"
+  step "Scaling mode — modifying node counts"
   cd "$INSTALL_DIR"
 
-  # ── Chargement de la configuration ──────────────────────────────────────────
+  # ── Configuration loading ────────────────────────────────────────────────────
   declare -gA MINIO_PATHS 2>/dev/null || true
 
   if [[ -f "$ANSWERS_CACHE" ]]; then
     # shellcheck source=/dev/null
     source "$ANSWERS_CACHE"
-    info "Configuration rechargée depuis le cache"
-    # Sécurité : vérifier que MINIO_NODES du cache correspond aux containers réels
-    # (évite ORIG_MINIO_NODES périmé → double appel _minio_register_pool)
+    info "Configuration reloaded from cache"
+    # Safety check: verify MINIO_NODES from cache matches actual containers
+    # (prevents stale ORIG_MINIO_NODES → double call to _minio_register_pool)
     local _actual_minio
     _actual_minio=$(_detect_node_count "minio-node" "^minio-node[0-9]")
     if (( _actual_minio > MINIO_NODES )); then
-      warn "MINIO_NODES cache (${MINIO_NODES}) < containers réels (${_actual_minio}) — correction"
+      warn "MINIO_NODES cache (${MINIO_NODES}) < actual containers (${_actual_minio}) — correcting"
       MINIO_NODES="$_actual_minio"
     fi
   elif [[ -f "$INSTALL_DIR/.env" ]]; then
-    warn "Cache absent — reconstruction depuis .env et containers en cours"
+    warn "Cache missing — rebuilding from .env and running containers"
     NC_DOMAIN=$(grep    -m1 '^NEXTCLOUD_DOMAIN='    "$INSTALL_DIR/.env" | cut -d= -f2)
     COLLAB_DOMAIN=$(grep -m1 '^COLLABORA_DOMAIN='   "$INSTALL_DIR/.env" | cut -d= -f2)
     WB_DOMAIN=$(grep    -m1 '^WHITEBOARD_DOMAIN='   "$INSTALL_DIR/.env" | cut -d= -f2)
@@ -2866,22 +2866,22 @@ scale_nodes() {
                                     | cut -d= -f2 || echo "/data/minio/node${n}/data${d}")
       done
     done
-    info "Configuration reconstruite : NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES}"
+    info "Configuration rebuilt: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES}"
   else
-    die "Ni cache de configuration ni fichier .env trouvé dans $INSTALL_DIR — impossible de scaler"
+    die "Neither config cache nor .env file found in $INSTALL_DIR — cannot scale"
   fi
 
-  # ── Affichage de la configuration actuelle ───────────────────────────────────
-  box "Nœuds actuels" \
-    "Nextcloud FPM+nginx : ${NC_NODES} nœuds" \
-    "MariaDB Galera      : ${MARIADB_NODES} nœuds  (impair requis)" \
-    "Redis Cluster       : ${REDIS_NODES} nœuds  (pair ≥ 6, delta pair)" \
-    "Collabora           : ${COLLAB_NODES} nœuds" \
-    "Whiteboard          : ${WB_NODES} nœuds" \
-    "MinIO               : ${MINIO_NODES} nœuds × ${MINIO_DISKS} disques  (scale-up par pool)"
+  # ── Display current configuration ───────────────────────────────────────────
+  box "Current Nodes" \
+    "Nextcloud FPM+nginx : ${NC_NODES} nodes" \
+    "MariaDB Galera      : ${MARIADB_NODES} nodes  (odd number required)" \
+    "Redis Cluster       : ${REDIS_NODES} nodes  (even ≥ 6, even delta)" \
+    "Collabora           : ${COLLAB_NODES} nodes" \
+    "Whiteboard          : ${WB_NODES} nodes" \
+    "MinIO               : ${MINIO_NODES} nodes × ${MINIO_DISKS} disks  (scale-up by pool)"
   echo ""
 
-  # ── Saisie des nouvelles valeurs ─────────────────────────────────────────────
+  # ── Enter new values ─────────────────────────────────────────────────────────
   local ORIG_NC_NODES="$NC_NODES"
   local ORIG_MARIADB_NODES="$MARIADB_NODES"
   local ORIG_REDIS_NODES="$REDIS_NODES"
@@ -2889,52 +2889,52 @@ scale_nodes() {
   local ORIG_WB_NODES="$WB_NODES"
   local ORIG_MINIO_NODES="$MINIO_NODES"
 
-  step "Nouveaux nombres de nœuds (Entrée = conserver la valeur actuelle)"
-  ask_int "Nextcloud — nœuds FPM+nginx"       "$NC_NODES"      is_positive_int "Entier ≥ 1 requis"             NC_NODES
-  ask_int "MariaDB Galera — nœuds (impair)"   "$MARIADB_NODES" is_odd          "Nombre impair requis (quorum)" MARIADB_NODES
-  ask_int "Redis Cluster — nœuds (pair ≥ 6)"  "$REDIS_NODES"   is_even_min6    "Nombre pair ≥ 6 requis"        REDIS_NODES
-  ask_int "Collabora — nœuds"                 "$COLLAB_NODES"  is_positive_int "Entier ≥ 1 requis"             COLLAB_NODES
-  ask_int "Whiteboard — nœuds"                "$WB_NODES"      is_positive_int "Entier ≥ 1 requis"             WB_NODES
+  step "New node counts (Enter = keep current value)"
+  ask_int "Nextcloud — FPM+nginx nodes"        "$NC_NODES"      is_positive_int "Integer ≥ 1 required"          NC_NODES
+  ask_int "MariaDB Galera — nodes (odd)"        "$MARIADB_NODES" is_odd          "Odd number required (quorum)"  MARIADB_NODES
+  ask_int "Redis Cluster — nodes (even ≥ 6)"   "$REDIS_NODES"   is_even_min6    "Even number ≥ 6 required"      REDIS_NODES
+  ask_int "Collabora — nodes"                  "$COLLAB_NODES"  is_positive_int "Integer ≥ 1 required"          COLLAB_NODES
+  ask_int "Whiteboard — nodes"                 "$WB_NODES"      is_positive_int "Integer ≥ 1 required"          WB_NODES
 
-  # MinIO : scale-up uniquement (pool expansion) — scale-down via decommission manuel
+  # MinIO: scale-up only (pool expansion) — scale-down via manual decommission
   echo ""
-  ask_int "MinIO — nœuds total (≥ ${ORIG_MINIO_NODES}, ↑ uniquement)" \
-    "$MINIO_NODES" is_positive_int "Entier ≥ 1 requis" MINIO_NODES
+  ask_int "MinIO — total nodes (≥ ${ORIG_MINIO_NODES}, ↑ only)" \
+    "$MINIO_NODES" is_positive_int "Integer ≥ 1 required" MINIO_NODES
   if (( MINIO_NODES < ORIG_MINIO_NODES )); then
-    warn "MinIO scale-down non supporté — valeur ramenée à ${ORIG_MINIO_NODES}"
-    warn "Pour réduire MinIO : mc admin decommission start (procédure manuelle)"
+    warn "MinIO scale-down not supported — value reset to ${ORIG_MINIO_NODES}"
+    warn "To reduce MinIO: mc admin decommission start (manual procedure)"
     MINIO_NODES="$ORIG_MINIO_NODES"
   fi
 
-  # Valider que le delta Redis est pair (master+replica par paire)
+  # Validate that the Redis delta is even (master+replica per pair)
   local redis_delta=$(( REDIS_NODES - ORIG_REDIS_NODES ))
   if (( redis_delta != 0 && redis_delta % 2 != 0 )); then
-    warn "Redis : le delta doit être pair — valeur ramenée à ${ORIG_REDIS_NODES}"
+    warn "Redis: delta must be even — value reset to ${ORIG_REDIS_NODES}"
     REDIS_NODES="$ORIG_REDIS_NODES"
     redis_delta=0
   fi
 
-  # Si MinIO scale-up : collecter les chemins des nouveaux nœuds MAINTENANT
+  # If MinIO scale-up: collect paths for new nodes NOW
   local minio_scaled_up=false
   if (( MINIO_NODES > ORIG_MINIO_NODES )); then
     minio_scaled_up=true
     local new_pool_start=$(( ORIG_MINIO_NODES + 1 ))
-    step "Disques pour les nouveaux nœuds MinIO (${new_pool_start}–${MINIO_NODES})"
-    warn "Tous les nœuds MinIO existants redémarreront avec le nouveau pool (~30s d'indisponibilité)."
-    warn "Les données sont préservées — seule la commande server change."
+    step "Disks for new MinIO nodes (${new_pool_start}–${MINIO_NODES})"
+    warn "All existing MinIO nodes will restart with the new pool (~30s downtime)."
+    warn "Data is preserved — only the server command changes."
     echo ""
     local n d
     for n in $(seq $new_pool_start $MINIO_NODES); do
-      prompt_input "Nœud ${n} — chemin métadonnées" "/data/minio/node${n}"
+      prompt_input "Node ${n} — metadata path" "/data/minio/node${n}"
       MINIO_PATHS["${n}_path"]="$REPLY"
       for d in $(seq 1 "$MINIO_DISKS"); do
-        prompt_input "Nœud ${n} — Disque ${d}" "/data/minio/node${n}/data${d}"
+        prompt_input "Node ${n} — Disk ${d}" "/data/minio/node${n}/data${d}"
         MINIO_PATHS["${n}_${d}"]="$REPLY"
       done
     done
   fi
 
-  # ── Vérification des changements ─────────────────────────────────────────────
+  # ── Check for changes ────────────────────────────────────────────────────────
   local changed=false
   [[ "$NC_NODES"      != "$ORIG_NC_NODES"      ]] && changed=true
   [[ "$MARIADB_NODES" != "$ORIG_MARIADB_NODES" ]] && changed=true
@@ -2944,48 +2944,48 @@ scale_nodes() {
   $minio_scaled_up && changed=true
 
   if ! $changed; then
-    info "Aucune modification demandée — opération annulée"
+    info "No changes requested — operation cancelled"
     return 0
   fi
 
-  # ── Récapitulatif et confirmations ───────────────────────────────────────────
-  box "Modifications prévues" \
-    "Nextcloud  : ${ORIG_NC_NODES} → ${NC_NODES} nœuds" \
-    "Galera     : ${ORIG_MARIADB_NODES} → ${MARIADB_NODES} nœuds" \
-    "Redis      : ${ORIG_REDIS_NODES} → ${REDIS_NODES} nœuds" \
-    "Collabora  : ${ORIG_COLLAB_NODES} → ${COLLAB_NODES} nœuds" \
-    "Whiteboard : ${ORIG_WB_NODES} → ${WB_NODES} nœuds" \
-    "MinIO      : ${ORIG_MINIO_NODES} → ${MINIO_NODES} nœuds"
+  # ── Summary and confirmations ────────────────────────────────────────────────
+  box "Planned changes" \
+    "Nextcloud  : ${ORIG_NC_NODES} → ${NC_NODES} nodes" \
+    "Galera     : ${ORIG_MARIADB_NODES} → ${MARIADB_NODES} nodes" \
+    "Redis      : ${ORIG_REDIS_NODES} → ${REDIS_NODES} nodes" \
+    "Collabora  : ${ORIG_COLLAB_NODES} → ${COLLAB_NODES} nodes" \
+    "Whiteboard : ${ORIG_WB_NODES} → ${WB_NODES} nodes" \
+    "MinIO      : ${ORIG_MINIO_NODES} → ${MINIO_NODES} nodes"
 
   if (( MARIADB_NODES > ORIG_MARIADB_NODES )); then
-    info "Galera : les nouveaux nœuds rejoindront le cluster via SST (automatique)."
+    info "Galera: new nodes will join the cluster via SST (automatic)."
   elif (( MARIADB_NODES < ORIG_MARIADB_NODES )); then
-    warn "⚠  Réduction Galera : données répliquées sur tous les nœuds — aucune perte si quorum maintenu."
-    prompt_yn "Confirmer la réduction du cluster Galera ?" "N" || { info "Annulé"; return 0; }
+    warn "⚠  Galera reduction: data replicated on all nodes — no loss if quorum maintained."
+    prompt_yn "Confirm Galera cluster reduction?" "N" || { info "Cancelled"; return 0; }
   fi
 
   if (( REDIS_NODES > ORIG_REDIS_NODES )); then
-    info "Redis scale-up : $((redis_delta/2)) paire(s) master+replica — slots redistribués automatiquement."
+    info "Redis scale-up: $((redis_delta/2)) master+replica pair(s) — slots redistributed automatically."
   elif (( REDIS_NODES < ORIG_REDIS_NODES )); then
-    warn "⚠  Redis scale-down : slots migrés avant suppression — aucune perte de données."
-    warn "   Durée variable selon le volume de données en cache."
-    prompt_yn "Confirmer la réduction du cluster Redis ?" "N" || { info "Annulé"; return 0; }
+    warn "⚠  Redis scale-down: slots migrated before removal — no data loss."
+    warn "   Duration varies depending on cached data volume."
+    prompt_yn "Confirm Redis cluster reduction?" "N" || { info "Cancelled"; return 0; }
   fi
 
-  prompt_yn "Appliquer ces modifications ?" "Y" || { info "Annulé"; return 0; }
+  prompt_yn "Apply these changes?" "Y" || { info "Cancelled"; return 0; }
 
   # ── APPLICATION ───────────────────────────────────────────────────────────────
 
-  # Étape 1 : Redis scale-DOWN — migration des slots AVANT toute modif compose
+  # Step 1: Redis scale-DOWN — migrate slots BEFORE any compose change
   if (( REDIS_NODES < ORIG_REDIS_NODES )); then
-    step "Redis scale-down : migration des slots et retrait des nœuds"
+    step "Redis scale-down: migrating slots and removing nodes"
     _redis_scale_down "$REDIS_NODES" "$ORIG_REDIS_NODES"
   fi
 
-  # Étape 2 : MinIO pool expansion — enregistrement AVANT gen_compose
+  # Step 2: MinIO pool expansion — register BEFORE gen_compose
   if $minio_scaled_up; then
     _minio_register_pool "$ORIG_MINIO_NODES" "$MINIO_NODES"
-    step "Création des répertoires MinIO (nouveaux nœuds)"
+    step "Creating MinIO directories (new nodes)"
     local n d
     for n in $(seq $(( ORIG_MINIO_NODES + 1 )) $MINIO_NODES); do
       for d in $(seq 1 "$MINIO_DISKS"); do
@@ -2996,74 +2996,74 @@ scale_nodes() {
     done
   fi
 
-  # Étape 3 : Génération des fichiers de config (sans .env — mots de passe conservés)
+  # Step 3: Generate config files (without .env — passwords preserved)
   save_answers
   gen_compose
   gen_galera_cnf
   patch_haproxy
   patch_nextcloud_init
 
-  # Étape 4 : Démarrage / arrêt des containers
-  step "Application du scaling (nouveaux containers démarrés, orphelins supprimés)"
+  # Step 4: Start / stop containers
+  step "Applying scaling (new containers started, orphans removed)"
   start_spinner "docker compose up -d --remove-orphans..."
   docker compose up -d --remove-orphans 2>&1 \
     | grep -E '^\s*(✔|✘|Created|Started|Removed|Error)' || true
-  stop_spinner "Containers mis à jour"
+  stop_spinner "Containers updated"
 
-  # Étape 5 : Redémarrage de HAProxy pour appliquer les nouveaux backends
-  step "Redémarrage de HAProxy"
+  # Step 5: Restart HAProxy to apply new backends
+  step "Restarting HAProxy"
   docker compose restart haproxy 2>/dev/null || true
-  info "HAProxy redémarré (nouveaux backends actifs immédiatement)"
+  info "HAProxy restarted (new backends active immediately)"
 
-  # Étape 6 : Redis scale-UP — intégration des nouveaux nœuds dans le cluster
+  # Step 6: Redis scale-UP — integrate new nodes into the cluster
   if (( REDIS_NODES > ORIG_REDIS_NODES )); then
-    step "Redis scale-up : intégration des nouveaux nœuds dans le cluster"
+    step "Redis scale-up: integrating new nodes into the cluster"
     _redis_scale_up "$REDIS_NODES" "$ORIG_REDIS_NODES"
   fi
 
-  # Étape 7 : Patch binaire Collabora sur les nouveaux nœuds (scale-up seulement)
-  # On passe (ORIG_COLLAB_NODES + 1) pour extraire depuis un nouveau nœud (binaire non patché)
-  # plutôt que depuis node1 qui est déjà patché depuis le déploiement initial.
+  # Step 7: Collabora binary patch on new nodes (scale-up only)
+  # Pass (ORIG_COLLAB_NODES + 1) to extract from a new node (unpatched binary)
+  # rather than from node1 which is already patched since initial deployment.
   if (( COLLAB_NODES > ORIG_COLLAB_NODES )); then
     patch_collabora_binary $(( ORIG_COLLAB_NODES + 1 ))
   fi
 
   wait_healthy
 
-  box "Scaling terminé ✓" \
-    "Nextcloud  : ${NC_NODES} nœuds FPM + ${NC_NODES} nginx" \
-    "Galera     : ${MARIADB_NODES} nœuds" \
-    "Redis      : ${REDIS_NODES} nœuds ($((REDIS_NODES/2)) masters + $((REDIS_NODES/2)) replicas)" \
-    "Collabora  : ${COLLAB_NODES} nœuds" \
-    "Whiteboard : ${WB_NODES} nœuds" \
-    "MinIO      : ${MINIO_NODES} nœuds × ${MINIO_DISKS} disques"
+  box "Scaling complete ✓" \
+    "Nextcloud  : ${NC_NODES} FPM nodes + ${NC_NODES} nginx" \
+    "Galera     : ${MARIADB_NODES} nodes" \
+    "Redis      : ${REDIS_NODES} nodes ($((REDIS_NODES/2)) masters + $((REDIS_NODES/2)) replicas)" \
+    "Collabora  : ${COLLAB_NODES} nodes" \
+    "Whiteboard : ${WB_NODES} nodes" \
+    "MinIO      : ${MINIO_NODES} nodes × ${MINIO_DISKS} disks"
 }
 
-# ─── [MAIN] Point d'entrée ───────────────────────────────────────────────────
+# ─── [MAIN] Entry point ──────────────────────────────────────────────────────
 
 main() {
   show_banner
   setup_logging
 
-  # Détection d'une stack existante → proposition mise à jour / scaling / redéploiement
+  # Detect existing stack → offer update / scaling / full redeployment
   if detect_existing_stack; then
-    box "Stack existante détectée" \
-      "Une stack NXT Maxscale est active dans ${INSTALL_DIR}." \
+    box "Existing stack detected" \
+      "An NXT Maxscale stack is running in ${INSTALL_DIR}." \
       "" \
-      "→ [1] Mise à jour rapide  : pull des images + patch Collabora (configuration conservée)" \
-      "→ [2] Scaling des nœuds   : augmenter/réduire les nœuds sans réinitialisation" \
-      "→ [3] Déploiement complet : re-génère tous les fichiers (⚠  repart de zéro)"
+      "→ [1] Quick update    : pull images + Collabora patch (configuration preserved)" \
+      "→ [2] Scale nodes     : increase/decrease nodes without reinitialization" \
+      "→ [3] Full deployment : regenerates all files (⚠  starts from scratch)"
     echo ""
-    echo -e "  ${C_WHITE}[1]${C_RESET} Mise à jour rapide ${C_GRAY}(recommandé)${C_RESET}"
-    echo -e "  ${C_WHITE}[2]${C_RESET} Augmenter / réduire les nœuds"
-    echo -e "  ${C_WHITE}[3]${C_RESET} Déploiement complet ${C_GRAY}(repart de zéro)${C_RESET}"
+    echo -e "  ${C_WHITE}[1]${C_RESET} Quick update ${C_GRAY}(recommended)${C_RESET}"
+    echo -e "  ${C_WHITE}[2]${C_RESET} Scale up / down nodes"
+    echo -e "  ${C_WHITE}[3]${C_RESET} Full deployment ${C_GRAY}(starts from scratch)${C_RESET}"
     echo ""
     local stack_choice
     while true; do
-      prompt_input "Votre choix" "1"
+      prompt_input "Your choice" "1"
       stack_choice="$REPLY"
       [[ "$stack_choice" =~ ^[123]$ ]] && break
-      error "Entrez 1, 2 ou 3"
+      error "Enter 1, 2 or 3"
     done
     case "$stack_choice" in
       1)
@@ -3075,21 +3075,21 @@ main() {
         return 0
         ;;
       3)
-        info "Déploiement complet sélectionné"
+        info "Full deployment selected"
         echo ""
         ;;
     esac
   fi
 
-  # Phase 1-2 : Système
+  # Phase 1-2: System
   detect_os
   install_deps
   check_requirements
 
-  # Phase 3 : Clone
+  # Phase 3: Clone
   clone_repo
 
-  # Phase 4 : Configuration interactive
+  # Phase 4: Interactive configuration
   if ! load_answers; then
     ask_domains
     ask_versions
@@ -3102,7 +3102,7 @@ main() {
   show_recap
   save_answers
 
-  # Phase 5 : Génération des fichiers
+  # Phase 5: File generation
   gen_passwords
   gen_env
   gen_compose
@@ -3111,12 +3111,12 @@ main() {
   patch_nextcloud_init
   create_minio_dirs
 
-  # Phase 6 : Déploiement
+  # Phase 6: Deployment
   gen_certs
   run_deploy
   patch_collabora_binary
 
-  # Phase 7 : Vérification
+  # Phase 7: Verification
   wait_healthy
   reset_bruteforce
   check_services
