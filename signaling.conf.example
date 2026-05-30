@@ -5,37 +5,46 @@
 # =============================================================================
 
 [http]
-# Internal listen address for the signaling server (HAProxy proxies to this)
+# Listen on all interfaces — HAProxy proxies inbound requests
 listen = :8080
 
 [app]
 debug = false
-# 0 = unlimited concurrent sessions
-sessionlimit = 0
+# Trust HAProxy IPs (talk-net subnet) so X-Real-IP forwarding works correctly
+trustedproxies = 172.60.0.0/24
 
 [sessions]
-# hashkey: 32 bytes hex (64 chars) — signs session cookies
+# hashkey: 32 or 64 bytes hex — signs session tokens
 hashkey = REPLACE_WITH_64_HEX_CHARS
-# blockkey: 16 bytes hex (32 chars) — encrypts session cookie payload
+# blockkey: MUST be 16, 24 or 32 bytes hex — encrypts session payload
 blockkey = REPLACE_WITH_32_HEX_CHARS
 
 [clients]
-# internalsecret: used by internal clients (SIP bridge etc.)
-internalsecret = REPLACE_WITH_HEX_SECRET
+# internalsecret: for internal services (SIP bridge etc.)
+# Must be DIFFERENT from the backend secret below
+internalsecret = REPLACE_WITH_INTERNAL_HEX_SECRET
 
 [backend]
-# Comma-separated list of backend identifiers (section names below)
+# Comma-separated list of backend section identifiers
 backends = nc
 # HTTP timeout for Nextcloud backend calls (seconds)
 timeout = 10
 connectionsperhost = 8
 
 [backend "nc"]
-# Full HTTPS URL of your Nextcloud instance
-url = https://nextcloud.example.tld
+# "urls" (plural) — comma-separated list of Nextcloud instance URLs
+urls = https://nextcloud.example.tld
 # Shared secret — must match the value set via:
 #   occ config:app:set spreed signaling_secret --value <secret>
 secret = REPLACE_WITH_SHARED_SECRET
+
+# Optional: uncomment and fill if coturn is deployed
+# [turn]
+# # API key clients send to /api/v1/turn to get temporary TURN credentials
+# apikey = REPLACE_WITH_TURN_APIKEY
+# # Shared secret — must match coturn's --static-auth-secret
+# secret = REPLACE_WITH_COTURN_SECRET
+# servers = turn:talk.example.tld:3478?transport=udp,turn:talk.example.tld:3478?transport=tcp
 
 [nats]
 # NATS message broker — distributes messages across signaling nodes
