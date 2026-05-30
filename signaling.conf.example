@@ -1,0 +1,42 @@
+# =============================================================================
+# signaling.conf.example — nextcloud-spreed-signaling configuration template
+# Copy to signaling.conf and fill in your values, OR let deploy.sh generate it.
+# Full reference: https://github.com/strukturag/nextcloud-spreed-signaling
+# =============================================================================
+
+[http]
+# Internal listen address for the signaling server (HAProxy proxies to this)
+listen = :8080
+
+[app]
+debug = false
+# 0 = unlimited concurrent sessions
+sessionlimit = 0
+
+[sessions]
+# hashkey: 32 bytes hex (64 chars) — signs session cookies
+hashkey = REPLACE_WITH_64_HEX_CHARS
+# blockkey: 16 bytes hex (32 chars) — encrypts session cookie payload
+blockkey = REPLACE_WITH_32_HEX_CHARS
+
+[clients]
+# internalsecret: used by internal clients (SIP bridge etc.)
+internalsecret = REPLACE_WITH_HEX_SECRET
+
+[backend]
+# Comma-separated list of backend identifiers (section names below)
+backends = nc
+# HTTP timeout for Nextcloud backend calls (seconds)
+timeout = 10
+connectionsperhost = 8
+
+[backend "nc"]
+# Full HTTPS URL of your Nextcloud instance
+url = https://nextcloud.example.tld
+# Shared secret — must match the value set via:
+#   occ config:app:set spreed signaling_secret --value <secret>
+secret = REPLACE_WITH_SHARED_SECRET
+
+[nats]
+# NATS message broker — distributes messages across signaling nodes
+url = nats://nats:4222

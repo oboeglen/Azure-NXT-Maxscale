@@ -157,7 +157,38 @@ occ config:app:set richdocuments wopi_allowlist  --value "172.10.0.0/24,172.40.0
 info "Collabora Online configuré → https://${COLLABORA_DOMAIN}"
 
 # ---------------------------------------------------------------------------
-# 5. Nextcloud Whiteboard
+# 5. Nextcloud Talk — standalone signaling backend
+# ---------------------------------------------------------------------------
+step "Installation Nextcloud Talk (spreed)"
+
+if ! ${OCC_BIN} app:enable spreed 2>/dev/null; then
+    echo "[setup] Downloading from Nextcloud App Store..."
+    occ app:install spreed
+else
+    info "spreed (Talk) already present — enabled"
+fi
+
+# Configure standalone signaling server
+occ config:app:set spreed signaling_servers \
+  --value '[{"server":"https://'"${TALK_DOMAIN}"'","verify":"1"}]'
+occ config:app:set spreed signaling_secret \
+  --value "${TALK_SIGNALING_SECRET}"
+
+# STUN/TURN — use coturn if a secret is provided, public STUN otherwise
+if [ -n "${COTURN_SECRET:-}" ]; then
+    occ config:app:set spreed stun_servers \
+      --value '["turn:'"${TALK_DOMAIN}"':3478"]'
+    occ config:app:set spreed turn_servers \
+      --value '[{"server":"turn:'"${TALK_DOMAIN}"':3478","secret":"'"${COTURN_SECRET}"'","protocols":"udp,tcp"}]'
+    info "Talk configured → signaling: https://${TALK_DOMAIN}  TURN: ${TALK_DOMAIN}:3478"
+else
+    occ config:app:set spreed stun_servers \
+      --value '["stun:stun.nextcloud.com:443"]'
+    info "Talk configured → signaling: https://${TALK_DOMAIN}  STUN: stun.nextcloud.com:443 (public)"
+fi
+
+# ---------------------------------------------------------------------------
+# 6. Nextcloud Whiteboard
 # ---------------------------------------------------------------------------
 step "Installation Nextcloud Whiteboard"
 
@@ -445,4 +476,5 @@ step "Setup Nextcloud terminé avec succès !"
 echo "[setup]  Redis Cluster  : redis-node1..6:6379 (3 masters, 3 replicas)"
 echo "[setup]  Collabora      : https://${COLLABORA_DOMAIN}"
 echo "[setup]  Whiteboard     : https://${WHITEBOARD_DOMAIN}"
+echo "[setup]  Talk signaling : https://${TALK_DOMAIN}"
 echo "[setup]  Nextcloud      : https://${NEXTCLOUD_DOMAIN}"
