@@ -570,6 +570,19 @@ ask_minio() {
       ;;
     2)
       MINIO_MODE="manual"
+      box "Recommended disk format for MinIO" \
+        "Filesystem : XFS  (best for object storage — large sequential I/O)" \
+        "             ext4 also supported, but XFS recommended" \
+        "" \
+        "Format     : mkfs.xfs -f -L minio-node1-disk1 /dev/sdX" \
+        "Mount opts : noatime,nodiratime  (avoids access-time write overhead)" \
+        "" \
+        "/etc/fstab : /dev/sdX  /mnt/node1-disk1  xfs  defaults,noatime,nodiratime  0 2" \
+        "" \
+        "Rules      : 1 physical disk per path — no RAID (MinIO handles erasure coding)" \
+        "             Avoid bind-mounts, LVM stripes, or shared NAS mounts" \
+        "             All data disks must be the same size for optimal erasure coding"
+      echo ""
       local n d
       for n in $(seq 1 "$MINIO_NODES"); do
         prompt_input "Node ${n} — metadata path" "/data/minio/node${n}"
@@ -582,6 +595,19 @@ ask_minio() {
       ;;
     3)
       MINIO_MODE="auto"
+      box "Recommended disk format for MinIO" \
+        "Filesystem : XFS  (best for object storage — large sequential I/O)" \
+        "             ext4 also supported, but XFS recommended" \
+        "" \
+        "Format     : mkfs.xfs -f -L minio-node1-disk1 /dev/sdX" \
+        "Mount opts : noatime,nodiratime  (avoids access-time write overhead)" \
+        "" \
+        "/etc/fstab : /dev/sdX  /mnt/node1-disk1  xfs  defaults,noatime,nodiratime  0 2" \
+        "" \
+        "Rules      : 1 physical disk per path — no RAID (MinIO handles erasure coding)" \
+        "             Avoid bind-mounts, LVM stripes, or shared NAS mounts" \
+        "             All data disks must be the same size for optimal erasure coding"
+      echo ""
       step "Detected available disks"
       df -h --output=source,target,size 2>/dev/null \
         | grep -vE '^(tmpfs|udev|/dev/loop|Filesystem|/dev/sr)' \
