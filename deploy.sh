@@ -3072,13 +3072,14 @@ configure_talk() {
   fi
   "${occ[@]}" app:enable spreed 2>&1 | grep -v '^$' | while read -r l; do info "$l"; done || true
 
-  # Configure signaling server
-  local sig_json="[{\"server\":\"https://${TALK_DOMAIN}/\",\"verify\":true}]"
+  # Configure signaling server — include secret in server object (Talk 19+)
+  # and also set the global signaling_secret key (Talk <19 compatibility)
+  local sig_json="[{\"server\":\"https://${TALK_DOMAIN}/\",\"verify\":true,\"secret\":\"${talk_secret}\"}]"
   local out
   out=$("${occ[@]}" config:app:set spreed signaling_servers --value "$sig_json" 2>&1)
   info "signaling_servers: $out"
 
-  # Configure shared secret
+  # Global signaling_secret — still read by getSignalingSecret() in Talk 20
   out=$("${occ[@]}" config:app:set spreed signaling_secret --value "$talk_secret" 2>&1)
   info "signaling_secret: $out"
 
