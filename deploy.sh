@@ -3144,14 +3144,17 @@ configure_talk() {
 
   local out
 
-  # Talk 20+ uses dedicated talk:signaling:add instead of config:app:set
-  # Remove any existing entries first to avoid duplicates on re-run
-  "${occ[@]}" talk:signaling:list 2>/dev/null | grep -q "${TALK_DOMAIN}" \
-    && info "Signaling server already registered — skipping add" \
-    || {
-      out=$("${occ[@]}" talk:signaling:add "wss://${TALK_DOMAIN}/" "$talk_secret" --verify 2>&1)
-      info "talk:signaling:add: $out"
-    }
+  # Use config:app:set directly to store the correct Talk 23 format.
+  # talk:signaling:add omits the secret inside the server object, causing
+  # Config::getSignalingSecret() to return null (TypeError on the admin page).
+  # Talk 23 requires: {"servers":[{"server":"wss://...","verify":true,"secret":"..."}],"secret":"..."}
+  local signaling_json
+  signaling_json='{"servers":[{"server":"wss://'"${TALK_DOMAIN}"'/","verify":true,"secret":"'"${talk_secret}"'"}],"secret":"'"${talk_secret}"'"}'
+  out=$("${occ[@]}" config:app:set spreed signaling_servers --value "$signaling_json" 2>&1)
+  info "signaling_servers set: $out"
+
+  # Remove legacy standalone key left by older Talk versions
+  "${occ[@]}" config:app:delete spreed signaling_secret 2>/dev/null || true
 
   # Verify
   local stored
