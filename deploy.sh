@@ -2676,9 +2676,8 @@ gen_certs() {
   fi
 
   # ── Port check ───────────────────────────────────────────────────────────
-  local port80_free=true port443_free=true
-  ss -tlnp 2>/dev/null | grep -q ':80 '  && port80_free=false
-  ss -tlnp 2>/dev/null | grep -q ':443 ' && port443_free=false
+  local port80_free=true
+  ss -tlnp 2>/dev/null | grep -q ':80 ' && port80_free=false
 
   # ── Certbot call ──────────────────────────────────────────────────────────
   step "Generating Let's Encrypt certificates"
@@ -2698,52 +2697,24 @@ gen_certs() {
 
   local cert_ok=false certbot_output=""
 
-  # challenge = "http-01" | "tls-alpn-01"  port = "80:80" | "443:443"
-  # NOTE: --preferred-challenges must go in certbot args, not docker run
-  _run_certbot() {
-    local challenge="$1" port="$2"
-    certbot_output=$(docker run --rm -p "$port" \
-      -v "${le_vol}:/etc/letsencrypt" \
-      certbot/certbot "${certbot_args[@]}" \
-      --preferred-challenges "$challenge" 2>&1) && return 0 || return 1
-  }
-
-  # Attempt 1: HTTP-01 port 80
-  if $port80_free; then
-    info "Attempting HTTP-01 (port 80)..."
-    if _run_certbot "http-01" "80:80"; then
-      cert_ok=true
-    else
-      warn "HTTP-01 (port 80) failed."
-      echo "$certbot_output" | grep -iE 'error|detail|challenge|timeout|connection' | head -5 >&2 || true
-    fi
-  else
-    warn "Port 80 in use — HTTP-01 skipped."
+  if ! $port80_free; then
+    die "Port 80 is in use — free it before running certbot (HTTP-01 requires port 80)."
   fi
 
-  # Attempt 2: TLS-ALPN-01 port 443
-  if ! $cert_ok; then
-    if $port443_free; then
-      info "Attempting TLS-ALPN-01 (port 443)..."
-      if _run_certbot "tls-alpn-01" "443:443"; then
-        cert_ok=true
-      else
-        warn "TLS-ALPN-01 (port 443) also failed."
-        echo "$certbot_output" | grep -iE 'error|detail|challenge|timeout|connection' | head -5 >&2 || true
-      fi
-    else
-      warn "Port 443 in use — TLS-ALPN-01 skipped."
-    fi
-  fi
+  info "Attempting HTTP-01 (port 80)..."
+  certbot_output=$(docker run --rm -p "80:80" \
+    -v "${le_vol}:/etc/letsencrypt" \
+    certbot/certbot "${certbot_args[@]}" \
+    --preferred-challenges http-01 2>&1) && cert_ok=true
 
   if ! $cert_ok; then
-    error "Certbot failed on both methods. Full output:"
+    error "Certbot failed. Full output:"
     echo "$certbot_output" | tail -20 >&2
     # Detect rate limit and show unlock time
     local retry_after=""
     retry_after=$(echo "$certbot_output" | grep -oE 'until [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z' | head -1 | sed 's/until //')
     [[ -n "$retry_after" ]] && error "Rate limit — retry after: $retry_after"
-    die "Check:\n  • DNS: domains point to this server\n  • Ports 80/443 accessible from the Internet\n  • Rate limit: max 5 certificates / 7 days (use Staging mode for testing)"
+    die "Check:\n  • DNS: domains point to this server\n  • Port 80 accessible from the Internet\n  • Rate limit: max 5 certificates / 7 days (use Staging mode for testing)"
   fi
 
   step "Combining fullchain + privkey for HAProxy"
