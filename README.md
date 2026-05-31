@@ -166,7 +166,7 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 | CPU | 8 cores minimum |
 | RAM | 16 GB minimum (32 GB recommended in production) |
 | Disk | 500 GB SSD (depending on usage and number of nodes) |
-| DNS | 3 subdomains pointing to this server **before** launch |
+| DNS | 3 subdomains minimum (Nextcloud, Collabora, Whiteboard) + 1 for Talk if enabled — all pointing to this server **before** launch |
 | Ports | 80 and 443 open for certificate validation |
 
 > [!TIP]
@@ -506,7 +506,7 @@ Talk HA (`spreed-signaling`) is required so that Talk calls work correctly when 
 
 ## 📬 Notify Push
 
-Client Push replaces polling with a persistent WebSocket connection, so file changes appear immediately in Nextcloud desktop and mobile clients — no more 30-second sync delays.
+Notify Push replaces polling with a persistent WebSocket connection, so file changes appear immediately in Nextcloud desktop and mobile clients — no more 30-second sync delays.
 
 ### How it works
 
@@ -878,7 +878,7 @@ Once the infrastructure is deployed, **restricting exposed ports** is the first 
 | Port | Protocol | Usage |
 |------|----------|-------|
 | `80` | TCP | HTTP → HTTPS redirect + Let's Encrypt ACME challenge |
-| `443` | TCP | HTTPS — main entry point (Nextcloud, Collabora, Whiteboard, Talk signaling, Client Push) |
+| `443` | TCP | HTTPS — main entry point (Nextcloud, Collabora, Whiteboard, Talk signaling, Notify Push) |
 | `22` | TCP | SSH administration (restrict to your IP if possible) |
 | `3478` | UDP + TCP | coturn TURN/STUN relay — **only when coturn is enabled** |
 
