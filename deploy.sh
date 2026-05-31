@@ -738,15 +738,17 @@ _prepare_minio_disk() {
       # shellcheck disable=SC2086
       info "XFS profile: ${XFS_PROFILE_DESC}"
       start_spinner "Formatting $dev as XFS (${size_gb}GB ${disk_type^^})..."
+      local _mkfs_out
       # shellcheck disable=SC2086
-      mkfs.xfs -f -L "$label" ${XFS_MKFS_OPTS} "$dev" &>/dev/null \
-        || { stop_spinner; die "mkfs.xfs failed on $dev"; }
+      _mkfs_out=$(mkfs.xfs -f -L "$label" ${XFS_MKFS_OPTS} "$dev" 2>&1) \
+        || { stop_spinner; die "mkfs.xfs failed on $dev"$'\n'"${_mkfs_out}"; }
     else
       info "EXT4 profile: ${EXT4_PROFILE_DESC}"
       start_spinner "Formatting $dev as EXT4 (${size_gb}GB ${disk_type^^})..."
+      local _mkfs_out
       # shellcheck disable=SC2086
-      mkfs.ext4 -F -L "$label" ${EXT4_MKFS_OPTS} "$dev" &>/dev/null \
-        || { stop_spinner; die "mkfs.ext4 failed on $dev"; }
+      _mkfs_out=$(mkfs.ext4 -F -L "$label" ${EXT4_MKFS_OPTS} "$dev" 2>&1) \
+        || { stop_spinner; die "mkfs.ext4 failed on $dev"$'\n'"${_mkfs_out}"; }
     fi
     stop_spinner "Formatted: $dev → ${chosen_fs^^}"
   else
