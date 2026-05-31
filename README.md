@@ -550,11 +550,12 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 | **Redis Cluster** | ✅ | ✅ | Even delta mandatory — automatic cluster integration |
 | **Collabora CODE** | ✅ | ✅ | `home_mode` binary patch reapplied on new nodes |
 | **Whiteboard** | ✅ | ✅ | |
+| **Talk HA** | ✅ | ✅ | HAProxy updated automatically — NATS and coturn unaffected |
 | **MinIO** | ✅ | ❌ | Scale-up via pool expansion; scale-down via `mc admin decommission` |
 
 ### Internal mechanics
 
-**Nextcloud / Galera / Collabora / Whiteboard** — `docker compose up -d --remove-orphans` creates new containers and removes orphans. HAProxy is restarted to register the new backends.
+**Nextcloud / Galera / Collabora / Whiteboard / Talk HA** — `docker compose up -d --remove-orphans` creates new containers and removes orphans. HAProxy is restarted to register the new backends.
 
 **Redis Cluster (scale-up)**
 1. Wait for new nodes to respond to `PING`
