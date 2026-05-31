@@ -6,6 +6,35 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.3.1] — 2026-05-31
+
+### Fixed
+- **Talk signaling registered as `https://` without secret** — `nextcloud-init.sh` was configuring Talk via the deprecated `config:app:set spreed signaling_servers` API with `https://` before `configure_talk()` in `deploy.sh` had a chance to run. When `configure_talk()` detected the domain already present, it skipped `talk:signaling:add`, leaving the signaling server with the wrong URL scheme and no secret. Fixed by removing all signaling/STUN/TURN configuration from `nextcloud-init.sh` — the app is now only installed and enabled there; all URL and secret wiring is handled exclusively by `configure_talk()` which correctly uses `wss://` via `talk:signaling:add`
+- **Notify Push startup timeout too tight** — the wait loop capped at 60 s (12 × 5 s), exactly matching `start_period` of the dependent FPM healthcheck. On slower servers this caused a race condition. Extended to 120 s (24 × 5 s)
+
+### Added
+- **UFW firewall section updated** — coturn TURN/STUN port (`3478/udp+tcp`) and media relay port range (`49152-65535/udp`) added to the recommended UFW rules
+
+---
+
+## [2.3.0] — 2026-05-31
+
+### Added
+- **Nextcloud Talk — HA Signaling** — full Talk backend deployed via `deploy.sh`: `spreed-signaling` nodes load-balanced by HAProxy (`leastconn`), NATS message broker for inter-node event routing, optional `coturn` TURN/STUN relay (`network_mode: host`, ports `3478/udp+tcp`)
+- **Talk auto-configuration** — `configure_talk()` wires secrets end-to-end: generates `GEN_TALK_SECRET`, writes `signaling.conf`, registers `wss://TALK_DOMAIN/` via `occ talk:signaling:add --verify`, configures STUN/TURN via `occ talk:stun:add` / `occ talk:turn:add`
+- **Notify Push (Client Push)** — `notify-push` container using the binary bundled in the Nextcloud image; HAProxy routes `/push` before the general Nextcloud rule; auto-configured via `occ notify_push:setup` + full self-test
+- **Disk Wizard** — interactive disk preparation wizard: detects block devices via `lsblk --pairs`, formats XFS with tuned parameters (`agcount`, `lazy-count`), mounts with persistent `fstab` entry, refreshes the disk table after each operation
+- **Talk HA scaling** — `spreed-signaling` nodes support scale-up and scale-down via the existing scaling menu
+- **README** — new sections: Talk HA Signaling, Notify Push, Disk Wizard; updated architecture diagram, HA table, ports, HAProxy stats table, Docker images table (`IMG_NATS`, `IMG_SPREED_SIGNALING`, `IMG_COTURN`)
+
+### Fixed
+- **certbot TLS-ALPN-01 removed** — challenge type unsupported since certbot v2.6+; HTTP-01 standalone only
+- **`signaling.conf` permissions** — changed from `600` to `644` so the non-root container user can read the file
+- **HAProxy signaling health check** — switched to `HTTP/1.0` to avoid Host header substitution issues with `envsubst`
+- **HAProxy ACL restoration** — `patch_haproxy()` now restores `acl is_talk`, `use_backend signaling`, and the full `backend signaling` block when `TALK_ENABLED` switches from `no` to `yes` on re-deploy
+
+---
+
 ## [2.2.1] — 2026-05-27
 
 ### Changed
@@ -263,5 +292,9 @@ Major version — complete architecture redesign towards an FPM + MinIO stack.
 [2.1.4]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.3...v2.1.4
 [2.1.3]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.2...v2.1.3
 [2.1.2]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.1...v2.1.2
+[2.3.1]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.3.0...v2.3.1
+[2.3.0]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.2.1...v2.3.0
+[2.2.1]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.2.0...v2.2.1
+[2.2.0]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.16...v2.2.0
 [2.1.1]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/oboeglen/Azure-NXT-Maxscale/releases/tag/v2.1.0
