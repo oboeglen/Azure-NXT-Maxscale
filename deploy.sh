@@ -1993,7 +1993,7 @@ WBREDIS
     restart: always
     entrypoint: ["/bin/sh", "-c"]
     command: >
-      "exec /var/www/html/custom_apps/notify_push/bin/\$\$(uname -m)/notify_push /var/www/html/config/config.php"
+      "exec /var/www/html/apps/notify_push/bin/\$\$(uname -m)/notify_push /var/www/html/config/config.php"
     environment:
       - PORT=7867
       - LOG=warn
@@ -2007,7 +2007,7 @@ WBREDIS
       app-next-01:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:7867/test/cookie 2>/dev/null | grep -q 'false' || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:7867/test/cookie > /dev/null; exit 0"]
       interval: 30s
       timeout: 10s
       retries: 3
