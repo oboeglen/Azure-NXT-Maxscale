@@ -3472,19 +3472,98 @@ scale_nodes() {
   if (( MINIO_NODES > ORIG_MINIO_NODES )); then
     minio_scaled_up=true
     local new_pool_start=$(( ORIG_MINIO_NODES + 1 ))
-    step "Disks for new MinIO nodes (${new_pool_start}–${MINIO_NODES})"
+    step "New MinIO pool — nodes ${new_pool_start}–${MINIO_NODES}  (${MINIO_DISKS} disk(s) each)"
     warn "All existing MinIO nodes will restart with the new pool (~30s downtime)."
     warn "Data is preserved — only the server command changes."
+    info "New nodes must use exactly ${MINIO_DISKS} disk(s) each (must match existing pool)"
     echo ""
-    local n d
-    for n in $(seq $new_pool_start $MINIO_NODES); do
-      prompt_input "Node ${n} — metadata path" "/data/minio/node${n}"
-      MINIO_PATHS["${n}_path"]="$REPLY"
-      for d in $(seq 1 "$MINIO_DISKS"); do
-        prompt_input "Node ${n} — Disk ${d}" "/data/minio/node${n}/data${d}"
-        MINIO_PATHS["${n}_${d}"]="$REPLY"
+
+    if [[ "$MINIO_MODE" == "auto" ]]; then
+      # ── Disk wizard for new nodes ──────────────────────────────────────────
+      _scan_available_disks
+
+      if (( DISK_COUNT == 0 )); then
+        warn "No candidate disk found — falling back to manual path entry"
+        local n d
+        for n in $(seq $new_pool_start $MINIO_NODES); do
+          prompt_input "Node ${n} — metadata path" "/data/minio/node${n}"
+          MINIO_PATHS["${n}_path"]="$REPLY"
+          for d in $(seq 1 "$MINIO_DISKS"); do
+            prompt_input "Node ${n} — Disk ${d}" "/data/minio/node${n}/data${d}"
+            MINIO_PATHS["${n}_${d}"]="$REPLY"
+          done
+        done
+      else
+        info "${DISK_COUNT} disk(s)/partition(s) found"
+        _show_disk_table
+        echo -e "  ${C_BGREEN}Green${C_RESET} = already mounted   ${C_YELLOW}Yellow${C_RESET} = formatted   ${C_GRAY}Gray${C_RESET} = no filesystem"
+        echo ""
+
+        local preferred_fs="xfs"
+        echo -e "  ${C_WHITE}Filesystem for unformatted disks?${C_RESET}"
+        echo -e "  ${C_CYAN}[1]${C_RESET} XFS   ${C_GRAY}(recommended — optimal for object storage)${C_RESET}"
+        echo -e "  ${C_CYAN}[2]${C_RESET} EXT4"
+        echo ""
+        prompt_input "Choice" "1"
+        [[ "$REPLY" == "2" ]] && preferred_fs="ext4"
+        info "Filesystem: ${preferred_fs^^}"
+        echo ""
+
+        local -a _selected_devs=()
+        local n d ci
+        for n in $(seq $new_pool_start $MINIO_NODES); do
+          for d in $(seq 1 "$MINIO_DISKS"); do
+            echo ""
+            step "New node ${n} — Disk ${d}"
+            _show_disk_table
+            while true; do
+              prompt_input "Select disk [1-${DISK_COUNT}]" ""
+              if [[ "$REPLY" =~ ^[0-9]+$ ]] && (( REPLY >= 1 && REPLY <= DISK_COUNT )); then
+                ci=$(( REPLY - 1 ))
+                if [[ " ${_selected_devs[*]} " == *" ${DISK_NAMES[$ci]} "* ]]; then
+                  warn "${DISK_NAMES[$ci]} already assigned to another slot"
+                  prompt_yn "Use anyway?" "N" || continue
+                fi
+                break
+              fi
+              error "Enter a number between 1 and ${DISK_COUNT}"
+            done
+
+            _selected_devs+=("${DISK_NAMES[$ci]}")
+            local target_mount="/mnt/minio-node${n}-disk${d}"
+            if [[ "${DISK_MOUNTS[$ci]}" != "-" && -n "${DISK_MOUNTS[$ci]}" ]]; then
+              target_mount="${DISK_MOUNTS[$ci]}"
+            fi
+
+            _prepare_minio_disk \
+              "${DISK_NAMES[$ci]}" "$target_mount" \
+              "${DISK_FSTYPES[$ci]}" "$preferred_fs"
+
+            MINIO_PATHS["${n}_${d}"]="$target_mount"
+          done
+          MINIO_PATHS["${n}_path"]="${MINIO_PATHS["${n}_1"]}"
+        done
+      fi
+
+    else
+      # ── Manual / test path entry ───────────────────────────────────────────
+      if [[ "$MINIO_MODE" == "manual" ]]; then
+        box "Reminder — ensure disks are ready before proceeding" \
+          "Format : mkfs.xfs -f /dev/sdX  (or mkfs.ext4 -F /dev/sdX)" \
+          "Mount  : mount -t xfs -o noatime,nodiratime,allocsize=64m /dev/sdX /mnt/..." \
+          "fstab  : UUID=... /mnt/...  xfs  noatime,nodiratime,allocsize=64m,logbsize=256k  0 2"
+        echo ""
+      fi
+      local n d
+      for n in $(seq $new_pool_start $MINIO_NODES); do
+        prompt_input "Node ${n} — metadata path" "/data/minio/node${n}"
+        MINIO_PATHS["${n}_path"]="$REPLY"
+        for d in $(seq 1 "$MINIO_DISKS"); do
+          prompt_input "Node ${n} — Disk ${d}" "/data/minio/node${n}/data${d}"
+          MINIO_PATHS["${n}_${d}"]="$REPLY"
+        done
       done
-    done
+    fi
   fi
 
   # ── Check for changes ────────────────────────────────────────────────────────
@@ -3538,15 +3617,34 @@ scale_nodes() {
   # Step 2: MinIO pool expansion — register BEFORE gen_compose
   if $minio_scaled_up; then
     _minio_register_pool "$ORIG_MINIO_NODES" "$MINIO_NODES"
-    step "Creating MinIO directories (new nodes)"
-    local n d
-    for n in $(seq $(( ORIG_MINIO_NODES + 1 )) $MINIO_NODES); do
-      for d in $(seq 1 "$MINIO_DISKS"); do
-        local path="${MINIO_PATHS[${n}_${d}]}"
-        mkdir -p "$path"
-        find "${path:?}" -mindepth 1 -delete 2>/dev/null || true
+
+    if [[ "$MINIO_MODE" == "auto" ]]; then
+      # Wizard already formatted, mounted and configured fstab — verify only
+      step "Verifying new MinIO node mount points"
+      local n d
+      for n in $(seq $(( ORIG_MINIO_NODES + 1 )) $MINIO_NODES); do
+        for d in $(seq 1 "$MINIO_DISKS"); do
+          local path="${MINIO_PATHS[${n}_${d}]}"
+          if mountpoint -q "$path" 2>/dev/null; then
+            info "Node ${n} disk ${d}: $path ✓ (mounted)"
+          else
+            warn "Node ${n} disk ${d}: $path is not a mount point — MinIO may fail to start"
+          fi
+        done
       done
-    done
+    else
+      # Test / manual mode: create directories and clear them for MinIO
+      # (MinIO refuses to start if data dirs contain unexpected files)
+      step "Creating MinIO directories (new nodes)"
+      local n d
+      for n in $(seq $(( ORIG_MINIO_NODES + 1 )) $MINIO_NODES); do
+        for d in $(seq 1 "$MINIO_DISKS"); do
+          local path="${MINIO_PATHS[${n}_${d}]}"
+          mkdir -p "$path"
+          find "${path:?}" -mindepth 1 -delete 2>/dev/null || true
+        done
+      done
+    fi
   fi
 
   # Step 3: Generate config files (without .env — passwords preserved)
