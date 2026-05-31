@@ -3079,7 +3079,7 @@ configure_talk() {
   "${occ[@]}" talk:signaling:list 2>/dev/null | grep -q "${TALK_DOMAIN}" \
     && info "Signaling server already registered — skipping add" \
     || {
-      out=$("${occ[@]}" talk:signaling:add "https://${TALK_DOMAIN}/" "$talk_secret" 2>&1)
+      out=$("${occ[@]}" talk:signaling:add "wss://${TALK_DOMAIN}/" "$talk_secret" --verify 2>&1)
       info "talk:signaling:add: $out"
     }
 
