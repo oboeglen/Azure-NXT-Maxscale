@@ -98,7 +98,7 @@ The script detects your OS, installs Docker if needed, asks the essential questi
 | ④ | Interactive prompts — domains, nodes, MinIO disks, certificates |
 | ⑤ | Secure secret generation (no `#` character) |
 | ⑥ | `.env`, `docker-compose.yml` and Galera config generation |
-| ⑦ | DNS check + Let's Encrypt SSL certificates (HTTP-01 / TLS-ALPN-01) |
+| ⑦ | DNS check + Let's Encrypt SSL certificates (HTTP-01 standalone) |
 | ⑧ | Parallel Docker image pull with progress bar |
 | ⑨ | Deployment with real-time monitoring and adaptive timeout |
 | ⑩ | Health check of all services + credentials display |
@@ -398,7 +398,7 @@ Enabled during deployment by `deploy.sh`. Accessible at `https://<NEXTCLOUD_DOMA
 - **Common scan paths** blocked (403) — `/wp-admin`, `/wp-login`, `/.git`, `/.env`, `/phpmyadmin`, `/xmlrpc.php`, `/cgi-bin`…
 - **Collabora admin console** blocked (403) — `/browser/dist/admin` inaccessible from outside
 - **Health check logs silenced** — `/status.php`, `/robots.txt`, `/favicon.ico` do not appear in HAProxy logs (~80% noise reduction)
-- **Extended CSP** — WebSocket allowed to Collabora and Whiteboard (`wss://`)
+- **Extended CSP** — WebSocket allowed to Collabora, Whiteboard and Talk signaling (`wss://`)
 
 ### Monitoring (/stats page)
 
