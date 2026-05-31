@@ -66,7 +66,7 @@
 - [🔒 HAProxy security](#-haproxy-security)
 - [📝 Collabora CODE](#-collabora-code)
 - [🎙️ Nextcloud Talk — HA Signaling](#️-nextcloud-talk--ha-signaling)
-- [📬 Client Push (notify\_push)](#-client-push-notify_push)
+- [📬 Notify Push](#-notify-push)
 - [📐 Scaling — adding and removing nodes](#-scaling--adding-and-removing-nodes)
 - [🛠️ Common operations](#️-common-operations)
 - [🚢 Manual deployment](#-manual-deployment)
@@ -123,11 +123,11 @@ flowchart TD
 
     HAProxy["⚖️ HAProxy\nSSL · Load Balancer · Stats"]
 
-    HAProxy -->|"next-net · /push"| npush["📬 notify-push\nClient Push · WebSocket"]
+    HAProxy -->|"next-net · /push"| npush["📬 Notify Push\nWebSocket"]
     HAProxy -->|next-net| nginx["🔀 nginx-next-01..N\nstatic files · FastCGI"]
     HAProxy -->|collabora-net| collab["📝 collabora-node1..N\nCollabora CODE · WOPI"]
     HAProxy -->|whiteboard-net| wb["🎨 whiteboard-node1..N\nWhiteboard · WebSocket"]
-    HAProxy -->|"talk-net · wss://"| sig["🎙️ spreed-signaling-01..N\nTalk signaling · WebSocket"]
+    HAProxy -->|"talk-net · wss://"| sig["🎙️ Talk HA\nspreed-signaling-01..N · WebSocket"]
 
     nginx --> fpm["⚙️ app-next-01..N\nNextcloud PHP-FPM 8.4"]
 
@@ -195,8 +195,8 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 | `whiteboard-node1..N` | Real-time collaborative whiteboard |
 | `redis-whiteboard` | Shared whiteboard state (Redis Streams) |
 | `minio-console` *(optional)* | MinIO web console — accessible via `/s3-console` |
-| `notify-push` | Client Push — real-time sync notifications over WebSocket (`/push`) |
-| `nats` *(Talk only)* | NATS message broker — distributes signaling events across spreed-signaling nodes |
+| `notify-push` | Notify Push — real-time sync notifications over WebSocket (`/push`) |
+| `nats` *(Talk only)* | NATS message broker — distributes signaling events across Talk HA nodes |
 | `spreed-signaling-01..N` *(Talk only)* | WebSocket signaling server — HAProxy load-balances across all nodes |
 | `coturn` *(Talk, optional)* | TURN/STUN relay — media relay for clients behind NAT or strict firewalls |
 
@@ -219,8 +219,8 @@ Everything is applied automatically by `nextcloud-setup` on first startup.
 - **Collabora Online** — office editing (Writer, Calc, Impress)
 - **Whiteboard** — real-time collaborative whiteboard
 - **MinIO S3** — object storage for all user files
-- **Nextcloud Talk** — HA signaling via spreed-signaling + NATS; optional coturn TURN relay
-- **Client Push (notify_push)** — real-time desktop/mobile sync notifications over WebSocket
+- **Nextcloud Talk** — HA signaling via Talk HA + NATS; optional coturn TURN relay
+- **Notify Push** — real-time desktop/mobile sync notifications over WebSocket
 - `trusted_proxies` + `forwarded_for_headers` — real client IPs forwarded behind HAProxy
 
 ### Security & UX
@@ -254,8 +254,8 @@ Everything is applied automatically by `nextcloud-setup` on first startup.
 | 📦 MinIO | ✅ Automatic | Reads continue, writes restored as soon as the node returns |
 | 📝 Collabora | ✅ Automatic | Editing session lost, automatic reconnection |
 | 🎨 Whiteboard | ✅ Automatic | Automatic WebSocket reconnection (state persisted in Redis) |
-| 🎙️ spreed-signaling | ✅ Automatic | HAProxy removes the failing node — active calls may reconnect once |
-| 📬 notify-push | ✅ Automatic | Container restarts automatically; clients reconnect the WebSocket |
+| 🎙️ Talk HA | ✅ Automatic | HAProxy removes the failing node — active calls may reconnect once |
+| 📬 Notify Push | ✅ Automatic | Container restarts automatically; clients reconnect the WebSocket |
 | 📨 NATS | ⚠️ Single node | Service interruption until the container restarts (`restart: always`) |
 | 🔄 coturn | ⚠️ Single node | Falls back to STUN-only — peer-to-peer if NAT allows, otherwise media blocked |
 
@@ -410,8 +410,8 @@ The HAProxy statistics page displays the real-time status of **all** backends:
 | `nextcloud-fpm` | app-next-01..N nodes (FPM TCP :9000) — monitoring only |
 | `coolwsd` | Collabora nodes (WOPI :9980) |
 | `whiteboard` | Whiteboard nodes (WS :3002) |
-| `signaling` | spreed-signaling nodes (WS :8080) — Talk only |
-| `notify-push` | notify-push container (:7867) — Client Push |
+| `signaling` | Talk HA nodes (WS :8080) — Talk only |
+| `notify-push` | Notify Push (:7867) |
 | `galera` | MariaDB nodes (:3306) |
 | `minio` | MinIO S3 nodes (:9000) |
 | `redis-cluster` | Redis nodes (:6379) |
@@ -459,7 +459,7 @@ The patch is written to the container's write layer (`docker cp`). Behavior by s
 
 ## 🎙️ Nextcloud Talk — HA Signaling
 
-A dedicated signaling server (`spreed-signaling`) is required so that Talk calls work correctly when users are served by different Nextcloud FPM nodes. Without it, WebRTC session negotiation fails across nodes.
+Talk HA (`spreed-signaling`) is required so that Talk calls work correctly when users are served by different Nextcloud FPM nodes. Without it, WebRTC session negotiation fails across nodes.
 
 ### Components
 
@@ -473,7 +473,7 @@ A dedicated signaling server (`spreed-signaling`) is required so that Talk calls
 
 | Component | Tolerance | Behavior during failure |
 |-----------|:---------:|------------------------|
-| 🎙️ spreed-signaling | ✅ Automatic | HAProxy removes the failing node — active calls may drop once then reconnect |
+| 🎙️ Talk HA | ✅ Automatic | HAProxy removes the failing node — active calls may drop once then reconnect |
 | 📨 NATS | ⚠️ Single node | Service interruption until the container restarts (`restart: always`) |
 | 🔄 coturn | ⚠️ Single node | Falls back to STUN-only — peer-to-peer if NAT allows, otherwise media blocked |
 
@@ -504,7 +504,7 @@ A dedicated signaling server (`spreed-signaling`) is required so that Talk calls
 
 ---
 
-## 📬 Client Push (notify_push)
+## 📬 Notify Push
 
 Client Push replaces polling with a persistent WebSocket connection, so file changes appear immediately in Nextcloud desktop and mobile clients — no more 30-second sync delays.
 
