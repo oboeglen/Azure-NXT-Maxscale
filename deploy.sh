@@ -477,12 +477,20 @@ ask_domains() {
     error "Invalid format"
   done
 
-  while true; do
-    prompt_input "Talk signaling domain" "talk.example.tld"
-    TALK_DOMAIN="$REPLY"
-    validate_domain "$TALK_DOMAIN" && break
-    error "Invalid format"
-  done
+  echo ""
+  if prompt_yn "Deploy Talk HA signaling backend?" "Y"; then
+    TALK_ENABLED="yes"
+    while true; do
+      prompt_input "Talk signaling domain" "talk.example.tld"
+      TALK_DOMAIN="$REPLY"
+      validate_domain "$TALK_DOMAIN" && break
+      error "Invalid format"
+    done
+  else
+    TALK_ENABLED="no"
+    TALK_DOMAIN=""
+    info "Talk HA disabled — Nextcloud Talk will use the built-in signaling (limited scalability)"
+  fi
 
   while true; do
     prompt_input "Let's Encrypt email" "admin@example.tld"
@@ -495,7 +503,7 @@ ask_domains() {
   check_dns_warn "$NC_DOMAIN"
   check_dns_warn "$COLLAB_DOMAIN"
   check_dns_warn "$WB_DOMAIN"
-  check_dns_warn "$TALK_DOMAIN"
+  [[ "$TALK_ENABLED" == "yes" ]] && check_dns_warn "$TALK_DOMAIN"
 }
 
 # --- ask_versions ---
@@ -989,6 +997,12 @@ ask_minio_console() {
 
 # --- ask_talk ---
 ask_talk() {
+  if [[ "${TALK_ENABLED:-no}" != "yes" ]]; then
+    SIGNALING_NODES=0
+    COTURN_ENABLED="no"
+    return 0
+  fi
+
   step "Nextcloud Talk — signaling nodes"
   ask_int "Talk signaling — nodes" "2" is_positive_int "Integer ≥ 1 required" SIGNALING_NODES
 
@@ -1092,7 +1106,9 @@ show_recap() {
     "Nextcloud      : $NC_DOMAIN  (${NC_NODES} FPM nodes + ${NC_NODES} nginx, v${NC_VERSION})" \
     "Collabora      : $COLLAB_DOMAIN  (${COLLAB_NODES} nodes)" \
     "Whiteboard     : $WB_DOMAIN  (${WB_NODES} nodes)" \
-    "Talk signaling : $TALK_DOMAIN  (${SIGNALING_NODES:-2} signaling nodes + NATS)  coturn: ${COTURN_ENABLED}" \
+    "$( [[ "${TALK_ENABLED:-no}" == "yes" ]] \
+        && echo "Talk signaling : $TALK_DOMAIN  (${SIGNALING_NODES:-2} nodes + NATS)  coturn: ${COTURN_ENABLED}" \
+        || echo "Talk signaling : disabled (built-in signaling only)" )" \
     "SSL Email      : $CERTBOT_EMAIL" \
     "MariaDB Galera : ${MARIADB_NODES} nodes" \
     "Redis Cluster  : ${REDIS_NODES} nodes" \
@@ -1133,7 +1149,8 @@ save_answers() {
     printf 'NC_DOMAIN="%s"\n'     "$NC_DOMAIN"
     printf 'COLLAB_DOMAIN="%s"\n' "$COLLAB_DOMAIN"
     printf 'WB_DOMAIN="%s"\n'     "$WB_DOMAIN"
-    printf 'TALK_DOMAIN="%s"\n'   "$TALK_DOMAIN"
+    printf 'TALK_ENABLED="%s"\n'  "${TALK_ENABLED:-no}"
+    printf 'TALK_DOMAIN="%s"\n'   "${TALK_DOMAIN:-}"
     printf 'CERTBOT_EMAIL="%s"\n' "$CERTBOT_EMAIL"
     printf 'NC_VERSION="%s"\n'    "$NC_VERSION"
     printf 'NC_NODES="%s"\n'      "$NC_NODES"
@@ -1244,7 +1261,8 @@ COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}
 NEXTCLOUD_DOMAIN=${NC_DOMAIN}
 COLLABORA_DOMAIN=${COLLAB_DOMAIN}
 WHITEBOARD_DOMAIN=${WB_DOMAIN}
-TALK_DOMAIN=${TALK_DOMAIN}
+TALK_ENABLED=${TALK_ENABLED:-no}
+TALK_DOMAIN=${TALK_DOMAIN:-}
 CERTBOT_EMAIL=${CERTBOT_EMAIL}
 
 HAPROXY_STATS_PASSWORD=${GEN_HAPROXY_STATS_PASS}
@@ -1934,7 +1952,8 @@ WBNODE
       retries: 5
 WBREDIS
 
-  # ── Talk: NATS + spreed-signaling nodes ────────────────────────────────
+  # ── Talk: NATS + spreed-signaling nodes (opt-in) ───────────────────────
+  if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
   cat >> "$dest" <<NATSSVC
 
   nats:
@@ -2015,6 +2034,7 @@ SIGSVC
       - TALK_DOMAIN=\${TALK_DOMAIN}
 COTURNBLOCK
   fi
+  fi  # end TALK_ENABLED
 
   # ── Networks ────────────────────────────────────────────────────────────
   cat >> "$dest" <<'NETWORKS'
@@ -2310,7 +2330,19 @@ patch_haproxy() {
   _replace_servers "GALERA"        "${galera_servers%$'\n'}"    "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
   _replace_servers "MINIO"         "${minio_servers%$'\n'}"     "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
   _replace_servers "REDIS"         "${redis_servers%$'\n'}"     "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "SIGNALING"     "${signaling_servers%$'\n'}" "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+
+  # Talk HA: populate signaling servers or strip the whole Talk section
+  if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
+    _replace_servers "SIGNALING" "${signaling_servers%$'\n'}" "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  else
+    # Remove acl + backend routing lines
+    awk '!/acl is_talk / && !/use_backend signaling /' "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+    # Strip Talk domains from CSP replace-header line
+    sed 's| https://\${TALK_DOMAIN} wss://\${TALK_DOMAIN}||g' "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+    # Remove backend signaling block
+    awk '/# BEGIN_TALK_BACKEND/{skip=1} /# END_TALK_BACKEND/{skip=0; next} !skip{print}' \
+      "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  fi
 
   # Remove stats block from https frontend if disabled (between BEGIN/END_STATS markers)
   if [[ "$HAPROXY_STATS" == "no" ]]; then
@@ -2327,7 +2359,8 @@ patch_haproxy() {
   fi
 
   mv "$tmp" "$file"
-  info "haproxy.cfg patched (NC:${NC_NODES} Collab:${COLLAB_NODES} WB:${WB_NODES} DB:${MARIADB_NODES} MinIO:${MINIO_NODES})"
+  local _talk_status="${TALK_ENABLED:-no}"; [[ "$_talk_status" == "yes" ]] && _talk_status="yes (${SIGNALING_NODES:-2} nodes)"
+  info "haproxy.cfg patched (NC:${NC_NODES} Collab:${COLLAB_NODES} WB:${WB_NODES} DB:${MARIADB_NODES} MinIO:${MINIO_NODES} Talk:${_talk_status})"
 }
 
 # ─── [PATCH] Collabora binary patch — removing home_mode limit ───────────────
@@ -2590,7 +2623,9 @@ gen_certs() {
   info "Public IP detected: ${my_ip:-unknown}"
 
   local domain
-  for domain in "$NC_DOMAIN" "$COLLAB_DOMAIN" "$WB_DOMAIN" "$TALK_DOMAIN"; do
+  local _cert_domains=("$NC_DOMAIN" "$COLLAB_DOMAIN" "$WB_DOMAIN")
+  [[ "${TALK_ENABLED:-no}" == "yes" ]] && _cert_domains+=("$TALK_DOMAIN")
+  for domain in "${_cert_domains[@]}"; do
     local resolved=""
     resolved=$(getent hosts "$domain" 2>/dev/null | awk '{print $1}' | head -1)
     [[ -z "$resolved" ]] && resolved=$(dig +short "$domain" A 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
@@ -2618,15 +2653,18 @@ gen_certs() {
 
   # ── Certbot call ──────────────────────────────────────────────────────────
   step "Generating Let's Encrypt certificates"
-  info "Domains: ${NC_DOMAIN}, ${COLLAB_DOMAIN}, ${WB_DOMAIN}, ${TALK_DOMAIN}"
+  local _domain_list="${NC_DOMAIN}, ${COLLAB_DOMAIN}, ${WB_DOMAIN}"
+  [[ "${TALK_ENABLED:-no}" == "yes" ]] && _domain_list+=", ${TALK_DOMAIN}"
+  info "Domains: ${_domain_list}"
   info "Email  : ${CERTBOT_EMAIL}"
 
   local certbot_args=(
     certonly --standalone --non-interactive --keep-until-expiring
     --agree-tos --no-eff-email --email "$CERTBOT_EMAIL"
-    -d "$NC_DOMAIN" -d "$COLLAB_DOMAIN" -d "$WB_DOMAIN" -d "$TALK_DOMAIN"
-    --cert-name stack
+    -d "$NC_DOMAIN" -d "$COLLAB_DOMAIN" -d "$WB_DOMAIN"
   )
+  [[ "${TALK_ENABLED:-no}" == "yes" ]] && certbot_args+=(-d "$TALK_DOMAIN")
+  certbot_args+=(--cert-name stack)
   [[ "$CERTBOT_STAGING" == "yes" ]] && certbot_args+=(--staging)
 
   local cert_ok=false certbot_output=""
@@ -2747,10 +2785,11 @@ run_deploy() {
     "${IMG_MINIO_MC}"
     "${IMG_COLLABORA}"
     "${IMG_WHITEBOARD}"
-    "${IMG_NATS}"
-    "${IMG_SPREED_SIGNALING}"
   )
-  [[ "$COTURN_ENABLED" == "yes" ]] && images+=("${IMG_COTURN}")
+  if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
+    images+=("${IMG_NATS}" "${IMG_SPREED_SIGNALING}")
+    [[ "$COTURN_ENABLED" == "yes" ]] && images+=("${IMG_COTURN}")
+  fi
   local total=${#images[@]}
   local tmpdir; tmpdir=$(mktemp -d)
 
@@ -3038,12 +3077,14 @@ check_services() {
   _check "nextcloud-cron actif" \
     bash -c "docker inspect nextcloud-cron --format='{{.State.Running}}' 2>/dev/null | grep -q true"
 
-  local _sig_i
-  for _sig_i in $(seq 1 "${SIGNALING_NODES:-2}"); do
-    local _sig_name="spreed-signaling-$(printf '%02d' "$_sig_i")"
-    _check "Talk signaling reachable (${_sig_name})" \
-      bash -c "docker exec ${_sig_name} sh -c \"echo '' | nc -w2 127.0.0.1 8080\" 2>/dev/null"
-  done
+  if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
+    local _sig_i
+    for _sig_i in $(seq 1 "${SIGNALING_NODES:-2}"); do
+      local _sig_name="spreed-signaling-$(printf '%02d' "$_sig_i")"
+      _check "Talk signaling reachable (${_sig_name})" \
+        bash -c "docker exec ${_sig_name} sh -c \"echo '' | nc -w2 127.0.0.1 8080\" 2>/dev/null"
+    done
+  fi
 
   if (( failures > 0 )); then
     warn "${failures} test(s) failed — check: docker compose logs"
@@ -3080,7 +3121,12 @@ CREDS
   [[ "$MINIO_CONSOLE" == "yes" ]] && \
     console_line="MinIO Console  : https://${NC_DOMAIN}/s3-console  (login: MINIO_ACCESS_KEY / MINIO_SECRET_KEY)"
 
-  local talk_line="Talk signaling : https://${TALK_DOMAIN}  (${SIGNALING_NODES:-2} nodes + NATS)  coturn: ${COTURN_ENABLED}"
+  local talk_line
+  if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
+    talk_line="Talk signaling : https://${TALK_DOMAIN}  (${SIGNALING_NODES:-2} nodes + NATS)  coturn: ${COTURN_ENABLED}"
+  else
+    talk_line="Talk signaling : disabled"
+  fi
 
   # Dynamic width: adapts to the longest line (password, domain, etc.)
   local I=0 _lw
@@ -3191,8 +3237,11 @@ update_images() {
     WB_NODES=$(_detect_node_count      "whiteboard-node" "^whiteboard-node[0-9]")
     MINIO_NODES=$(_detect_node_count   "minio-node"     "^minio-node[0-9]")
     SIGNALING_NODES=$(_detect_node_count "spreed-signaling-" "^spreed-signaling-[0-9]")
-    SIGNALING_NODES="${SIGNALING_NODES:-2}"
-    info "Detected nodes: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES} · Signaling=${SIGNALING_NODES}"
+    SIGNALING_NODES="${SIGNALING_NODES:-0}"
+    TALK_ENABLED=$(grep -m1 '^TALK_ENABLED=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
+    TALK_ENABLED="${TALK_ENABLED:-no}"
+    (( SIGNALING_NODES > 0 )) && TALK_ENABLED="yes"
+    info "Detected nodes: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES} · Talk:${TALK_ENABLED}"
   fi
 
   step "Pulling new Docker images"
@@ -3448,6 +3497,8 @@ scale_nodes() {
     MINIO_CONSOLE="${MINIO_CONSOLE:-no}"
     COTURN_ENABLED=$(grep -m1 '^COTURN_ENABLED=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
     COTURN_ENABLED="${COTURN_ENABLED:-no}"
+    TALK_ENABLED=$(grep -m1 '^TALK_ENABLED=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
+    TALK_ENABLED="${TALK_ENABLED:-no}"
     SIGNALING_NODES=$(grep -m1 '^SIGNALING_NODES=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "2")
     SIGNALING_NODES="${SIGNALING_NODES:-2}"
     CERTBOT_STAGING="${CERTBOT_STAGING:-no}"
@@ -3472,7 +3523,9 @@ scale_nodes() {
     "Redis Cluster       : ${REDIS_NODES} nodes  (even ≥ 6, even delta)" \
     "Collabora           : ${COLLAB_NODES} nodes" \
     "Whiteboard          : ${WB_NODES} nodes" \
-    "Talk signaling      : ${SIGNALING_NODES:-2} nodes  (stateless — scale up or down freely)" \
+    "$( [[ "${TALK_ENABLED:-no}" == "yes" ]] \
+        && echo "Talk signaling      : ${SIGNALING_NODES:-2} nodes  (stateless — scale up or down freely)" \
+        || echo "Talk signaling      : disabled" )" \
     "MinIO               : ${MINIO_NODES} nodes × ${MINIO_DISKS} disks  (scale-up by pool)"
   echo ""
 
@@ -3492,7 +3545,9 @@ scale_nodes() {
   ask_int "Redis Cluster — nodes (even ≥ 6)"   "$REDIS_NODES"   is_even_min6    "Even number ≥ 6 required"      REDIS_NODES
   ask_int "Collabora — nodes"                  "$COLLAB_NODES"  is_positive_int "Integer ≥ 1 required"          COLLAB_NODES
   ask_int "Whiteboard — nodes"                 "$WB_NODES"      is_positive_int "Integer ≥ 1 required"          WB_NODES
-  ask_int "Talk signaling — nodes (↑↓ free)"   "$SIGNALING_NODES" is_positive_int "Integer ≥ 1 required"        SIGNALING_NODES
+  if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
+    ask_int "Talk signaling — nodes (↑↓ free)"   "$SIGNALING_NODES" is_positive_int "Integer ≥ 1 required"        SIGNALING_NODES
+  fi
 
   # MinIO: scale-up only (pool expansion) — scale-down via manual decommission
   echo ""
@@ -3633,7 +3688,9 @@ scale_nodes() {
     "Redis      : ${ORIG_REDIS_NODES} → ${REDIS_NODES} nodes" \
     "Collabora  : ${ORIG_COLLAB_NODES} → ${COLLAB_NODES} nodes" \
     "Whiteboard : ${ORIG_WB_NODES} → ${WB_NODES} nodes" \
-    "Signaling  : ${ORIG_SIGNALING_NODES} → ${SIGNALING_NODES} nodes" \
+    "$( [[ "${TALK_ENABLED:-no}" == "yes" ]] \
+        && echo "Signaling  : ${ORIG_SIGNALING_NODES} → ${SIGNALING_NODES} nodes" \
+        || echo "Signaling  : disabled" )" \
     "MinIO      : ${ORIG_MINIO_NODES} → ${MINIO_NODES} nodes"
 
   if (( MARIADB_NODES > ORIG_MARIADB_NODES )); then
@@ -3734,7 +3791,7 @@ scale_nodes() {
     "Redis      : ${REDIS_NODES} nodes ($((REDIS_NODES/2)) masters + $((REDIS_NODES/2)) replicas)" \
     "Collabora  : ${COLLAB_NODES} nodes" \
     "Whiteboard : ${WB_NODES} nodes" \
-    "Signaling  : ${SIGNALING_NODES} nodes" \
+    "$( [[ "${TALK_ENABLED:-no}" == "yes" ]] && echo "Signaling  : ${SIGNALING_NODES} nodes" || echo "Signaling  : disabled" )" \
     "MinIO      : ${MINIO_NODES} nodes × ${MINIO_DISKS} disks"
 }
 
@@ -3806,7 +3863,7 @@ main() {
   gen_passwords
   gen_env
   gen_compose
-  gen_signaling_conf
+  [[ "${TALK_ENABLED:-no}" == "yes" ]] && gen_signaling_conf
   gen_galera_cnf
   patch_haproxy
   patch_nextcloud_init
