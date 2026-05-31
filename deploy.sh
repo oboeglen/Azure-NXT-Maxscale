@@ -647,11 +647,13 @@ _scan_available_disks() {
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     local name size fstype mount model
-    name=$(  awk '{print $1}' <<< "$line")
-    size=$(  awk '{print $2}' <<< "$line")
-    fstype=$(awk '{print $3}' <<< "$line")
-    mount=$( awk '{print $4}' <<< "$line")
-    model=$(awk '{for(i=5;i<=NF;i++) printf "%s%s",$i,(i<NF?" ":""); print ""}' <<< "$line")
+    # Use --pairs (-P) output: NAME="/dev/sda" SIZE="5.5T" FSTYPE="" MOUNTPOINT="" MODEL="..."
+    # awk field-splitting breaks when FSTYPE/MOUNTPOINT are empty (adjacent spaces collapse)
+    name=$(  grep -oP 'NAME="\K[^"]*'       <<< "$line")
+    size=$(  grep -oP 'SIZE="\K[^"]*'       <<< "$line")
+    fstype=$(grep -oP 'FSTYPE="\K[^"]*'     <<< "$line")
+    mount=$( grep -oP 'MOUNTPOINT="\K[^"]*' <<< "$line")
+    model=$( grep -oP 'MODEL="\K[^"]*'      <<< "$line")
 
     # Skip root disk and its children
     [[ -n "$root_disk" && "$name" == "/dev/${root_disk}"* ]] && continue
@@ -671,7 +673,7 @@ _scan_available_disks() {
     DISK_MOUNTS[$DISK_COUNT]="${mount:--}"
     DISK_MODELS[$DISK_COUNT]="${model:--}"
     (( DISK_COUNT++ )) || true
-  done < <(lsblk -pno NAME,SIZE,FSTYPE,MOUNTPOINT,MODEL 2>/dev/null)
+  done < <(lsblk -P -p -n -o NAME,SIZE,FSTYPE,MOUNTPOINT,MODEL 2>/dev/null)
 }
 
 # Prints the candidate disk table
