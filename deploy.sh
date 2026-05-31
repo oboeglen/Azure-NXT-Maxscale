@@ -291,8 +291,19 @@ detect_os() {
 install_deps() {
   phase 2 7 "Installing Dependencies"
 
-  local pkgs_apt=(git curl wget openssl python3 ca-certificates gnupg lsb-release netcat-openbsd)
-  local pkgs_dnf=(git curl wget openssl python3 ca-certificates gnupg2)
+  # netcat-openbsd  : nc (signaling health checks, port tests)
+  # xfsprogs        : mkfs.xfs, xfs_repair (disk wizard — XFS format)
+  # e2fsprogs       : mkfs.ext4, e2fsck   (disk wizard — EXT4 format)
+  # util-linux      : lsblk, blkid, findmnt (disk detection)
+  # dnsutils/bind-utils : dig (DNS verification in gen_certs)
+  local pkgs_apt=(
+    git curl wget openssl python3 ca-certificates gnupg lsb-release
+    netcat-openbsd xfsprogs e2fsprogs util-linux dnsutils
+  )
+  local pkgs_dnf=(
+    git curl wget openssl python3 ca-certificates gnupg2
+    nmap-ncat xfsprogs e2fsprogs util-linux bind-utils
+  )
 
   step "Updating sources and installing essential packages"
   start_spinner "Updating packages..."
@@ -603,6 +614,23 @@ _ext4_profile() {
   EXT4_PROFILE_DESC="journal=${journal_size}MB, data=ordered"
 }
 
+# Verify that disk formatting tools are present before the wizard runs.
+_check_disk_tools() {
+  local missing=()
+  command -v lsblk   &>/dev/null || missing+=("lsblk (util-linux)")
+  command -v blkid   &>/dev/null || missing+=("blkid (util-linux)")
+  command -v findmnt &>/dev/null || missing+=("findmnt (util-linux)")
+  command -v mkfs.xfs  &>/dev/null || missing+=("mkfs.xfs (xfsprogs)")
+  command -v mkfs.ext4 &>/dev/null || missing+=("mkfs.ext4 (e2fsprogs)")
+  if (( ${#missing[@]} > 0 )); then
+    error "Missing tools required for the disk wizard:"
+    for t in "${missing[@]}"; do
+      error "  • $t"
+    done
+    die "Install the listed packages and retry."
+  fi
+}
+
 # Scans available block devices (excludes root disk, swap, loop).
 # Populates globals: DISK_COUNT, DISK_NAMES[], DISK_SIZES[], DISK_FSTYPES[],
 #                    DISK_MOUNTS[], DISK_MODELS[]
@@ -860,6 +888,7 @@ ask_minio() {
       ;;
     3)
       MINIO_MODE="auto"
+      _check_disk_tools
       step "Scanning block devices..."
       _scan_available_disks
 
@@ -3580,6 +3609,7 @@ scale_nodes() {
 
     if [[ "$MINIO_MODE" == "auto" ]]; then
       # ── Disk wizard for new nodes ──────────────────────────────────────────
+      _check_disk_tools
       _scan_available_disks
 
       if (( DISK_COUNT == 0 )); then
