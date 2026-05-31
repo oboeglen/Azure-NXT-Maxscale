@@ -31,11 +31,12 @@ backends = nc
 timeout = 10
 connectionsperhost = 8
 
-[backend "nc"]
-# "urls" (plural) — comma-separated list of Nextcloud instance URLs
+# Backend section name must match the identifier above — no "backend " prefix, no quotes
+[nc]
+# urls: comma-separated list of Nextcloud instance URLs (no trailing slash)
 urls = https://nextcloud.example.tld
-# Shared secret — must match the value set via:
-#   occ config:app:set spreed signaling_secret --value <secret>
+# Shared secret — must match the value registered via:
+#   occ talk:signaling:add "wss://talk.example.tld/" <secret> --verify
 secret = REPLACE_WITH_SHARED_SECRET
 
 # Optional: uncomment and fill if coturn is deployed
