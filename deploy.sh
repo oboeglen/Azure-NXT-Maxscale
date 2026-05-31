@@ -3178,7 +3178,7 @@ configure_talk() {
     "${occ[@]}" talk:turn:list 2>/dev/null | grep -q "${TALK_DOMAIN}" \
       && info "TURN server already registered — skipping add" \
       || {
-        out=$("${occ[@]}" talk:turn:add "turn:${TALK_DOMAIN}:3478" "$coturn_secret" "turn" "udp,tcp" 2>&1)
+        out=$("${occ[@]}" talk:turn:add --secret="$coturn_secret" "turn" "${TALK_DOMAIN}:3478" "udp,tcp" 2>&1)
         info "talk:turn:add: $out"
       }
   fi
@@ -3201,7 +3201,7 @@ configure_notify_push() {
   # Wait for notify-push container to be ready (up to 120s — depends on app-next-01 healthcheck)
   local i
   for i in $(seq 1 24); do
-    if docker exec notify-push wget -qO- http://localhost:7867/test/cookie 2>/dev/null | grep -q 'false'; then
+    if docker exec notify-push curl -sf http://localhost:7867/test/cookie 2>/dev/null | grep -q 'false'; then
       break
     fi
     info "Waiting for notify-push to start ($((i*5))s)..."
