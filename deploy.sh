@@ -968,6 +968,9 @@ ask_minio() {
               "${DISK_NAMES[$ci]}" "$target_mount" \
               "${DISK_FSTYPES[$ci]}" "$preferred_fs"
 
+            # Refresh disk state so the table shows updated FS/mountpoint on next iteration
+            _scan_available_disks
+
             MINIO_PATHS["${n}_${d}"]="$target_mount"
           done
           # Metadata path = mount point of first disk of this node
@@ -3639,6 +3642,9 @@ scale_nodes() {
             _prepare_minio_disk \
               "${DISK_NAMES[$ci]}" "$target_mount" \
               "${DISK_FSTYPES[$ci]}" "$preferred_fs"
+
+            # Refresh disk state so the table shows updated FS/mountpoint on next iteration
+            _scan_available_disks
 
             MINIO_PATHS["${n}_${d}"]="$target_mount"
           done
