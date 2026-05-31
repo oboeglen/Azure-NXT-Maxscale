@@ -119,12 +119,15 @@ The script detects your OS, installs Docker if needed, asks the essential questi
 ```mermaid
 flowchart TD
     Internet(["🌐 Internet"]) -->|"HTTP 80 / HTTPS 443"| HAProxy
+    Internet -->|"UDP+TCP 3478 ¹"| coturn
 
     HAProxy["⚖️ HAProxy\nSSL · Load Balancer · Stats"]
 
+    HAProxy -->|"next-net · /push"| npush["📬 notify-push\nClient Push · WebSocket"]
     HAProxy -->|next-net| nginx["🔀 nginx-next-01..N\nstatic files · FastCGI"]
     HAProxy -->|collabora-net| collab["📝 collabora-node1..N\nCollabora CODE · WOPI"]
     HAProxy -->|whiteboard-net| wb["🎨 whiteboard-node1..N\nWhiteboard · WebSocket"]
+    HAProxy -->|"talk-net · wss://"| sig["🎙️ spreed-signaling-01..N\nTalk signaling · WebSocket"]
 
     nginx --> fpm["⚙️ app-next-01..N\nNextcloud PHP-FPM 8.4"]
 
@@ -133,10 +136,19 @@ flowchart TD
     fpm --> minio[("📦 MinIO S3\nErasure coding · storage-net")]
 
     wb --> redis_wb["🔴 redis-whiteboard\nStreams · whiteboard-net"]
+
+    sig --> nats["📨 NATS\ntalk-net · pub/sub"]
+    nats --> sig
+
+    npush --> redis
+    npush --> galera
+
+    coturn["🔄 coturn ¹\nTURN/STUN · host network"]
 ```
 
 > [!NOTE]
-> Only HAProxy exposes ports to the outside (80 and 443). All user files are stored in MinIO. A node failure is **transparent** to the end user.
+> Only HAProxy exposes ports 80 and 443 to the outside. All user files are stored in MinIO. A node failure is **transparent** to the end user.
+> ¹ coturn is optional — port 3478 UDP/TCP is only required when coturn is enabled.
 
 **Request flow:**
 ```
