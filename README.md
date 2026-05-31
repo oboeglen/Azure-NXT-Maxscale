@@ -294,8 +294,8 @@ MinIO runs in **distributed erasure coding** mode — N nodes × D drives per no
 `deploy.sh` includes an interactive disk preparation wizard that runs automatically when you answer **"No"** to test mode. It scans the server's available block devices and lets you format and mount them one by one before configuring MinIO paths.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Available disks                                                │
+┌────────────────────────────────────────────────────────────────┐
+│  Available disks                                               │
 ├────────────────┬────────┬────────┬───────────────┬─────────────┤
 │ Device         │ Size   │ FS     │ Mount         │ Model       │
 ├────────────────┼────────┼────────┼───────────────┼─────────────┤
