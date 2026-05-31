@@ -3195,9 +3195,9 @@ configure_notify_push() {
     info "$out"
   fi
 
-  # Wait for notify-push container to be ready
+  # Wait for notify-push container to be ready (up to 120s — depends on app-next-01 healthcheck)
   local i
-  for i in $(seq 1 12); do
+  for i in $(seq 1 24); do
     if docker exec notify-push wget -qO- http://localhost:7867/test/cookie 2>/dev/null | grep -q 'false'; then
       break
     fi
