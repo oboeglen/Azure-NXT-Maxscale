@@ -1984,6 +1984,36 @@ WBNODE
       retries: 5
 WBREDIS
 
+  # ── notify-push (Client Push — real-time sync notifications) ───────────
+  cat >> "$dest" <<NOTIFYPUSH
+
+  notify-push:
+    image: nextcloud:${NC_VERSION}
+    container_name: notify-push
+    restart: always
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "exec /var/www/html/custom_apps/notify_push/bin/\$\$(uname -m)/notify_push /var/www/html/config/config.php"
+    environment:
+      - PORT=7867
+      - LOG=warn
+    volumes:
+      - nextcloud_html:/var/www/html:ro
+      - nextcloud_apps:/var/www/html/custom_apps:ro
+      - nextcloud_config:/var/www/html/config:ro
+    networks:
+      - next-net
+    depends_on:
+      app-next-01:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7867/test/cookie 2>/dev/null | grep -q 'false' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+NOTIFYPUSH
+
   # ── Talk: NATS + spreed-signaling nodes (opt-in) ───────────────────────
   if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
   cat >> "$dest" <<NATSSVC
@@ -3151,6 +3181,35 @@ configure_talk() {
   fi
 }
 
+configure_notify_push() {
+  step "Configuring Nextcloud Client Push (notify_push)"
+  local -a occ=(docker exec -u www-data app-next-01 php /var/www/html/occ)
+
+  if "${occ[@]}" app:list 2>/dev/null | grep -q 'notify_push'; then
+    info "notify_push already installed — enabling"
+    "${occ[@]}" app:enable notify_push &>/dev/null || true
+  else
+    info "Installing notify_push app..."
+    local out
+    out=$("${occ[@]}" app:install notify_push 2>&1)
+    info "$out"
+  fi
+
+  # Wait for notify-push container to be ready
+  local i
+  for i in $(seq 1 12); do
+    if docker exec notify-push wget -qO- http://localhost:7867/test/cookie 2>/dev/null | grep -q 'false'; then
+      break
+    fi
+    info "Waiting for notify-push to start ($((i*5))s)..."
+    sleep 5
+  done
+
+  local out
+  out=$("${occ[@]}" notify_push:setup "https://${NC_DOMAIN}/push" 2>&1)
+  info "notify_push:setup: $out"
+}
+
 check_services() {
   step "Functional tests"
   local failures=0
@@ -3991,6 +4050,7 @@ main() {
   wait_healthy
   reset_bruteforce
   configure_talk
+  configure_notify_push
   check_services
   final_check
   show_summary
