@@ -6,6 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.3.3] — 2026-05-31
+
+### Fixed
+- **`talk:turn:add` wrong argument order for Talk 23** — Talk 23 changed the command signature: the secret is now a `--secret=VALUE` option, not a positional argument. Previous call `talk:turn:add "turn:DOMAIN:3478" SECRET "turn" "udp,tcp"` failed with "Too many arguments". Fixed to `talk:turn:add --secret=SECRET "turn" "DOMAIN:3478" "udp,tcp"`
+- **Notify Push wait loop used `wget` instead of `curl`** — `wget` is not available in the Nextcloud FPM image used by the `notify-push` container. The startup detection loop always timed out at 120 s instead of breaking early when the server was ready. Fixed to use `curl -sf`
+
+---
+
 ## [2.3.2] — 2026-05-31
 
 ### Fixed
@@ -300,6 +308,7 @@ Major version — complete architecture redesign towards an FPM + MinIO stack.
 [2.1.4]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.3...v2.1.4
 [2.1.3]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.2...v2.1.3
 [2.1.2]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.1...v2.1.2
+[2.3.3]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.3.2...v2.3.3
 [2.3.2]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.2.1...v2.3.0
