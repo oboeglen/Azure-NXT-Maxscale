@@ -3053,42 +3053,56 @@ configure_talk() {
 
   local -a occ=(docker exec -u www-data app-next-01 php /var/www/html/occ)
   local talk_secret
-  talk_secret=$(grep -m1 '^TALK_SIGNALING_SECRET=' "$INSTALL_DIR/.env" | cut -d= -f2)
+  talk_secret=$(grep -m1 '^TALK_SIGNALING_SECRET=' "$INSTALL_DIR/.env" | cut -d= -f2 | tr -d '"')
 
-  # Install and enable spreed app
+  if [[ -z "$talk_secret" ]]; then
+    warn "TALK_SIGNALING_SECRET not found in .env — skipping Talk configuration"
+    return 0
+  fi
+
+  # Install and enable spreed app — must be enabled before config:app:set works
+  local install_out
   if "${occ[@]}" app:list 2>/dev/null | grep -q 'spreed'; then
-    info "Talk (spreed) app already installed"
-    "${occ[@]}" app:enable spreed &>/dev/null || true
+    info "Talk (spreed) app already present — enabling"
   else
     info "Installing Talk (spreed) app..."
-    "${occ[@]}" app:install spreed 2>&1 | tail -1 || warn "app:install spreed failed — may already be installed"
+    install_out=$("${occ[@]}" app:install spreed 2>&1) \
+      && info "spreed installed: ${install_out}" \
+      || warn "app:install spreed: ${install_out}"
   fi
+  "${occ[@]}" app:enable spreed 2>&1 | grep -v '^$' | while read -r l; do info "$l"; done || true
 
   # Configure signaling server
   local sig_json="[{\"server\":\"https://${TALK_DOMAIN}/\",\"verify\":true}]"
-  "${occ[@]}" config:app:set spreed signaling_servers --value "$sig_json" \
-    && info "Signaling server configured: https://${TALK_DOMAIN}/" \
-    || warn "Failed to set signaling_servers"
+  local out
+  out=$("${occ[@]}" config:app:set spreed signaling_servers --value "$sig_json" 2>&1)
+  info "signaling_servers: $out"
 
   # Configure shared secret
-  "${occ[@]}" config:app:set spreed signaling_secret --value "$talk_secret" \
-    && info "Signaling secret set" \
-    || warn "Failed to set signaling_secret"
+  out=$("${occ[@]}" config:app:set spreed signaling_secret --value "$talk_secret" 2>&1)
+  info "signaling_secret: $out"
+
+  # Verify secret was actually stored
+  local stored
+  stored=$("${occ[@]}" config:app:get spreed signaling_secret 2>/dev/null)
+  if [[ -z "$stored" ]]; then
+    warn "signaling_secret is empty after set — Talk signaling will not work"
+  else
+    info "signaling_secret stored ✓"
+  fi
 
   # Configure STUN/TURN if coturn is deployed
   if [[ "$COTURN_ENABLED" == "yes" ]]; then
     local coturn_secret
-    coturn_secret=$(grep -m1 '^COTURN_SECRET=' "$INSTALL_DIR/.env" | cut -d= -f2)
+    coturn_secret=$(grep -m1 '^COTURN_SECRET=' "$INSTALL_DIR/.env" | cut -d= -f2 | tr -d '"')
 
-    "${occ[@]}" config:app:set spreed stun_servers \
-      --value "[\"${TALK_DOMAIN}:3478\"]" \
-      && info "STUN server configured: ${TALK_DOMAIN}:3478" \
-      || warn "Failed to set stun_servers"
+    out=$("${occ[@]}" config:app:set spreed stun_servers \
+      --value "[\"${TALK_DOMAIN}:3478\"]" 2>&1)
+    info "stun_servers: $out"
 
     local turn_json="[{\"server\":\"turn:${TALK_DOMAIN}:3478\",\"secret\":\"${coturn_secret}\",\"protocols\":\"udp,tcp\"}]"
-    "${occ[@]}" config:app:set spreed turn_servers --value "$turn_json" \
-      && info "TURN server configured: ${TALK_DOMAIN}:3478" \
-      || warn "Failed to set turn_servers"
+    out=$("${occ[@]}" config:app:set spreed turn_servers --value "$turn_json" 2>&1)
+    info "turn_servers: $out"
   fi
 }
 
