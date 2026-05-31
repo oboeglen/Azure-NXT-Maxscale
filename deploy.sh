@@ -421,6 +421,7 @@ validate_domain() {
 }
 
 is_positive_int() { [[ "$1" =~ ^[1-9][0-9]*$ ]]; }
+is_non_neg_int()  { [[ "$1" =~ ^[0-9]+$ ]]; }
 is_odd()          { is_positive_int "$1" && (( $1 % 2 == 1 )); }
 is_even_min6()    { is_positive_int "$1" && (( $1 % 2 == 0 )) && (( $1 >= 6 )); }
 
@@ -769,7 +770,7 @@ _prepare_minio_disk() {
 
 # --- ask_minio ---
 minio_fault_tolerance() {
-  local nodes="$1" disks="$2"
+  local nodes="$1" disks="$2" disk_size_gb="${3:-0}"
   local total=$(( nodes * disks ))
   local tol_read=$(( total / 2 ))
   local tol_write=$(( total / 2 - 1 ))
@@ -781,6 +782,15 @@ minio_fault_tolerance() {
     echo "→ Loss of an entire node (${disks} drives): service maintained"
   else
     echo "→ Single node: no node-level tolerance (testing mode only)"
+  fi
+  if (( disk_size_gb > 0 )); then
+    local raw_gb=$(( nodes * disks * disk_size_gb ))
+    local usable_gb=$(( raw_gb / 2 ))
+    local raw_tb usable_tb
+    raw_tb=$(awk -v r="$raw_gb"    'BEGIN{printf "%.1f", r/1000}')
+    usable_tb=$(awk -v u="$usable_gb" 'BEGIN{printf "%.1f", u/1000}')
+    echo "Raw capacity   : ${raw_tb} TB  (${nodes}×${disks}×${disk_size_gb} GB)"
+    echo "Usable storage : ${usable_tb} TB  (50% overhead for parity — default EC:N/2)"
   fi
 }
 
@@ -929,8 +939,14 @@ ask_minio() {
   [[ "$MINIO_MODE" == "test" ]] && MINIO_BYPASS="true"
 
   echo ""
+  step "Estimated usable capacity"
+  echo -e "  ${C_GRAY}Disk size per disk — used to calculate real usable storage (erasure coding).${C_RESET}"
+  echo -e "  ${C_GRAY}Examples: 4000 ≈ 4 TB · 8000 ≈ 8 TB · 12000 ≈ 12 TB. Enter 0 to skip.${C_RESET}"
+  echo ""
+  ask_int "Disk size per disk (GB)" "0" is_non_neg_int "Integer ≥ 0 required" MINIO_DISK_SIZE_GB
+
   local ft_lines
-  mapfile -t ft_lines < <(minio_fault_tolerance "$MINIO_NODES" "$MINIO_DISKS")
+  mapfile -t ft_lines < <(minio_fault_tolerance "$MINIO_NODES" "$MINIO_DISKS" "$MINIO_DISK_SIZE_GB")
   box "MinIO Fault Tolerance" "${ft_lines[@]}"
 }
 
@@ -1032,19 +1048,33 @@ show_load_estimate() {
   local minio_tol_drives=$(( minio_total / 2 - 1 ))
   local minio_tol_nodes=$(( MINIO_NODES / 2 ))
 
-  box "Load Estimate" \
-    "Concurrent sessions      : ~${concurrent} VUs  (ref: 34 VUs measured at 6 nodes)" \
-    "Daily active users       : ~${total} DAU  (ratio 1 VU : 15 DAU measured)" \
-    "PHP throughput (login/API): ~${req_s_php} req/s  (ref: 44 req/s at 6 nodes)" \
-    "Light throughput (/status…): ~${req_s_light} req/s" \
-    "Estimated PHP P99        : ~${p99_php} ms" \
-    "Recommended RAM          : ~${ram_total} GB" \
-    "MariaDB writes           : ~${write_tps} TPS  (Galera ${MARIADB_NODES} nodes)" \
-    "Redis cache              : ${redis_masters} masters  > 500,000 ops/s" \
-    "MinIO tolerance          : ${minio_tol_nodes} node(s) or ${minio_tol_drives} drives losable (writes)" \
-    "Collabora                : ${COLLAB_NODES} node(s) — unlimited connections/documents (home_mode binary patch)" \
-    "" \
+  local minio_storage_line=""
+  if (( ${MINIO_DISK_SIZE_GB:-0} > 0 )); then
+    local _raw_gb=$(( MINIO_NODES * MINIO_DISKS * MINIO_DISK_SIZE_GB ))
+    local _usable_tb _raw_tb
+    _raw_tb=$(awk    -v r="$_raw_gb"              'BEGIN{printf "%.1f", r/1000}')
+    _usable_tb=$(awk -v u="$(( _raw_gb / 2 ))"   'BEGIN{printf "%.1f", u/1000}')
+    minio_storage_line="MinIO storage            : ${_usable_tb} TB usable  (${_raw_tb} TB raw · EC:N/2)"
+  fi
+
+  local _estimate_args=(
+    "Concurrent sessions      : ~${concurrent} VUs  (ref: 34 VUs measured at 6 nodes)"
+    "Daily active users       : ~${total} DAU  (ratio 1 VU : 15 DAU measured)"
+    "PHP throughput (login/API): ~${req_s_php} req/s  (ref: 44 req/s at 6 nodes)"
+    "Light throughput (/status…): ~${req_s_light} req/s"
+    "Estimated PHP P99        : ~${p99_php} ms"
+    "Recommended RAM          : ~${ram_total} GB"
+    "MariaDB writes           : ~${write_tps} TPS  (Galera ${MARIADB_NODES} nodes)"
+    "Redis cache              : ${redis_masters} masters  > 500,000 ops/s"
+    "MinIO tolerance          : ${minio_tol_nodes} node(s) or ${minio_tol_drives} drives losable (writes)"
+  )
+  [[ -n "$minio_storage_line" ]] && _estimate_args+=("$minio_storage_line")
+  _estimate_args+=(
+    "Collabora                : ${COLLAB_NODES} node(s) — unlimited connections/documents (home_mode binary patch)"
+    ""
     "Real data: 0 errors / 1,900 req · 150 concurrent · max 247 req/s"
+  )
+  box "Load Estimate" "${_estimate_args[@]}"
 }
 
 show_recap() {
@@ -1102,9 +1132,10 @@ save_answers() {
     printf 'REDIS_NODES="%s"\n'   "$REDIS_NODES"
     printf 'COLLAB_NODES="%s"\n'  "$COLLAB_NODES"
     printf 'WB_NODES="%s"\n'      "$WB_NODES"
-    printf 'MINIO_NODES="%s"\n'  "$MINIO_NODES"
-    printf 'MINIO_DISKS="%s"\n'  "$MINIO_DISKS"
-    printf 'MINIO_MODE="%s"\n'   "$MINIO_MODE"
+    printf 'MINIO_NODES="%s"\n'        "$MINIO_NODES"
+    printf 'MINIO_DISKS="%s"\n'        "$MINIO_DISKS"
+    printf 'MINIO_DISK_SIZE_GB="%s"\n' "${MINIO_DISK_SIZE_GB:-0}"
+    printf 'MINIO_MODE="%s"\n'         "$MINIO_MODE"
     printf 'MINIO_BYPASS="%s"\n' "$MINIO_BYPASS"
     printf 'HAPROXY_STATS="%s"\n' "$HAPROXY_STATS"
     printf 'MINIO_CONSOLE="%s"\n' "$MINIO_CONSOLE"
@@ -3396,6 +3427,8 @@ scale_nodes() {
     NC_VERSION=$(docker inspect --format='{{index .Config.Image}}' app-next-01 2>/dev/null \
                  | cut -d: -f2 || echo "latest-fpm")
     MINIO_DISKS="${MINIO_DISKS:-4}"
+    MINIO_DISK_SIZE_GB=$(grep -m1 '^MINIO_DISK_SIZE_GB=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "0")
+    MINIO_DISK_SIZE_GB="${MINIO_DISK_SIZE_GB:-0}"
     MINIO_MODE=$(grep -m1 '^MINIO_MODE=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "test")
     MINIO_MODE="${MINIO_MODE:-test}"
     MINIO_BYPASS=$(grep -m1 '^MINIO_BYPASS=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "true")
