@@ -2195,7 +2195,7 @@ connectionsperhost = 8
 
 [backend "nc"]
 # url: Nextcloud instance URL (singular key required by spreed-signaling)
-url = https://${NC_DOMAIN}/
+url = https://${NC_DOMAIN}
 # Shared secret — must match the secret registered via talk:signaling:add
 secret = ${GEN_TALK_SECRET}
 ${turn_section}
