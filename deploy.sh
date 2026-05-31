@@ -2193,9 +2193,9 @@ backends = nc
 timeout = 10
 connectionsperhost = 8
 
-[backend "nc"]
-# url: Nextcloud instance URL (singular key required by spreed-signaling)
-url = https://${NC_DOMAIN}
+[nc]
+# urls: comma-separated list of Nextcloud instance URLs (section must be named after the backend id, not [backend "id"])
+urls = https://${NC_DOMAIN}
 # Shared secret — must match the secret registered via talk:signaling:add
 secret = ${GEN_TALK_SECRET}
 ${turn_section}
