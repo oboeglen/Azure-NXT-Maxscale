@@ -2194,9 +2194,9 @@ timeout = 10
 connectionsperhost = 8
 
 [backend "nc"]
-# urls: comma-separated list of Nextcloud instance URLs
-urls = https://${NC_DOMAIN}
-# Shared secret — must match: occ config:app:set spreed signaling_secret
+# url: Nextcloud instance URL (singular key required by spreed-signaling)
+url = https://${NC_DOMAIN}
+# Shared secret — must match the secret registered via talk:signaling:add
 secret = ${GEN_TALK_SECRET}
 ${turn_section}
 [nats]
@@ -2367,6 +2367,13 @@ patch_haproxy() {
   # Talk HA: populate signaling servers or strip the whole Talk section
   if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
     _replace_servers "SIGNALING" "${signaling_servers%$'\n'}" "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+    # Restore ACL and routing lines if stripped by a previous TALK_ENABLED=no run
+    if ! grep -q 'acl is_talk' "$tmp"; then
+      sed -i '/acl is_whiteboard/a\  acl is_talk        hdr(host) -i ${TALK_DOMAIN}' "$tmp"
+    fi
+    if ! grep -q 'use_backend signaling' "$tmp"; then
+      sed -i '/use_backend whiteboard/a\  use_backend signaling   if is_talk' "$tmp"
+    fi
   else
     # Remove acl + backend routing lines
     awk '!/acl is_talk / && !/use_backend signaling /' "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
