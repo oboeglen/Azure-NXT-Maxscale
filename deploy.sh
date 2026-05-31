@@ -2046,7 +2046,8 @@ SIGSVC
     network_mode: host
     entrypoint: ["/bin/sh", "-c"]
     command: >
-      "EXT_IP=\$\$(curl -sf --max-time 5 https://api.ipify.org || hostname -I | awk '{print \$\$1}');
+      "EXT_IP=\$\$(ip -4 route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if(\$\$i==\"src\") {print \$\$(i+1); exit}}');
+       EXT_IP=\$\${EXT_IP:-\$\$(hostname -I | awk '{print \$\$1}')};
        exec turnserver
          --external-ip=\$\$EXT_IP
          --listening-ip=0.0.0.0
@@ -3045,6 +3046,52 @@ reset_bruteforce() {
     || info "Brute force reset: no entries to delete"
 }
 
+configure_talk() {
+  [[ "${TALK_ENABLED:-no}" != "yes" ]] && return 0
+
+  step "Configuring Nextcloud Talk (spreed)"
+
+  local occ="docker exec -u www-data app-next-01 php /var/www/html/occ"
+  local talk_secret
+  talk_secret=$(grep -m1 '^TALK_SIGNALING_SECRET=' "$INSTALL_DIR/.env" | cut -d= -f2)
+
+  # Install and enable spreed app
+  if $occ app:list 2>/dev/null | grep -q 'spreed'; then
+    info "Talk (spreed) app already installed"
+    $occ app:enable spreed &>/dev/null || true
+  else
+    info "Installing Talk (spreed) app..."
+    $occ app:install spreed 2>&1 | tail -1 || warn "app:install spreed failed — may already be installed"
+  fi
+
+  # Configure signaling server
+  local sig_json="[{\"server\":\"https://${TALK_DOMAIN}/\",\"verify\":true}]"
+  $occ config:app:set spreed signaling_servers --value "$sig_json" \
+    && info "Signaling server configured: https://${TALK_DOMAIN}/" \
+    || warn "Failed to set signaling_servers"
+
+  # Configure shared secret
+  $occ config:app:set spreed signaling_secret --value "$talk_secret" \
+    && info "Signaling secret set" \
+    || warn "Failed to set signaling_secret"
+
+  # Configure STUN/TURN if coturn is deployed
+  if [[ "$COTURN_ENABLED" == "yes" ]]; then
+    local coturn_secret
+    coturn_secret=$(grep -m1 '^COTURN_SECRET=' "$INSTALL_DIR/.env" | cut -d= -f2)
+
+    $occ config:app:set spreed stun_servers \
+      --value "[\"${TALK_DOMAIN}:3478\"]" \
+      && info "STUN server configured: ${TALK_DOMAIN}:3478" \
+      || warn "Failed to set stun_servers"
+
+    local turn_json="[{\"server\":\"turn:${TALK_DOMAIN}:3478\",\"secret\":\"${coturn_secret}\",\"protocols\":\"udp,tcp\"}]"
+    $occ config:app:set spreed turn_servers --value "$turn_json" \
+      && info "TURN server configured: ${TALK_DOMAIN}:3478" \
+      || warn "Failed to set turn_servers"
+  fi
+}
+
 check_services() {
   step "Functional tests"
   local failures=0
@@ -3884,6 +3931,7 @@ main() {
   # Phase 7: Verification
   wait_healthy
   reset_bruteforce
+  configure_talk
   check_services
   final_check
   show_summary
