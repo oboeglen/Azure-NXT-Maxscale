@@ -561,7 +561,7 @@ _disk_size_gb() {
   echo $(( bytes / 1024 / 1024 / 1024 ))
 }
 
-# Sets globals XFS_MKFS_OPTS, XFS_MOUNT_OPTS, XFS_PROFILE_DESC
+# Sets globals XFS_MKFS_OPTS (array), XFS_MOUNT_OPTS, XFS_PROFILE_DESC
 # based on disk type and size — tuned for MinIO object storage workloads
 _xfs_profile() {
   local disk_type="$1" size_gb="$2"
@@ -584,10 +584,8 @@ _xfs_profile() {
   fi
 
   # Skip agcount on very small disks to avoid mkfs minimum-AG-size errors
-  local agcount_opt=""
-  (( size_gb >= 10 )) && agcount_opt="-d agcount=${agcount}"
-
-  XFS_MKFS_OPTS="-l size=${log_size},lazy-count=1 ${agcount_opt}"
+  XFS_MKFS_OPTS=(-l "size=${log_size},lazy-count=1")
+  (( size_gb >= 10 )) && XFS_MKFS_OPTS+=(-d "agcount=${agcount}")
 
   # allocsize: preallocate on write to reduce fragmentation for large objects
   # logbsize:  in-memory log buffer (256k = max; cuts expensive log flushes)
@@ -602,14 +600,14 @@ _xfs_profile() {
   esac
 }
 
-# Sets globals EXT4_MKFS_OPTS, EXT4_MOUNT_OPTS, EXT4_PROFILE_DESC
+# Sets globals EXT4_MKFS_OPTS (array), EXT4_MOUNT_OPTS, EXT4_PROFILE_DESC
 _ext4_profile() {
   local disk_type="$1" size_gb="$2"
   # Journal size: larger = fewer forced commits per second under write load
   local journal_size
   (( size_gb >= 500 )) && journal_size="256" || journal_size="128"
   # lazy_itable_init=0: initialise inode tables immediately (no background init)
-  EXT4_MKFS_OPTS="-b 4096 -E lazy_itable_init=0,lazy_journal_init=0 -J size=${journal_size}"
+  EXT4_MKFS_OPTS=(-b 4096 -E "lazy_itable_init=0,lazy_journal_init=0" -J "size=${journal_size}")
   EXT4_MOUNT_OPTS="noatime,nodiratime,data=ordered"
   EXT4_PROFILE_DESC="journal=${journal_size}MB, data=ordered"
 }
@@ -739,15 +737,13 @@ _prepare_minio_disk() {
       info "XFS profile: ${XFS_PROFILE_DESC}"
       start_spinner "Formatting $dev as XFS (${size_gb}GB ${disk_type^^})..."
       local _mkfs_out
-      # shellcheck disable=SC2086
-      _mkfs_out=$(mkfs.xfs -f -L "$label" ${XFS_MKFS_OPTS} "$dev" 2>&1) \
+      _mkfs_out=$(mkfs.xfs -f -L "$label" "${XFS_MKFS_OPTS[@]}" "$dev" 2>&1) \
         || { stop_spinner; die "mkfs.xfs failed on $dev"$'\n'"${_mkfs_out}"; }
     else
       info "EXT4 profile: ${EXT4_PROFILE_DESC}"
       start_spinner "Formatting $dev as EXT4 (${size_gb}GB ${disk_type^^})..."
       local _mkfs_out
-      # shellcheck disable=SC2086
-      _mkfs_out=$(mkfs.ext4 -F -L "$label" ${EXT4_MKFS_OPTS} "$dev" 2>&1) \
+      _mkfs_out=$(mkfs.ext4 -F -L "$label" "${EXT4_MKFS_OPTS[@]}" "$dev" 2>&1) \
         || { stop_spinner; die "mkfs.ext4 failed on $dev"$'\n'"${_mkfs_out}"; }
     fi
     stop_spinner "Formatted: $dev → ${chosen_fs^^}"
