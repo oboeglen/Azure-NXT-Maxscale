@@ -6,6 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.3.2] — 2026-05-31
+
+### Fixed
+- **Talk admin page crash (`serverid` out of range)** — `nextcloud-custom.config.php` set `'serverid' => gethostname()`, which resolved to the Docker container short ID (e.g. `36653f7c76a9`). Nextcloud Talk parsed the leading digits as an integer (`36653`), exceeding the valid range 0–1023 required for Snowflake session ID generation. Removed `serverid` from `custom.config.php`; the value auto-generated in `config.php` during installation is used instead
+- **Talk signaling `getSignalingSecret()` returning null** — `configure_talk()` now uses `config:app:set` directly to store the signaling config in the Talk 23 format with the secret embedded inside the server object (`{"servers":[{...,"secret":"..."}],"secret":"..."}`). `talk:signaling:add` only stores the secret at the root level, causing `getSignalingSecret()` to return null when the per-server secret field was absent. Also removes the legacy `signaling_secret` standalone key left by older Talk versions
+
+---
+
 ## [2.3.1] — 2026-05-31
 
 ### Fixed
@@ -292,6 +300,7 @@ Major version — complete architecture redesign towards an FPM + MinIO stack.
 [2.1.4]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.3...v2.1.4
 [2.1.3]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.2...v2.1.3
 [2.1.2]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.1.1...v2.1.2
+[2.3.2]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.2.1...v2.3.0
 [2.2.1]: https://github.com/oboeglen/Azure-NXT-Maxscale/compare/v2.2.0...v2.2.1
