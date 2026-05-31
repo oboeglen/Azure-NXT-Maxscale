@@ -3051,27 +3051,27 @@ configure_talk() {
 
   step "Configuring Nextcloud Talk (spreed)"
 
-  local occ="docker exec -u www-data app-next-01 php /var/www/html/occ"
+  local -a occ=(docker exec -u www-data app-next-01 php /var/www/html/occ)
   local talk_secret
   talk_secret=$(grep -m1 '^TALK_SIGNALING_SECRET=' "$INSTALL_DIR/.env" | cut -d= -f2)
 
   # Install and enable spreed app
-  if $occ app:list 2>/dev/null | grep -q 'spreed'; then
+  if "${occ[@]}" app:list 2>/dev/null | grep -q 'spreed'; then
     info "Talk (spreed) app already installed"
-    $occ app:enable spreed &>/dev/null || true
+    "${occ[@]}" app:enable spreed &>/dev/null || true
   else
     info "Installing Talk (spreed) app..."
-    $occ app:install spreed 2>&1 | tail -1 || warn "app:install spreed failed — may already be installed"
+    "${occ[@]}" app:install spreed 2>&1 | tail -1 || warn "app:install spreed failed — may already be installed"
   fi
 
   # Configure signaling server
   local sig_json="[{\"server\":\"https://${TALK_DOMAIN}/\",\"verify\":true}]"
-  $occ config:app:set spreed signaling_servers --value "$sig_json" \
+  "${occ[@]}" config:app:set spreed signaling_servers --value "$sig_json" \
     && info "Signaling server configured: https://${TALK_DOMAIN}/" \
     || warn "Failed to set signaling_servers"
 
   # Configure shared secret
-  $occ config:app:set spreed signaling_secret --value "$talk_secret" \
+  "${occ[@]}" config:app:set spreed signaling_secret --value "$talk_secret" \
     && info "Signaling secret set" \
     || warn "Failed to set signaling_secret"
 
@@ -3080,13 +3080,13 @@ configure_talk() {
     local coturn_secret
     coturn_secret=$(grep -m1 '^COTURN_SECRET=' "$INSTALL_DIR/.env" | cut -d= -f2)
 
-    $occ config:app:set spreed stun_servers \
+    "${occ[@]}" config:app:set spreed stun_servers \
       --value "[\"${TALK_DOMAIN}:3478\"]" \
       && info "STUN server configured: ${TALK_DOMAIN}:3478" \
       || warn "Failed to set stun_servers"
 
     local turn_json="[{\"server\":\"turn:${TALK_DOMAIN}:3478\",\"secret\":\"${coturn_secret}\",\"protocols\":\"udp,tcp\"}]"
-    $occ config:app:set spreed turn_servers --value "$turn_json" \
+    "${occ[@]}" config:app:set spreed turn_servers --value "$turn_json" \
       && info "TURN server configured: ${TALK_DOMAIN}:3478" \
       || warn "Failed to set turn_servers"
   fi
