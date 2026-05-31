@@ -916,6 +916,11 @@ ask_minio() {
 
             _selected_devs+=("${DISK_NAMES[$ci]}")
 
+            # Auto-detect disk size from first selected disk (all disks should be identical in MinIO)
+            if (( n == 1 && d == 1 )); then
+              MINIO_DISK_SIZE_GB=$(_disk_size_gb "${DISK_NAMES[$ci]}")
+            fi
+
             # Determine mount point (use existing if already mounted)
             local target_mount="/mnt/minio-node${n}-disk${d}"
             if [[ "${DISK_MOUNTS[$ci]}" != "-" && -n "${DISK_MOUNTS[$ci]}" ]]; then
@@ -939,14 +944,18 @@ ask_minio() {
   [[ "$MINIO_MODE" == "test" ]] && MINIO_BYPASS="true"
 
   echo ""
-  step "Estimated usable capacity"
-  echo -e "  ${C_GRAY}Disk size per disk — used to calculate real usable storage (erasure coding).${C_RESET}"
-  echo -e "  ${C_GRAY}Examples: 4000 ≈ 4 TB · 8000 ≈ 8 TB · 12000 ≈ 12 TB. Enter 0 to skip.${C_RESET}"
-  echo ""
-  ask_int "Disk size per disk (GB)" "0" is_non_neg_int "Integer ≥ 0 required" MINIO_DISK_SIZE_GB
+  if [[ "$MINIO_MODE" == "auto" && "${MINIO_DISK_SIZE_GB:-0}" -gt 0 ]]; then
+    info "Disk size detected automatically: ${MINIO_DISK_SIZE_GB} GB per disk"
+  else
+    step "Estimated usable capacity"
+    echo -e "  ${C_GRAY}Disk size per disk — used to calculate real usable storage (erasure coding).${C_RESET}"
+    echo -e "  ${C_GRAY}Examples: 4000 ≈ 4 TB · 8000 ≈ 8 TB · 12000 ≈ 12 TB. Enter 0 to skip.${C_RESET}"
+    echo ""
+    ask_int "Disk size per disk (GB)" "0" is_non_neg_int "Integer ≥ 0 required" MINIO_DISK_SIZE_GB
+  fi
 
   local ft_lines
-  mapfile -t ft_lines < <(minio_fault_tolerance "$MINIO_NODES" "$MINIO_DISKS" "$MINIO_DISK_SIZE_GB")
+  mapfile -t ft_lines < <(minio_fault_tolerance "$MINIO_NODES" "$MINIO_DISKS" "${MINIO_DISK_SIZE_GB:-0}")
   box "MinIO Fault Tolerance" "${ft_lines[@]}"
 }
 
