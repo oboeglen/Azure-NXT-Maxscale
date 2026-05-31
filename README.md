@@ -5,7 +5,7 @@
 
 **High-availability Nextcloud infrastructure — deployable with a single command**
 
-[![Version](https://img.shields.io/badge/version-2.2.1-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
+[![Version](https://img.shields.io/badge/version-2.3.0-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9?logo=nextcloud&logoColor=white)](https://nextcloud.com)
 [![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?logo=php&logoColor=white)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -45,7 +45,6 @@
 
 > This project is in **active development**. Upcoming features include:
 
-- 📹 **Full video backend for Talk** — high-availability Nextcloud Talk integration with signaling server and TURN/STUN
 - 🤖 **Local AI** — on-premise language model deployment connected to Nextcloud AI
 - ✍️ **Electronic document signing** — eIDAS-compliant signing service integration
 - 📝 **Choice between Collabora or OnlyOffice** — office suite selection at deployment time
@@ -66,6 +65,8 @@
 - [💾 MinIO object storage](#-minio-object-storage)
 - [🔒 HAProxy security](#-haproxy-security)
 - [📝 Collabora CODE](#-collabora-code)
+- [🎙️ Nextcloud Talk — HA Signaling](#️-nextcloud-talk--ha-signaling)
+- [📬 Client Push (notify\_push)](#-client-push-notify_push)
 - [📐 Scaling — adding and removing nodes](#-scaling--adding-and-removing-nodes)
 - [🛠️ Common operations](#️-common-operations)
 - [🚢 Manual deployment](#-manual-deployment)
@@ -182,10 +183,14 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 | `whiteboard-node1..N` | Real-time collaborative whiteboard |
 | `redis-whiteboard` | Shared whiteboard state (Redis Streams) |
 | `minio-console` *(optional)* | MinIO web console — accessible via `/s3-console` |
+| `notify-push` | Client Push — real-time sync notifications over WebSocket (`/push`) |
+| `nats` *(Talk only)* | NATS message broker — distributes signaling events across spreed-signaling nodes |
+| `spreed-signaling-01..N` *(Talk only)* | WebSocket signaling server — HAProxy load-balances across all nodes |
+| `coturn` *(Talk, optional)* | TURN/STUN relay — media relay for clients behind NAT or strict firewalls |
 
 > MinIO bucket versioning is automatically enabled by `deploy.sh` at the end of the Nextcloud installation, via `minio/mc:latest` (image pulled at deployment but without a persistent container).
 
-**Exposed ports:** `80` (HTTPS redirect) · `443` (Nextcloud, Collabora, Whiteboard)
+**Exposed ports:** `80` (HTTPS redirect) · `443` (Nextcloud, Collabora, Whiteboard, Talk, Push) · `3478/udp+tcp` (coturn TURN/STUN — only when coturn is enabled)
 
 > [!CAUTION]
 > HAProxy stats (`/stats`) and the MinIO console (`/s3-console`) are diagnostic tools that can be enabled during deployment. Both pages require credentials, but they remain exposed on Nextcloud's public URL and reveal sensitive infrastructure information. Reserve for test environments or disable after use.
@@ -202,6 +207,8 @@ Everything is applied automatically by `nextcloud-setup` on first startup.
 - **Collabora Online** — office editing (Writer, Calc, Impress)
 - **Whiteboard** — real-time collaborative whiteboard
 - **MinIO S3** — object storage for all user files
+- **Nextcloud Talk** — HA signaling via spreed-signaling + NATS; optional coturn TURN relay
+- **Client Push (notify_push)** — real-time desktop/mobile sync notifications over WebSocket
 - `trusted_proxies` + `forwarded_for_headers` — real client IPs forwarded behind HAProxy
 
 ### Security & UX
@@ -235,6 +242,10 @@ Everything is applied automatically by `nextcloud-setup` on first startup.
 | 📦 MinIO | ✅ Automatic | Reads continue, writes restored as soon as the node returns |
 | 📝 Collabora | ✅ Automatic | Editing session lost, automatic reconnection |
 | 🎨 Whiteboard | ✅ Automatic | Automatic WebSocket reconnection (state persisted in Redis) |
+| 🎙️ spreed-signaling | ✅ Automatic | HAProxy removes the failing node — active calls may reconnect once |
+| 📬 notify-push | ✅ Automatic | Container restarts automatically; clients reconnect the WebSocket |
+| 📨 NATS | ⚠️ Single node | Service interruption until the container restarts (`restart: always`) |
+| 🔄 coturn | ⚠️ Single node | Falls back to STUN-only — peer-to-peer if NAT allows, otherwise media blocked |
 
 ### Full Galera cluster restart
 
@@ -265,6 +276,36 @@ MinIO runs in **distributed erasure coding** mode — N nodes × D drives per no
 **Test mode (single-server)** — all paths on the same physical disk (`/data/minio/...`). Automatically offered by `deploy.sh`. Use only for development.
 
 **Production mode** — each `DATA{N}` must point to a **separate physical disk** for erasure coding to be truly effective.
+
+### Disk Wizard
+
+`deploy.sh` includes an interactive disk preparation wizard that runs automatically when you answer **"No"** to test mode. It scans the server's available block devices and lets you format and mount them one by one before configuring MinIO paths.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Available disks                                                │
+├────────────────┬────────┬────────┬───────────────┬─────────────┤
+│ Device         │ Size   │ FS     │ Mount         │ Model       │
+├────────────────┼────────┼────────┼───────────────┼─────────────┤
+│ /dev/sda       │ 500G   │ ext4   │ /             │ Samsung SSD │
+│ /dev/sdb       │ 2T     │        │               │ WDC WD20    │
+│ /dev/sdc       │ 2T     │        │               │ WDC WD20    │
+└────────────────┴────────┴────────┴───────────────┴─────────────┘
+```
+
+For each unformatted disk you select, the wizard:
+
+1. **Formats** the disk as XFS with optimized parameters:
+   - Log size scaled to disk capacity (`lazy-count=1` for faster metadata)
+   - Allocation group count (`agcount`) tuned for parallelism on disks ≥ 10 GB
+2. **Mounts** the disk to a path of your choice (default: `/data/minio/node{N}/data{N}`)
+3. **Adds a persistent fstab entry** so the mount survives reboots
+4. **Refreshes the disk table** so the updated filesystem and mount point are visible immediately
+
+The wizard then uses the confirmed mount paths as MinIO `DATA{N}` paths in `docker-compose.yml`.
+
+> [!TIP]
+> The wizard only proposes disks that are not already mounted to critical paths (e.g., `/`, `/boot`). It displays the disk model and current filesystem so you can identify the right devices before formatting.
 
 ### Cluster inspection
 
@@ -357,6 +398,8 @@ The HAProxy statistics page displays the real-time status of **all** backends:
 | `nextcloud-fpm` | app-next-01..N nodes (FPM TCP :9000) — monitoring only |
 | `coolwsd` | Collabora nodes (WOPI :9980) |
 | `whiteboard` | Whiteboard nodes (WS :3002) |
+| `signaling` | spreed-signaling nodes (WS :8080) — Talk only |
+| `notify-push` | notify-push container (:7867) — Client Push |
 | `galera` | MariaDB nodes (:3306) |
 | `minio` | MinIO S3 nodes (:9000) |
 | `redis-cluster` | Redis nodes (:6379) |
@@ -399,6 +442,78 @@ The patch is written to the container's write layer (`docker cp`). Behavior by s
 - **Administration console** (`/browser/dist/admin/admin.html`) blocked by HAProxy → HTTP 403
 - **Document size limit** — 100 MB maximum per open document (`--o:net.max_file_size=104857600`), configurable in `extra_params`
 - **SSL terminated by HAProxy** — Collabora receives plain HTTP internally (`ssl.enable=false`, `ssl.termination=true`)
+
+---
+
+## 🎙️ Nextcloud Talk — HA Signaling
+
+A dedicated signaling server (`spreed-signaling`) is required so that Talk calls work correctly when users are served by different Nextcloud FPM nodes. Without it, WebRTC session negotiation fails across nodes.
+
+### Components
+
+| Container | Role |
+|-----------|------|
+| `spreed-signaling-01..N` | WebSocket signaling — HAProxy `leastconn` distributes long-lived connections across all nodes |
+| `nats` | Message broker — routes signaling events between nodes so any two clients can communicate regardless of which node they landed on |
+| `coturn` *(optional)* | TURN/STUN relay — required when clients are behind symmetric NAT or strict corporate firewalls |
+
+### High availability
+
+| Component | Tolerance | Behavior during failure |
+|-----------|:---------:|------------------------|
+| 🎙️ spreed-signaling | ✅ Automatic | HAProxy removes the failing node — active calls may drop once then reconnect |
+| 📨 NATS | ⚠️ Single node | Service interruption until the container restarts (`restart: always`) |
+| 🔄 coturn | ⚠️ Single node | Falls back to STUN-only — peer-to-peer if NAT allows, otherwise media blocked |
+
+### STUN / TURN
+
+| Scenario | Configuration |
+|----------|--------------|
+| coturn **disabled** | Nextcloud uses `stun.nextcloud.com:443` — peer-to-peer if NAT allows, no firewall changes needed |
+| coturn **enabled** | Full TURN relay on `TALK_DOMAIN:3478/udp` and `:3478/tcp` — works behind any NAT type |
+
+> [!IMPORTANT]
+> coturn uses `network_mode: host` — it requires a **Linux VPS** (not macOS Docker Desktop or WSL2). Open ports `3478/udp` and `3478/tcp` in your firewall when coturn is enabled.
+
+### Secrets and registration
+
+`deploy.sh` handles all secret wiring automatically:
+
+1. Generates `GEN_TALK_SECRET` and stores it in `.env`
+2. Writes it into `signaling.conf` under the `[nc]` section (`urls` + `secret` keys)
+3. Registers it in Nextcloud via `occ talk:signaling:add "wss://TALK_DOMAIN/" <secret> --verify`
+4. Configures STUN/TURN via `occ talk:stun:add` / `occ talk:turn:add` when coturn is enabled
+
+> [!TIP]
+> To inspect the registered signaling servers:
+> ```bash
+> docker exec -u www-data app-next-01 php /var/www/html/occ talk:signaling:list
+> ```
+
+---
+
+## 📬 Client Push (notify_push)
+
+Client Push replaces polling with a persistent WebSocket connection, so file changes appear immediately in Nextcloud desktop and mobile clients — no more 30-second sync delays.
+
+### How it works
+
+```
+Nextcloud FPM ──► notify-push:7867 ──► WebSocket clients (desktop / mobile)
+                       ▲
+              HAProxy: /push path (intercepted before the general Nextcloud rule)
+```
+
+The `notify-push` container runs the `notify_push` binary bundled inside the Nextcloud image. It reads `config.php` directly to connect to the same MariaDB cluster and Redis cluster as the FPM nodes — no additional credentials or configuration required.
+
+### Configuration
+
+Automatic — `deploy.sh` runs `occ notify_push:setup "https://NEXTCLOUD_DOMAIN/push"` after deployment, which:
+1. Registers the push endpoint with Nextcloud
+2. Runs `occ notify_push:self-test` to validate all 6 checks: Redis, database, Nextcloud connectivity, trusted proxy, push endpoint trust, and version compatibility
+
+> [!NOTE]
+> HAProxy uses a TCP-only health check for `notify-push` — `notify_push` exposes no unauthenticated HTTP endpoint suitable for `httpchk`. The container itself runs a `curl` health check against `/test/cookie`.
 
 ---
 
@@ -750,10 +865,11 @@ Once the infrastructure is deployed, **restricting exposed ports** is the first 
 | Port | Protocol | Usage |
 |------|----------|-------|
 | `80` | TCP | HTTP → HTTPS redirect + Let's Encrypt ACME challenge |
-| `443` | TCP | HTTPS — main entry point (Nextcloud, Collabora, Whiteboard) |
+| `443` | TCP | HTTPS — main entry point (Nextcloud, Collabora, Whiteboard, Talk signaling, Client Push) |
 | `22` | TCP | SSH administration (restrict to your IP if possible) |
+| `3478` | UDP + TCP | coturn TURN/STUN relay — **only when coturn is enabled** |
 
-> All other ports (3306 MariaDB, 6379 Redis, 9000 MinIO, 9980 Collabora…) are internal to Docker networks and must **never** be exposed on the public interface.
+> All other ports (3306 MariaDB, 6379 Redis, 9000 MinIO, 9980 Collabora, 8080 signaling…) are internal to Docker networks and must **never** be exposed on the public interface.
 
 The two recommended complementary approaches: a **UFW firewall** to filter incoming traffic, and **fail2ban** to block SSH intrusion attempts.
 
@@ -836,8 +952,12 @@ All Docker images are pinned to precise versions rather than floating tags (`:la
 | `IMG_COLLABORA` | `collabora/code` | `25.04.9.4.1` |
 | `IMG_AUTOHEAL` | `willfarrell/autoheal` | `latest` |
 | `IMG_WHITEBOARD` | `ghcr.io/nextcloud-releases/whiteboard` | `v1.5.8` |
+| `IMG_NATS` | `nats` | `2.10-alpine` |
+| `IMG_SPREED_SIGNALING` | `strukturag/nextcloud-spreed-signaling` | `latest` |
+| `IMG_COTURN` | `coturn/coturn` | `4.6` |
 
 > `autoheal` does not publish recent versioned tags on Docker Hub (`1.2.0` dates from 2021) — kept on `latest`.
+> `spreed-signaling` does not publish granular versioned tags — kept on `latest`. The `notify-push` container reuses the Nextcloud image (`nextcloud:${NC_VERSION}`), pinned via the `NC_VERSION` variable set in `deploy.sh`.
 
 ### Update an image
 
