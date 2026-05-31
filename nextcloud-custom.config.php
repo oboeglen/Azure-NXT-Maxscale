@@ -5,10 +5,6 @@
 // Nextcloud charge automatiquement tous les .php du dossier config/.
 // =============================================================================
 $CONFIG = [
-  // Identifiant unique par nœud PHP — requis pour les clusters multi-instances.
-  // gethostname() retourne le hostname Docker du container (défini via hostname: dans compose).
-  'serverid' => gethostname(),
-
   // Autorise Nextcloud à contacter sa propre URL interne (IPs Docker 172.x.x.x)
   // Requis pour que le check /.well-known/caldav réussisse depuis le container
   'allow_local_remote_servers' => true,
