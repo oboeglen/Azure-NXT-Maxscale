@@ -2202,7 +2202,7 @@ ${turn_section}
 url = nats://nats:4222
 EOF
 
-  chmod 600 "$dest"
+  chmod 644 "$dest"
   info "signaling.conf generated: $dest"
 }
 
