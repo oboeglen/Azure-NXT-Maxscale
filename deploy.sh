@@ -2374,6 +2374,39 @@ patch_haproxy() {
     if ! grep -q 'use_backend signaling' "$tmp"; then
       sed -i '/use_backend whiteboard/a\  use_backend signaling   if is_talk' "$tmp"
     fi
+    # Restore full backend signaling block if stripped by a previous TALK_ENABLED=no run
+    if ! grep -q 'backend signaling' "$tmp"; then
+      local _sig_servers="${signaling_servers%$'\n'}"
+      python3 - "$tmp" "$_sig_servers" <<'PYEOF'
+import sys
+path, servers = sys.argv[1], sys.argv[2]
+content = open(path).read()
+block = (
+  "# BEGIN_TALK_BACKEND\n"
+  "# Backend Talk Signaling (nextcloud-spreed-signaling)\n"
+  "backend signaling\n"
+  "  mode http\n"
+  "  balance leastconn\n"
+  "  no option http-server-close\n"
+  "  no option redispatch\n"
+  "  retries 0\n"
+  "  timeout connect 5s\n"
+  "  timeout server  60s\n"
+  "  timeout tunnel  3600s\n"
+  "  option httpchk\n"
+  "  http-check send meth GET uri /api/v1/welcome ver HTTP/1.1 hdr Host ${TALK_DOMAIN}\n"
+  "  http-check expect status 200\n"
+  "  default-server inter 10s fastinter 1s rise 2 fall 2 resolvers docker init-addr libc,none\n"
+  "  # BEGIN_SERVERS_SIGNALING\n"
+  + servers + "\n"
+  "  # END_SERVERS_SIGNALING\n"
+  "# END_TALK_BACKEND\n\n"
+)
+anchor = "# BEGIN_MINIO_CONSOLE_BACKEND"
+content = content.replace(anchor, block + anchor) if anchor in content else content + "\n" + block
+open(path, "w").write(content)
+PYEOF
+    fi
   else
     # Remove acl + backend routing lines
     awk '!/acl is_talk / && !/use_backend signaling /' "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
