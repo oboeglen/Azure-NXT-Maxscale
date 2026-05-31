@@ -964,6 +964,9 @@ ask_minio_console() {
 
 # --- ask_talk ---
 ask_talk() {
+  step "Nextcloud Talk — signaling nodes"
+  ask_int "Talk signaling — nodes" "2" is_positive_int "Integer ≥ 1 required" SIGNALING_NODES
+
   step "Nextcloud Talk — TURN server (coturn)"
   echo ""
   echo -e "  ${C_WHITE}A TURN server relays WebRTC media through NAT for remote users.${C_RESET}"
@@ -1050,7 +1053,7 @@ show_recap() {
     "Nextcloud      : $NC_DOMAIN  (${NC_NODES} FPM nodes + ${NC_NODES} nginx, v${NC_VERSION})" \
     "Collabora      : $COLLAB_DOMAIN  (${COLLAB_NODES} nodes)" \
     "Whiteboard     : $WB_DOMAIN  (${WB_NODES} nodes)" \
-    "Talk signaling : $TALK_DOMAIN  (2 signaling nodes + NATS)  coturn: ${COTURN_ENABLED}" \
+    "Talk signaling : $TALK_DOMAIN  (${SIGNALING_NODES:-2} signaling nodes + NATS)  coturn: ${COTURN_ENABLED}" \
     "SSL Email      : $CERTBOT_EMAIL" \
     "MariaDB Galera : ${MARIADB_NODES} nodes" \
     "Redis Cluster  : ${REDIS_NODES} nodes" \
@@ -1106,6 +1109,7 @@ save_answers() {
     printf 'HAPROXY_STATS="%s"\n' "$HAPROXY_STATS"
     printf 'MINIO_CONSOLE="%s"\n' "$MINIO_CONSOLE"
     printf 'COTURN_ENABLED="%s"\n' "$COTURN_ENABLED"
+    printf 'SIGNALING_NODES="%s"\n' "${SIGNALING_NODES:-2}"
     printf 'CERTBOT_STAGING="%s"\n' "$CERTBOT_STAGING"
     declare -p MINIO_PATHS | sed 's/^declare -A/declare -gA/'
   } > "$ANSWERS_CACHE"
@@ -1230,6 +1234,7 @@ WHITEBOARD_JWT_SECRET=${GEN_JWT_SECRET}
 TALK_SIGNALING_SECRET=${GEN_TALK_SECRET}
 COTURN_SECRET=${GEN_COTURN_SECRET}
 COTURN_ENABLED=${COTURN_ENABLED}
+SIGNALING_NODES=${SIGNALING_NODES:-2}
 EOF
 
   chmod 600 "$dest"
@@ -1890,7 +1895,7 @@ WBNODE
 WBREDIS
 
   # ── Talk: NATS + spreed-signaling nodes ────────────────────────────────
-  cat >> "$dest" <<TALKBASE
+  cat >> "$dest" <<NATSSVC
 
   nats:
     image: ${IMG_NATS}
@@ -1907,10 +1912,16 @@ WBREDIS
       timeout: 5s
       retries: 5
       start_period: 10s
+NATSSVC
 
-  spreed-signaling-01:
+  local _sig_n="${SIGNALING_NODES:-2}"
+  for i in $(seq 1 "$_sig_n"); do
+    local _name; _name="spreed-signaling-$(printf '%02d' "$i")"
+    cat >> "$dest" <<SIGSVC
+
+  ${_name}:
     image: ${IMG_SPREED_SIGNALING}
-    container_name: spreed-signaling-01
+    container_name: ${_name}
     restart: always
     expose:
       - "8080"
@@ -1928,28 +1939,8 @@ WBREDIS
       timeout: 5s
       retries: 5
       start_period: 15s
-
-  spreed-signaling-02:
-    image: ${IMG_SPREED_SIGNALING}
-    container_name: spreed-signaling-02
-    restart: always
-    expose:
-      - "8080"
-    volumes:
-      - ./signaling.conf:/config/server.conf:ro
-    networks:
-      - talk-net
-      - next-net
-    depends_on:
-      nats:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 8080 > /dev/null 2>&1 || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-TALKBASE
+SIGSVC
+  done
 
   # ── Talk: coturn (opt-in) ───────────────────────────────────────────────
   if [[ "$COTURN_ENABLED" == "yes" ]]; then
@@ -2261,10 +2252,10 @@ patch_haproxy() {
     fpm_servers+="  server app-next-$(printf '%02d' "$i") app-next-$(printf '%02d' "$i"):9000 check"$'\n'
   done
 
-  # Signaling servers are fixed at 2 nodes (not dynamically scaled)
   local signaling_servers=""
-  signaling_servers+="  server spreed-signaling-01 spreed-signaling-01:8080 check"$'\n'
-  signaling_servers+="  server spreed-signaling-02 spreed-signaling-02:8080 check"$'\n'
+  for i in $(seq 1 "${SIGNALING_NODES:-2}"); do
+    signaling_servers+="  server spreed-signaling-$(printf '%02d' "$i") spreed-signaling-$(printf '%02d' "$i"):8080 check"$'\n'
+  done
 
   # Apply patches sequentially using temp files
   local tmp tmp2
@@ -3007,8 +2998,12 @@ check_services() {
   _check "nextcloud-cron actif" \
     bash -c "docker inspect nextcloud-cron --format='{{.State.Running}}' 2>/dev/null | grep -q true"
 
-  _check "Talk signaling reachable" \
-    bash -c "docker exec spreed-signaling-01 sh -c \"echo '' | nc -w2 127.0.0.1 8080\" 2>/dev/null"
+  local _sig_i
+  for _sig_i in $(seq 1 "${SIGNALING_NODES:-2}"); do
+    local _sig_name="spreed-signaling-$(printf '%02d' "$_sig_i")"
+    _check "Talk signaling reachable (${_sig_name})" \
+      bash -c "docker exec ${_sig_name} sh -c \"echo '' | nc -w2 127.0.0.1 8080\" 2>/dev/null"
+  done
 
   if (( failures > 0 )); then
     warn "${failures} test(s) failed — check: docker compose logs"
@@ -3045,7 +3040,7 @@ CREDS
   [[ "$MINIO_CONSOLE" == "yes" ]] && \
     console_line="MinIO Console  : https://${NC_DOMAIN}/s3-console  (login: MINIO_ACCESS_KEY / MINIO_SECRET_KEY)"
 
-  local talk_line="Talk signaling : https://${TALK_DOMAIN}  (2 nodes + NATS)  coturn: ${COTURN_ENABLED}"
+  local talk_line="Talk signaling : https://${TALK_DOMAIN}  (${SIGNALING_NODES:-2} nodes + NATS)  coturn: ${COTURN_ENABLED}"
 
   # Dynamic width: adapts to the longest line (password, domain, etc.)
   local I=0 _lw
@@ -3155,7 +3150,9 @@ update_images() {
     COLLAB_NODES=$(_detect_node_count  "collabora-node" "^collabora-node[0-9]")
     WB_NODES=$(_detect_node_count      "whiteboard-node" "^whiteboard-node[0-9]")
     MINIO_NODES=$(_detect_node_count   "minio-node"     "^minio-node[0-9]")
-    info "Detected nodes: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES}"
+    SIGNALING_NODES=$(_detect_node_count "spreed-signaling-" "^spreed-signaling-[0-9]")
+    SIGNALING_NODES="${SIGNALING_NODES:-2}"
+    info "Detected nodes: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES} · Signaling=${SIGNALING_NODES}"
   fi
 
   step "Pulling new Docker images"
@@ -3409,6 +3406,8 @@ scale_nodes() {
     MINIO_CONSOLE="${MINIO_CONSOLE:-no}"
     COTURN_ENABLED=$(grep -m1 '^COTURN_ENABLED=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
     COTURN_ENABLED="${COTURN_ENABLED:-no}"
+    SIGNALING_NODES=$(grep -m1 '^SIGNALING_NODES=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "2")
+    SIGNALING_NODES="${SIGNALING_NODES:-2}"
     CERTBOT_STAGING="${CERTBOT_STAGING:-no}"
     local n d
     for n in $(seq 1 "$MINIO_NODES"); do
@@ -3419,7 +3418,7 @@ scale_nodes() {
                                     | cut -d= -f2 || echo "/data/minio/node${n}/data${d}")
       done
     done
-    info "Configuration rebuilt: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES}"
+    info "Configuration rebuilt: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES} · Signaling=${SIGNALING_NODES}"
   else
     die "Neither config cache nor .env file found in $INSTALL_DIR — cannot scale"
   fi
@@ -3431,6 +3430,7 @@ scale_nodes() {
     "Redis Cluster       : ${REDIS_NODES} nodes  (even ≥ 6, even delta)" \
     "Collabora           : ${COLLAB_NODES} nodes" \
     "Whiteboard          : ${WB_NODES} nodes" \
+    "Talk signaling      : ${SIGNALING_NODES:-2} nodes  (stateless — scale up or down freely)" \
     "MinIO               : ${MINIO_NODES} nodes × ${MINIO_DISKS} disks  (scale-up by pool)"
   echo ""
 
@@ -3441,6 +3441,8 @@ scale_nodes() {
   local ORIG_COLLAB_NODES="$COLLAB_NODES"
   local ORIG_WB_NODES="$WB_NODES"
   local ORIG_MINIO_NODES="$MINIO_NODES"
+  local ORIG_SIGNALING_NODES="${SIGNALING_NODES:-2}"
+  SIGNALING_NODES="$ORIG_SIGNALING_NODES"
 
   step "New node counts (Enter = keep current value)"
   ask_int "Nextcloud — FPM+nginx nodes"        "$NC_NODES"      is_positive_int "Integer ≥ 1 required"          NC_NODES
@@ -3448,6 +3450,7 @@ scale_nodes() {
   ask_int "Redis Cluster — nodes (even ≥ 6)"   "$REDIS_NODES"   is_even_min6    "Even number ≥ 6 required"      REDIS_NODES
   ask_int "Collabora — nodes"                  "$COLLAB_NODES"  is_positive_int "Integer ≥ 1 required"          COLLAB_NODES
   ask_int "Whiteboard — nodes"                 "$WB_NODES"      is_positive_int "Integer ≥ 1 required"          WB_NODES
+  ask_int "Talk signaling — nodes (↑↓ free)"   "$SIGNALING_NODES" is_positive_int "Integer ≥ 1 required"        SIGNALING_NODES
 
   # MinIO: scale-up only (pool expansion) — scale-down via manual decommission
   echo ""
@@ -3568,11 +3571,12 @@ scale_nodes() {
 
   # ── Check for changes ────────────────────────────────────────────────────────
   local changed=false
-  [[ "$NC_NODES"      != "$ORIG_NC_NODES"      ]] && changed=true
-  [[ "$MARIADB_NODES" != "$ORIG_MARIADB_NODES" ]] && changed=true
-  [[ "$REDIS_NODES"   != "$ORIG_REDIS_NODES"   ]] && changed=true
-  [[ "$COLLAB_NODES"  != "$ORIG_COLLAB_NODES"  ]] && changed=true
-  [[ "$WB_NODES"      != "$ORIG_WB_NODES"      ]] && changed=true
+  [[ "$NC_NODES"         != "$ORIG_NC_NODES"         ]] && changed=true
+  [[ "$MARIADB_NODES"    != "$ORIG_MARIADB_NODES"    ]] && changed=true
+  [[ "$REDIS_NODES"      != "$ORIG_REDIS_NODES"      ]] && changed=true
+  [[ "$COLLAB_NODES"     != "$ORIG_COLLAB_NODES"     ]] && changed=true
+  [[ "$WB_NODES"         != "$ORIG_WB_NODES"         ]] && changed=true
+  [[ "$SIGNALING_NODES"  != "$ORIG_SIGNALING_NODES"  ]] && changed=true
   $minio_scaled_up && changed=true
 
   if ! $changed; then
@@ -3587,6 +3591,7 @@ scale_nodes() {
     "Redis      : ${ORIG_REDIS_NODES} → ${REDIS_NODES} nodes" \
     "Collabora  : ${ORIG_COLLAB_NODES} → ${COLLAB_NODES} nodes" \
     "Whiteboard : ${ORIG_WB_NODES} → ${WB_NODES} nodes" \
+    "Signaling  : ${ORIG_SIGNALING_NODES} → ${SIGNALING_NODES} nodes" \
     "MinIO      : ${ORIG_MINIO_NODES} → ${MINIO_NODES} nodes"
 
   if (( MARIADB_NODES > ORIG_MARIADB_NODES )); then
@@ -3687,6 +3692,7 @@ scale_nodes() {
     "Redis      : ${REDIS_NODES} nodes ($((REDIS_NODES/2)) masters + $((REDIS_NODES/2)) replicas)" \
     "Collabora  : ${COLLAB_NODES} nodes" \
     "Whiteboard : ${WB_NODES} nodes" \
+    "Signaling  : ${SIGNALING_NODES} nodes" \
     "MinIO      : ${MINIO_NODES} nodes × ${MINIO_DISKS} disks"
 }
 
