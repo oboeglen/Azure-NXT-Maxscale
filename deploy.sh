@@ -3060,7 +3060,7 @@ configure_talk() {
     return 0
   fi
 
-  # Install and enable spreed app — must be enabled before config:app:set works
+  # Install and enable spreed app — must be enabled before talk:* commands work
   local install_out
   if "${occ[@]}" app:list 2>/dev/null | grep -q 'spreed'; then
     info "Talk (spreed) app already present — enabling"
@@ -3072,38 +3072,42 @@ configure_talk() {
   fi
   "${occ[@]}" app:enable spreed 2>&1 | grep -v '^$' | while read -r l; do info "$l"; done || true
 
-  # Configure signaling server — include secret in server object (Talk 19+)
-  # and also set the global signaling_secret key (Talk <19 compatibility)
-  local sig_json="[{\"server\":\"https://${TALK_DOMAIN}/\",\"verify\":true,\"secret\":\"${talk_secret}\"}]"
   local out
-  out=$("${occ[@]}" config:app:set spreed signaling_servers --value "$sig_json" 2>&1)
-  info "signaling_servers: $out"
 
-  # Global signaling_secret — still read by getSignalingSecret() in Talk 20
-  out=$("${occ[@]}" config:app:set spreed signaling_secret --value "$talk_secret" 2>&1)
-  info "signaling_secret: $out"
+  # Talk 20+ uses dedicated talk:signaling:add instead of config:app:set
+  # Remove any existing entries first to avoid duplicates on re-run
+  "${occ[@]}" talk:signaling:list 2>/dev/null | grep -q "${TALK_DOMAIN}" \
+    && info "Signaling server already registered — skipping add" \
+    || {
+      out=$("${occ[@]}" talk:signaling:add "https://${TALK_DOMAIN}/" "$talk_secret" 2>&1)
+      info "talk:signaling:add: $out"
+    }
 
-  # Verify secret was actually stored
+  # Verify
   local stored
-  stored=$("${occ[@]}" config:app:get spreed signaling_secret 2>/dev/null)
-  if [[ -z "$stored" ]]; then
-    warn "signaling_secret is empty after set — Talk signaling will not work"
-  else
-    info "signaling_secret stored ✓"
-  fi
+  stored=$("${occ[@]}" talk:signaling:list 2>/dev/null)
+  info "Signaling servers: $stored"
 
   # Configure STUN/TURN if coturn is deployed
   if [[ "$COTURN_ENABLED" == "yes" ]]; then
     local coturn_secret
     coturn_secret=$(grep -m1 '^COTURN_SECRET=' "$INSTALL_DIR/.env" | cut -d= -f2 | tr -d '"')
 
-    out=$("${occ[@]}" config:app:set spreed stun_servers \
-      --value "[\"${TALK_DOMAIN}:3478\"]" 2>&1)
-    info "stun_servers: $out"
+    # STUN
+    "${occ[@]}" talk:stun:list 2>/dev/null | grep -q "${TALK_DOMAIN}" \
+      && info "STUN server already registered — skipping add" \
+      || {
+        out=$("${occ[@]}" talk:stun:add "${TALK_DOMAIN}:3478" 2>&1)
+        info "talk:stun:add: $out"
+      }
 
-    local turn_json="[{\"server\":\"turn:${TALK_DOMAIN}:3478\",\"secret\":\"${coturn_secret}\",\"protocols\":\"udp,tcp\"}]"
-    out=$("${occ[@]}" config:app:set spreed turn_servers --value "$turn_json" 2>&1)
-    info "turn_servers: $out"
+    # TURN
+    "${occ[@]}" talk:turn:list 2>/dev/null | grep -q "${TALK_DOMAIN}" \
+      && info "TURN server already registered — skipping add" \
+      || {
+        out=$("${occ[@]}" talk:turn:add "turn:${TALK_DOMAIN}:3478" "$coturn_secret" "turn" "udp,tcp" 2>&1)
+        info "talk:turn:add: $out"
+      }
   fi
 }
 
