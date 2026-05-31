@@ -353,7 +353,7 @@ Enabled during deployment by `deploy.sh` (same principle as HAProxy stats on `/s
 | **Password** | MinIO secret key (`MINIO_SECRET_KEY`) |
 | **Image** | [`ghcr.io/georgmangold/console`](https://github.com/georgmangold/console) |
 
-HAProxy routes `/s3-console/*` to the `minio-console:9090` container **stripping the `/s3-console` prefix** before forwarding to the Go server, which prevents MIME errors on the React SPA's static assets. The `/s3-console` and `/s3-console/` roots are automatically redirected to `/s3-console/login`.
+HAProxy routes `/s3-console/*` to the `minio-console:9090` container **stripping the `/s3-console` prefix** before forwarding to the Go server, which prevents MIME errors on the React SPA's static assets. Routing and authentication are handled entirely client-side by the React SPA.
 
 > [!TIP]
 > To enable or disable the console on an existing deployment, re-run `deploy.sh` — the answer is saved in the configuration file and reused on each run.
