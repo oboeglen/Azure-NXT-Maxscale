@@ -1179,9 +1179,8 @@ All Docker images are pinned to precise versions rather than floating tags (`:la
 | `IMG_CERTBOT` | `certbot/certbot` | `v5.6.0` |
 | `IMG_REDIS` | `redis` | `7.4-alpine` |
 | `IMG_MARIADB` | `maxscale-mariadb-galera` | `11.4` |
-| `IMG_RUSTFS` | `rustfs/rustfs` | `RELEASE.2025-09-07T16-13-09Z` |
-| `IMG_MC` | `mc` (S3-compatible CLI) | `RELEASE.2025-08-13T08-35-41Z` |
-| `IMG_RUSTFS` console | built-in to `rustfs/rustfs` |
+| `IMG_RUSTFS` | `rustfs/rustfs` | `latest` |
+| `IMG_MC` | `minio/mc` (S3-compatible CLI, works with RustFS) | `RELEASE.2025-08-13T08-35-41Z` |
 | `IMG_COLLABORA` | `collabora/code` | `25.04.9.4.1` |
 | `IMG_AUTOHEAL` | `willfarrell/autoheal` | `latest` |
 | `IMG_WHITEBOARD` | `ghcr.io/nextcloud-releases/whiteboard` | `v1.5.8` |
