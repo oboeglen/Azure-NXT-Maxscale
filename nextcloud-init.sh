@@ -343,13 +343,15 @@ done
 
 # App Store apps
 for app in \
+    assistant \
     collectives \
     deck \
     forms \
+    mail \
     tables \
     groupfolders \
     twofactor_nextcloud_notification \
-    user_oidc; do
+    oidc; do
     install_app "$app"
 done
 
