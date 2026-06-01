@@ -235,7 +235,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6. Stockage objet S3 — MinIO via HAProxy (port 9000 interne)
+# 7. Stockage objet S3 — MinIO via HAProxy (port 9000 interne)
 # IMPORTANT : à configurer avant la création de données utilisateur
 # ---------------------------------------------------------------------------
 step "Configuration stockage objet S3 (MinIO)"
@@ -253,7 +253,7 @@ occ config:system:set objectstore arguments use_ssl      --type boolean --value 
 info "Stockage S3 configuré → haproxy:9000 / bucket: ${NEXTCLOUD_S3_BUCKET:-nextcloud}"
 
 # ---------------------------------------------------------------------------
-# 7. Paramètres système complémentaires
+# 8. Paramètres système complémentaires
 # ---------------------------------------------------------------------------
 step "Paramètres système"
 occ config:system:set default_language    --value 'fr'
@@ -299,7 +299,49 @@ occ config:system:set enabledPreviewProviders 8 --value 'OC\Preview\Svg'
 info "Previews limités aux formats légers (images, texte, audio)."
 
 # ---------------------------------------------------------------------------
-# 8. Désactivation des applications inutiles / intrusives
+# 9. Additional applications
+# Bundled apps (contacts, calendar, user_ldap, files_external, quota_warning)
+# are enabled directly; App Store apps are downloaded if not already bundled.
+# All installs are non-fatal — a missing app skips without stopping the setup.
+# Apps requiring manual configuration (user_ldap, user_oidc) are installed only;
+# server-specific settings must be configured post-deployment via Settings UI.
+# ---------------------------------------------------------------------------
+step "Installation additional applications"
+
+# Helper: enable if bundled, otherwise download from App Store
+install_app() {
+    local app="$1"
+    if ${OCC_BIN} app:enable "$app" 2>/dev/null; then
+        info "$app enabled"
+    else
+        echo "[setup] Downloading $app from Nextcloud App Store..."
+        ${OCC_BIN} app:install "$app" 2>/dev/null \
+            && info "$app installed and enabled" \
+            || warn "$app: not available for this Nextcloud version — skipping"
+    fi
+}
+
+# Bundled apps (shipped with Nextcloud, just need enabling)
+for app in contacts calendar user_ldap files_external quota_warning; do
+    install_app "$app"
+done
+
+# App Store apps
+for app in \
+    collectives \
+    deck \
+    forms \
+    tables \
+    groupfolders \
+    twofactor_nextcloud_notification \
+    user_oidc; do
+    install_app "$app"
+done
+
+info "Additional applications done."
+
+# ---------------------------------------------------------------------------
+# 10. Désactivation des applications inutiles / intrusives
 # ---------------------------------------------------------------------------
 step "Désactivation des applications non nécessaires"
 # Utilise OCC_BIN directement (sans retry) — app absente = warning, pas d'erreur fatale
@@ -346,7 +388,7 @@ echo '[setup] ' . $total . ' cron job(s) orphelin(s) supprimé(s)' . PHP_EOL;
 PHPCLEAN
 
 # ---------------------------------------------------------------------------
-# 9. Thème NXT — Logos, fond d'écran, favicon, CSS personnalisé
+# 11. Thème NXT — Logos, fond d'écran, favicon, CSS personnalisé
 # ---------------------------------------------------------------------------
 step "Configuration du thème NXT"
 
@@ -424,7 +466,7 @@ occ config:app:set theming_customcss customcss --value "$(cat /nxt-custom.css)"
 info "Thème NXT configuré (logos, fond, favicon, CSS, user-theming désactivé)."
 
 # ---------------------------------------------------------------------------
-# 10. Maintenance finale
+# 12. Maintenance finale
 # ---------------------------------------------------------------------------
 step "Maintenance et optimisation finale"
 occ maintenance:repair --include-expensive
@@ -433,7 +475,7 @@ occ db:add-missing-primary-keys
 occ db:convert-filecache-bigint --no-interaction
 
 # ---------------------------------------------------------------------------
-# 11. Purge des logs de démarrage
+# 13. Purge des logs de démarrage
 # Les erreurs Redis (Connection refused / Couldn't map cluster keyspace) sont
 # normales pendant les premières secondes avant que le cluster soit initialisé.
 # On les supprime ici pour ne pas polluer les logs applicatifs.
