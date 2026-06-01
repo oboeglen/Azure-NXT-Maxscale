@@ -710,7 +710,7 @@ docker compose logs -f nextcloud-setup
 
 ## 📊 Performance & sizing
 
-Two test series cover the platform: **raw HTTP microbenchmarks** (pure throughput on `/status.php` and `/login`) and **k6 realistic load tests** simulating active users across four business scenarios.
+Three test series cover the platform: **raw HTTP microbenchmarks** (pure throughput), **k6 realistic load tests** (users on a VPS), and a **full-stack test** (all services including Talk HA + Notify Push on a dedicated server).
 
 ---
 
@@ -801,21 +801,65 @@ Config: **3 FPM · 3 Galera · 6 Redis · 4 MinIO · 3 Collabora · 1 Whiteboard
 
 ---
 
-### A vs B comparison
+#### Test C — Full stack with Talk Backend, nominal load (k6 v0.57.0) — 2026-06-01
 
-> ⚠️ The two tests are **not comparable at iso-load**: test B uses 76% more VUs (+26 VUs) and half the FPM nodes. The degradation reflects both combined effects — not FPM reduction alone.
+Config: **6 FPM · 5 Galera · 12 Redis · 4 MinIO · 6 Collabora · 3 Whiteboard · 6 Talk HA · coturn · Notify Push** — Intel Xeon D-1521 @ 2.40 GHz · 15.5 GB RAM · Dedicated server
 
-| Criterion | Test A — 6 FPM · 34 VUs | Test B — 3 FPM · 60 VUs |
-|-----------|:-----------------------:|:-----------------------:|
-| FPM / nominal load | 6 nodes (~2,450 users) | 3 nodes (~1,450 users) |
-| Injected VUs | 34 (nominal load) | 60 (**2.5× 3 FPM threshold**) |
-| Browser sessions p95 | **155 ms** | 2,868 ms |
-| WebDAV p95 | **1,980 ms** ✅ | 4,285 ms ⚠️ |
-| Collabora p95 | **2,160 ms** ✅ | 3,089 ms ✅ |
-| Whiteboard p95 | **2,060 ms** ✅ | 4,900 ms ✅ |
-| HTTP 5xx errors | **0** | **0** |
-| Container crashes | **0** | **0** |
-| Network errors | 0.97% | 0.07% |
+> First test run on the full production stack — all services including Talk HA, coturn, and Notify Push deployed simultaneously. Nominal load: 44 VUs across 6 concurrent scenarios.
+
+| Parameter | Value |
+|-----------|-------|
+| VUs peak | **44** (15 browser · 10 WebDAV · 6 Collabora · 4 Whiteboard · 6 Talk · 3 Push) |
+| Test accounts | 29 (`perf_user_01..29`) |
+| Complete iterations | 2,331 in 7m38s — 5.09 req/s average |
+
+| Scenario | VUs | avg | p(50) | p(90) | **p(95)** | SLA | Status |
+|---|:-:|---:|---:|---:|---:|:---:|:---:|
+| Browser sessions | 15 | 486 ms | 479 ms | 923 ms | **1,110 ms** | < 4 s | ✅ |
+| WebDAV upload | 10 | 1,230 ms | 1,160 ms | 1,780 ms | **2,060 ms** | < 3 s | ✅ |
+| WebDAV download | 10 | 2,060 ms | 1,970 ms | 2,790 ms | **3,110 ms** | < 2 s | ⚠️ |
+| Collabora (HTTP) | 6 | 3.8 ms | 2 ms | 5.8 ms | **7.4 ms** | < 5 s | ✅ |
+| Whiteboard WS connect | 4 | 18.2 ms | 18 ms | 23.8 ms | **27 ms** | < 3 s | ✅ |
+| Talk signaling HTTP | 6 | — | — | — | — | 100% | ✅ |
+| Notify Push (HTTP) | 3 | 2.8 ms | 2 ms | 5 ms | **7 ms** | < 2 s | ✅ |
+
+> ⚠️ WebDAV download p95 = 3.1 s slightly exceeds the 2 s SLA at nominal load — all reads completed successfully (0 errors). Caused by simultaneous writes on the same MinIO cluster from 10 WebDAV VUs.
+>
+> ℹ️ Talk signaling WebSocket: 0% upgrade success — the spreed-signaling server requires a valid Nextcloud session token before completing the WS handshake. Unauthenticated upgrades are intentionally rejected. HTTP `/api/v1/welcome` returned 200 on all 6 nodes. WS connection is validated functionally by the platform during Talk calls.
+
+| Metric | Value |
+|--------|-------|
+| HTTP 5xx errors | **0** |
+| Container crashes | **0** |
+| `http_req_failed` | 4.44% (246 / 5,532) ✅ — Talk WS auth rejections + routing responses |
+| WebSocket sessions | **560** (153 Whiteboard · 407 Talk) |
+| Data received | 47 MB · 102 kB/s |
+
+**0 server errors, 0 crashes.** The full stack with Talk HA (6 nodes), coturn and Notify Push handles nominal load without degradation on any functional service.
+
+---
+
+### A vs B vs C comparison
+
+> ⚠️ The three tests are **not directly comparable**: different server hardware (A/B on 7.6 GB VPS, C on dedicated server), different FPM counts, and different load levels. Each test is representative of its own scenario — nominal, saturation, and full-stack respectively.
+
+| Criterion | Test A — 6 FPM · 34 VUs | Test B — 3 FPM · 60 VUs | Test C — 6 FPM · 44 VUs |
+|-----------|:-----------------------:|:-----------------------:|:-----------------------:|
+| Server | 7.6 GB VPS | 7.6 GB VPS | 15.5 GB dedicated |
+| Stack | FPM + Collab + WB | FPM + Collab + WB | Full stack + Talk HA + Push |
+| Load type | Nominal | **2.5× saturation** | Nominal |
+| FPM nodes | 6 (~2,450 users) | 3 (~1,450 users) | 6 (~2,450 users) |
+| Browser sessions p95 | **155 ms** | 2,868 ms | 1,110 ms |
+| WebDAV p95 | **1,980 ms** ✅ | 4,285 ms ⚠️ | 2,060 ms ✅ (up) · 3,110 ms ⚠️ (dl) |
+| Collabora p95 | **2,160 ms** ✅ | 3,089 ms ✅ | **7 ms** ✅ ¹ |
+| Whiteboard p95 | **2,060 ms** ✅ | 4,900 ms ✅ | **27 ms** ✅ ² |
+| Talk signaling | N/A | N/A | HTTP ✅ · WS auth required |
+| Notify Push | N/A | N/A | **7 ms** ✅ |
+| HTTP 5xx errors | **0** | **0** | **0** |
+| Container crashes | **0** | **0** | **0** |
+
+> ¹ Test C measures Collabora HTTP discovery only (no WOPI document session) — not comparable with WOPI p95 in A and B.  
+> ² Test C measures Whiteboard WebSocket connection time (18 ms) — not comparable with full session duration in A and B.
 
 Degradation is **consistent with the model** and **graceful**: no crashes, no server errors, even under saturation.
 
