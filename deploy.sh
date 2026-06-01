@@ -1886,8 +1886,10 @@ RCINIT
       # and the entrypoint would receive /bin/sh as $1 — completely wrong.
       # List form passes each URL directly as $1, $2, … to the entrypoint.
       rfs_cmd_line=$'    command:\n'
-      local _url
-      for _url in $rustfs_volumes_val; do
+      # IFS=$'\n\t' is set globally — use read -r -a to split on spaces instead.
+      local _url _urls=()
+      read -r -a _urls <<< "$rustfs_volumes_val"
+      for _url in "${_urls[@]}"; do
         rfs_cmd_line+=$'      - "'${_url}$'"\n'
       done
     fi
