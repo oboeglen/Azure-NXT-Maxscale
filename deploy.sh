@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.4.0
+# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.4.1
 # Usage: sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -1330,25 +1330,59 @@ EOF
   info ".env generated: $dest"
 }
 
-# gen_rustfs_volumes_env — builds the RUSTFS_VOLUMES value from the pools file
-# Returns space-separated local paths (SNSD) or URL notation (MNMD / multi-pool).
-# RustFS uses the RUSTFS_VOLUMES env var instead of positional CLI arguments.
+# gen_rustfs_volumes_env — builds the volume specification from the pools file.
+#
+# Single-node (SNSD/SNMD): returns space-separated absolute paths (/data1 /data2 …)
+#   → used in RUSTFS_VOLUMES env var; the entrypoint creates dirs + chowns them.
+#
+# Multi-node (MNMD, single or multiple pools): returns explicit HTTP URLs
+#   (http://rustfs-nodeN:9000/dataN …) with every node × disk fully expanded.
+#   → used as command: args in docker-compose; the entrypoint receives them via $@,
+#     prefixes /usr/bin/rustfs, and skips RUSTFS_VOLUMES (set to "none" to suppress
+#     the default /data fallback in the entrypoint).
+#
+# Why explicit expansion instead of brace notation for HTTP URLs:
+#   The entrypoint.sh skips any RUSTFS_VOLUMES token that is not an absolute path.
+#   Passing URLs directly as command args is the only reliable way to run distributed
+#   mode with the Docker Hub image entrypoint.
 gen_rustfs_volumes_env() {
   local pools_file="$INSTALL_DIR/.rustfs-pools"
-  if [[ -f "$pools_file" ]]; then
-    local volumes=""
-    while IFS=: read -r start end; do
-      [[ -n "$start" && -n "$end" ]] || continue
-      volumes+=" http://rustfs-node{${start}...${end}}:9000/data{1...${RUSTFS_DISKS}}"
-    done < "$pools_file"
-    echo "${volumes# }"
-  elif (( RUSTFS_NODES == 1 )); then
+
+  if (( RUSTFS_NODES == 1 )); then
+    # ── Single node: local paths via RUSTFS_VOLUMES ──────────────────────────
     local vols="" _d
     for _d in $(seq 1 "$RUSTFS_DISKS"); do vols+=" /data${_d}"; done
     echo "${vols# }"
-  else
-    echo "http://rustfs-node{1...${RUSTFS_NODES}}:9000/data{1...${RUSTFS_DISKS}}"
+    return
   fi
+
+  # ── Multi-node: fully-expanded HTTP URLs ─────────────────────────────────
+  local urls=""
+
+  if [[ -f "$pools_file" ]]; then
+    # Multi-pool: each pool has its own node range (scale-up history)
+    while IFS=: read -r start end; do
+      [[ -n "$start" && -n "$end" ]] || continue
+      local n
+      for n in $(seq "$start" "$end"); do
+        local d
+        for d in $(seq 1 "$RUSTFS_DISKS"); do
+          urls+=" http://rustfs-node${n}:9000/data${d}"
+        done
+      done
+    done < "$pools_file"
+  else
+    # Single pool
+    local n
+    for n in $(seq 1 "$RUSTFS_NODES"); do
+      local d
+      for d in $(seq 1 "$RUSTFS_DISKS"); do
+        urls+=" http://rustfs-node${n}:9000/data${d}"
+      done
+    done
+  fi
+
+  echo "${urls# }"
 }
 
 gen_compose() {
@@ -1832,16 +1866,36 @@ RCINIT
       rfs_vol_lines+="      - \${RUSTFS_NODE${i}_DATA${d}:-${RUSTFS_PATHS[${i}_${d}]}}:/data${d}"$'\n'
     done
 
-    # Enable built-in console on port 9001 when requested; HAProxy routes /s3-console there
+    # Built-in console on port 9001 (enabled via RUSTFS_CONSOLE_ENABLE)
     local console_enable="false"
     [[ "$RUSTFS_CONSOLE" == "yes" ]] && console_enable="true"
     local console_expose=""
     [[ "$RUSTFS_CONSOLE" == "yes" ]] && console_expose="      - \"9001\""$'\n'
 
+    # Multi-node distributed mode: pass all volume URLs directly as command args.
+    # The entrypoint normalises them to: /usr/bin/rustfs http://nodeN:9000/dataN …
+    # RUSTFS_VOLUMES is set to "none" to suppress the entrypoint's /data fallback.
+    # Single-node: use RUSTFS_VOLUMES with absolute paths (entrypoint creates dirs).
+    local rfs_volumes_line rfs_cmd_line=""
+    if (( RUSTFS_NODES == 1 )); then
+      rfs_volumes_line="      - RUSTFS_VOLUMES=${rustfs_volumes_val}"
+    else
+      rfs_volumes_line="      - RUSTFS_VOLUMES=none"
+      # Build YAML list form so each URL is a separate argv to the entrypoint.
+      # Shell-form command: (quoted string) would be wrapped in /bin/sh -c "..."
+      # and the entrypoint would receive /bin/sh as $1 — completely wrong.
+      # List form passes each URL directly as $1, $2, … to the entrypoint.
+      rfs_cmd_line=$'    command:\n'
+      local _url
+      for _url in $rustfs_volumes_val; do
+        rfs_cmd_line+=$'      - "'${_url}$'"\n'
+      done
+    fi
+
     local rfs_hc=""
     if (( i == 1 )); then
       rfs_hc="    healthcheck:
-      test: [\"CMD-SHELL\", \"curl -so /dev/null -w '%{http_code}' http://localhost:9000/ 2>/dev/null | grep -q '^[^0]' || exit 1\"]
+      test: [\"CMD-SHELL\", \"curl -sf http://localhost:9000/health 2>/dev/null || exit 1\"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -1855,15 +1909,14 @@ RCINIT
     container_name: rustfs-node${i}
     hostname: rustfs-node${i}
     restart: always
-    user: root
-    expose:
+${rfs_cmd_line}    expose:
       - "9000"
 ${console_expose}    volumes:
 ${rfs_vol_lines}
     environment:
       - RUSTFS_ACCESS_KEY=\${RUSTFS_ACCESS_KEY}
       - RUSTFS_SECRET_KEY=\${RUSTFS_SECRET_KEY}
-      - RUSTFS_VOLUMES=${rustfs_volumes_val}
+${rfs_volumes_line}
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=${console_enable}
     networks:
@@ -3229,7 +3282,7 @@ check_services() {
     bash -c "docker exec redis-node1 redis-cli -a '${GEN_REDIS_PASS}' --no-auth-warning cluster info | grep -q 'cluster_state:ok'"
 
   _check "RustFS S3 health" \
-    bash -c "docker exec rustfs-node1 curl -so /dev/null -w '%{http_code}' http://localhost:9000/ 2>/dev/null | grep -q '^[^0]'"
+    bash -c "docker exec rustfs-node1 curl -sf http://localhost:9000/health 2>/dev/null"
 
   _check "nextcloud-setup completed" \
     bash -c "docker logs nextcloud-setup 2>&1 | grep -q 'Setup Nextcloud terminé'"
