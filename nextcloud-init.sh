@@ -188,8 +188,8 @@ occ config:app:set whiteboard jwt_expiry       --value "86400"
 
 info "Whiteboard configuré → https://${WHITEBOARD_DOMAIN}"
 
-# Patch WhiteboardContentService — bug MinIO objectstore (fichier initialisé avec 1 octet)
-# Avec le backend S3/MinIO, les nouveaux fichiers .whiteboard reçoivent 1 octet au lieu
+# Patch WhiteboardContentService — bug RustFS objectstore (fichier initialisé avec 1 octet)
+# Avec le backend S3/RustFS, les nouveaux fichiers .whiteboard reçoivent 1 octet au lieu
 # de vide. La vérification === '' est en strict equality et ne le détecte pas →
 # json_decode() lève une JsonException. On ajoute trim() === '' et un try/catch.
 # Upstream : https://github.com/nextcloud/whiteboard/issues/XXX
@@ -225,7 +225,7 @@ $new = "\tpublic function getContent(File \$file): array {\n"
 if (strpos($content, $old) !== false) {
     copy($file, $file . '.bak');
     file_put_contents($file, str_replace($old, $new, $content));
-    echo "[setup] Patch WhiteboardContentService appliqué (bug MinIO 1-octet)\n";
+    echo "[setup] Patch WhiteboardContentService appliqué (bug RustFS 1-octet)\n";
 } else {
     echo "[setup] WhiteboardContentService: pattern non trouvé — déjà patché ou version différente\n";
 }
@@ -235,17 +235,17 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7. Stockage objet S3 — MinIO via HAProxy (port 9000 interne)
+# 7. Stockage objet S3 — RustFS via HAProxy (port 9000 interne)
 # IMPORTANT : à configurer avant la création de données utilisateur
 # ---------------------------------------------------------------------------
-step "Configuration stockage objet S3 (MinIO)"
+step "Configuration stockage objet S3 (RustFS)"
 
 occ config:system:set objectstore class                  --value '\OC\Files\ObjectStore\S3'
 occ config:system:set objectstore arguments bucket       --value "${NEXTCLOUD_S3_BUCKET:-nextcloud}"
 occ config:system:set objectstore arguments autocreate   --type boolean --value true
 occ config:system:set objectstore arguments hostname     --value 'haproxy'
-occ config:system:set objectstore arguments key          --value "${MINIO_ACCESS_KEY}"
-occ config:system:set objectstore arguments secret       --value "${MINIO_SECRET_KEY}"
+occ config:system:set objectstore arguments key          --value "${RUSTFS_ACCESS_KEY}"
+occ config:system:set objectstore arguments secret       --value "${RUSTFS_SECRET_KEY}"
 occ config:system:set objectstore arguments port         --type integer --value 9000
 occ config:system:set objectstore arguments use_path_style --type boolean --value true
 occ config:system:set objectstore arguments use_ssl      --type boolean --value false

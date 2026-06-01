@@ -9,7 +9,7 @@
 
 **High-availability Nextcloud infrastructure — deployable with a single command**
 
-[![Version](https://img.shields.io/badge/version-2.3.5-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
+[![Version](https://img.shields.io/badge/version-2.4.0-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9?logo=nextcloud&logoColor=white)](https://nextcloud.com)
 [![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?logo=php&logoColor=white)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -19,7 +19,7 @@
 [![HAProxy](https://img.shields.io/badge/HAProxy-2.8-3E69AF?logo=haproxy&logoColor=white)](https://www.haproxy.org)
 [![MariaDB](https://img.shields.io/badge/MariaDB-Galera-003545?logo=mariadb&logoColor=white)](https://mariadb.com/kb/en/galera-cluster/)
 [![Redis](https://img.shields.io/badge/Redis-Cluster-DC382D?logo=redis&logoColor=white)](https://redis.io/docs/management/scaling/)
-[![MinIO](https://img.shields.io/badge/MinIO-S3-C72E49?logo=minio&logoColor=white)](https://min.io)
+[![RustFS](https://img.shields.io/badge/RustFS-S3-E84B2F?logo=rust&logoColor=white)](https://rustfs.com)
 [![Collabora](https://img.shields.io/badge/Collabora-CODE-0D72BB?logo=libreoffice&logoColor=white)](https://www.collaboraonline.com)
 
 [![HTTPS](https://img.shields.io/badge/HTTPS-enforced-brightgreen?logo=letsencrypt&logoColor=white)](https://letsencrypt.org)
@@ -35,7 +35,7 @@
 ---
 
 <details>
-<summary><strong>Screenshots</strong> — Login · Dashboard · Files · Collabora · Talk · Whiteboard · MinIO · HAProxy</summary>
+<summary><strong>Screenshots</strong> — Login · Dashboard · Files · Collabora · Talk · Whiteboard · RustFS · HAProxy</summary>
 
 <div align="center">
 <table>
@@ -52,7 +52,7 @@
 <td align="center"><img src="img/whiteboard.png" width="480" alt="Whiteboard"/><br/><sub>Whiteboard</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="img/minio-console.png" width="480" alt="MinIO Console"/><br/><sub>MinIO Console</sub></td>
+<td align="center"><img src="img/s3-console.png" width="480" alt="RustFS built-in Console"/><br/><sub>RustFS Console (built-in)</sub></td>
 <td align="center"><img src="img/haproxy-stats.png" width="480" alt="HAProxy Stats"/><br/><sub>HAProxy Stats</sub></td>
 </tr>
 </table>
@@ -69,8 +69,8 @@
 - 🤖 **Local AI** — on-premise language model deployment connected to Nextcloud AI
 - ✍️ **Electronic document signing** — eIDAS-compliant signing service integration
 - 📝 **Choice between Collabora or OnlyOffice** — office suite selection at deployment time
-- 💽 **Classic storage (volumes) as an alternative to S3** — MinIO-free option for simple environments
-- 🪨 **Ceph support** — distributed alternative to MinIO for object storage
+- 💽 **Classic storage (volumes) as an alternative to S3** — RustFS-free option for simple environments
+- 🪨 **Ceph support** — distributed alternative to RustFS for object storage
 
 ---
 
@@ -83,7 +83,7 @@
 - [🧩 Deployed services](#-deployed-services)
 - [🔧 Nextcloud configuration](#-nextcloud-configuration)
 - [🔄 High availability](#-high-availability)
-- [💾 MinIO object storage](#-minio-object-storage)
+- [💾 RustFS object storage](#-rustfs-object-storage)
 - [🔒 HAProxy security](#-haproxy-security)
 - [📝 Collabora CODE](#-collabora-code)
 - [🎙️ Nextcloud Talk — HA Signaling](#️-nextcloud-talk--ha-signaling)
@@ -117,7 +117,7 @@ The script detects your OS, installs Docker if needed, asks the essential questi
 | ① | RAM check (≥ 16 GB), disk (≥ 50 GB), Docker ≥ 20 |
 | ② | OS detection and automatic Docker + Compose installation |
 | ③ | Repository clone from GitHub |
-| ④ | Interactive prompts — domains, nodes, MinIO disks, certificates |
+| ④ | Interactive prompts — domains, nodes, RustFS disks, certificates |
 | ⑤ | Secure secret generation (no `#` character) |
 | ⑥ | `.env`, `docker-compose.yml` and Galera config generation |
 | ⑦ | DNS check + Let's Encrypt SSL certificates (HTTP-01 standalone) |
@@ -131,7 +131,7 @@ The script detects your OS, installs Docker if needed, asks the essential questi
 |-----------|------------|--------|
 | MariaDB Galera | **Odd** number of nodes | Galera quorum (prevents split-brain) |
 | Redis Cluster | **Even number ≥ 6** | Masters + replicas (3+3 minimum) |
-| MinIO | Tolerance calculated and displayed | Erasure coding EC:N/2 |
+| RustFS | Tolerance calculated and displayed | Erasure coding EC:N/2 |
 | Nextcloud | Waits for Galera to be SYNCED | WSREP check via PHP PDO |
 
 ---
@@ -155,7 +155,7 @@ flowchart TD
 
     fpm --> galera[("🗄️ MariaDB Galera\ngalera-net · odd nodes")]
     fpm --> redis["🔴 Redis Cluster\n≥ 6 nodes · next-net"]
-    fpm --> minio[("📦 MinIO S3\nErasure coding · storage-net")]
+    fpm --> rustfs[("📦 RustFS S3\nErasure coding · storage-net")]
 
     wb --> redis_wb["🔴 redis-whiteboard\nStreams · whiteboard-net"]
 
@@ -169,7 +169,7 @@ flowchart TD
 ```
 
 > [!NOTE]
-> Only HAProxy exposes ports 80 and 443 to the outside. All user files are stored in MinIO. A node failure is **transparent** to the end user.
+> Only HAProxy exposes ports 80 and 443 to the outside. All user files are stored in RustFS. A node failure is **transparent** to the end user.
 > ¹ coturn is optional — port 3478 UDP/TCP is only required when coturn is enabled.
 
 **Request flow:**
@@ -212,22 +212,22 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 | `galera-autoheal` | Automatic restart of out-of-sync Galera nodes — `pgrep autoheal` healthcheck |
 | `redis-node1..N` | Distributed cache (Redis Cluster) |
 | `redis-cluster-init` | Redis cluster initialization (retry on-failure:5) |
-| `minio-node1..N` | Distributed S3 object storage (erasure coding) |
+| `rustfs-node1..N` | Distributed S3 object storage (erasure coding) |
 | `collabora-node1..N` | Online collaborative office editing — `/hosting/discovery` healthcheck on all nodes |
 | `whiteboard-node1..N` | Real-time collaborative whiteboard |
 | `redis-whiteboard` | Shared whiteboard state (Redis Streams) |
-| `minio-console` *(optional)* | MinIO web console — accessible via `/s3-console` |
+| RustFS built-in console *(optional)* | RustFS web console on port 9001 — accessible via `/s3-console` |
 | `notify-push` | Notify Push — real-time sync notifications over WebSocket (`/push`) |
 | `nats` *(Talk only)* | NATS message broker — distributes signaling events across Talk HA nodes |
 | `spreed-signaling-01..N` *(Talk only)* | WebSocket signaling server — HAProxy load-balances across all nodes |
 | `coturn` *(Talk, optional)* | TURN/STUN relay — media relay for clients behind NAT or strict firewalls |
 
-> MinIO bucket versioning is automatically enabled by `deploy.sh` at the end of the Nextcloud installation, via `minio/mc:latest` (image pulled at deployment but without a persistent container).
+> RustFS bucket versioning is automatically enabled by `deploy.sh` at the end of the Nextcloud installation, via the `mc` S3 CLI (image pulled at deployment but without a persistent container).
 
 **Exposed ports:** `80` (HTTPS redirect) · `443` (Nextcloud, Collabora, Whiteboard, Talk, Push) · `3478/udp+tcp` (coturn TURN/STUN — only when coturn is enabled)
 
 > [!CAUTION]
-> HAProxy stats (`/stats`) and the MinIO console (`/s3-console`) are diagnostic tools that can be enabled during deployment. Both pages require credentials, but they remain exposed on Nextcloud's public URL and reveal sensitive infrastructure information. Reserve for test environments or disable after use.
+> HAProxy stats (`/stats`) and the RustFS console (`/s3-console`) are diagnostic tools that can be enabled during deployment. Both pages require credentials, but they remain exposed on Nextcloud's public URL and reveal sensitive infrastructure information. Reserve for test environments or disable after use.
 
 ---
 
@@ -240,7 +240,7 @@ Everything is applied automatically by `nextcloud-setup` on first startup.
 - **Redis Cluster** — distributed cache, sessions and file locking
 - **Collabora Online** — office editing (Writer, Calc, Impress)
 - **Whiteboard** — real-time collaborative whiteboard
-- **MinIO S3** — object storage for all user files
+- **RustFS S3** — object storage for all user files
 - **Nextcloud Talk** — HA signaling via Talk HA + NATS; optional coturn TURN relay
 - **Notify Push** — real-time desktop/mobile sync notifications over WebSocket
 - `trusted_proxies` + `forwarded_for_headers` — real client IPs forwarded behind HAProxy
@@ -273,7 +273,7 @@ Everything is applied automatically by `nextcloud-setup` on first startup.
 | 🔀 Nextcloud FPM | ✅ Automatic | No impact — HAProxy redistributes in < 10 s |
 | 🗄️ MariaDB Galera | ✅ Automatic | No impact — quorum maintained, `galera-autoheal` restarts out-of-sync nodes |
 | 🔴 Redis Cluster | ✅ Automatic | No impact — cluster tolerates 1 failure per hash slot |
-| 📦 MinIO | ✅ Automatic | Reads continue, writes restored as soon as the node returns |
+| 📦 RustFS | ✅ Automatic | Reads continue, writes restored as soon as the node returns |
 | 📝 Collabora | ✅ Automatic | Editing session lost, automatic reconnection |
 | 🎨 Whiteboard | ✅ Automatic | Automatic WebSocket reconnection (state persisted in Redis) |
 | 🎙️ Talk HA | ✅ Automatic | HAProxy removes the failing node — active calls may reconnect once |
@@ -298,22 +298,22 @@ for i in 1 2 3; do echo "node$i:"; docker run --rm -v maxscale_mariadb_n${i}_dat
 
 ---
 
-## 💾 MinIO object storage
+## 💾 RustFS object storage
 
-MinIO runs in **distributed erasure coding** mode — N nodes × D drives per node.
+RustFS runs in **distributed erasure coding** mode — N nodes × D drives per node.
 
 | Configuration | Read tolerance | Write tolerance |
 |---|---|---|
 | 4 nodes × 2 drives (8 drives total) | Loss of 4 drives | Loss of 3 drives |
 | 4 nodes × 4 drives (16 drives total) | Loss of 8 drives | Loss of 7 drives |
 
-**Test mode (single-server)** — all paths on the same physical disk (`/data/minio/...`). Automatically offered by `deploy.sh`. Use only for development.
+**Test mode (single-server)** — all paths on the same physical disk (`/data/rustfs/...`). Automatically offered by `deploy.sh`. Use only for development.
 
 **Production mode** — each `DATA{N}` must point to a **separate physical disk** for erasure coding to be truly effective.
 
 ### Disk Wizard
 
-`deploy.sh` includes an interactive disk preparation wizard that runs automatically when you answer **"No"** to test mode. It scans the server's available block devices and lets you format and mount them one by one before configuring MinIO paths.
+`deploy.sh` includes an interactive disk preparation wizard that runs automatically when you answer **"No"** to test mode. It scans the server's available block devices and lets you format and mount them one by one before configuring RustFS paths.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -332,11 +332,11 @@ For each unformatted disk you select, the wizard:
 1. **Formats** the disk as XFS with optimized parameters:
    - Log size scaled to disk capacity (`lazy-count=1` for faster metadata)
    - Allocation group count (`agcount`) tuned for parallelism on disks ≥ 10 GB
-2. **Mounts** the disk to a path of your choice (default: `/data/minio/node{N}/data{N}`)
+2. **Mounts** the disk to a path of your choice (default: `/data/rustfs/node{N}/data{N}`)
 3. **Adds a persistent fstab entry** so the mount survives reboots
 4. **Refreshes the disk table** so the updated filesystem and mount point are visible immediately
 
-The wizard then uses the confirmed mount paths as MinIO `DATA{N}` paths in `docker-compose.yml`.
+The wizard then uses the confirmed mount paths as RustFS `DATA{N}` paths in `docker-compose.yml`.
 
 > [!TIP]
 > The wizard only proposes disks that are not already mounted to critical paths (e.g., `/`, `/boot`). It displays the disk model and current filesystem so you can identify the right devices before formatting.
@@ -347,38 +347,35 @@ The wizard then uses the confirmed mount paths as MinIO `DATA{N}` paths in `dock
 ### Cluster inspection
 
 ```bash
-source /opt/nxt-maxscale/.env
-docker run --rm --network storage-net --entrypoint sh minio/mc -c "
-  mc alias set r http://minio-node1:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} --quiet
-  mc admin info r
-"
+# Check node status and recent logs
+docker logs rustfs-node1 --tail 50
+docker ps --filter "name=rustfs-node" --format "table {{.Names}}\t{{.Status}}"
 ```
 
-### Repair after node failure
+### Node failure recovery
+
+RustFS performs automatic data recovery through erasure coding — no manual healing is required. When a node comes back online, data is reconstructed automatically from the remaining shards.
 
 ```bash
-source /opt/nxt-maxscale/.env
-docker run --rm --network storage-net --entrypoint sh minio/mc -c "
-  mc alias set r http://minio-node1:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} --quiet
-  mc admin heal -r r/nextcloud
-"
+# Verify all nodes are healthy after a recovery
+docker ps --filter "name=rustfs-node" --format "table {{.Names}}\t{{.Status}}\t{{.Health}}"
 ```
 
-### MinIO web console (optional)
+### RustFS web console (optional)
 
 > [!WARNING]
-> The console is protected by MinIO credentials (`MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`), but it is exposed on Nextcloud's public URL without IP restriction or additional network layer. It provides direct access to all MinIO buckets. Use only in test or diagnostic environments, and disable afterwards.
+> The console is protected by RustFS credentials (`RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`), but it is exposed on Nextcloud's public URL without IP restriction or additional network layer. It provides direct access to all RustFS buckets. Use only in test or diagnostic environments, and disable afterwards.
 
-Enabled during deployment by `deploy.sh` (same principle as HAProxy stats on `/stats`). Once enabled, the console is accessible from the browser without exposing an additional port.
+Enabled during deployment by `deploy.sh` (same principle as HAProxy stats on `/stats`). The console is built into RustFS — no separate container is needed. Once enabled (`RUSTFS_CONSOLE_ENABLE=true`), port 9001 is active on all RustFS nodes.
 
 | | |
 |---|---|
-| **URL** | `https://<NEXTCLOUD_DOMAIN>/s3-console/login` |
-| **Login** | MinIO access key (`MINIO_ACCESS_KEY`) |
-| **Password** | MinIO secret key (`MINIO_SECRET_KEY`) |
-| **Image** | [`ghcr.io/georgmangold/console`](https://github.com/georgmangold/console) |
+| **URL** | `https://<NEXTCLOUD_DOMAIN>/s3-console/` |
+| **Login** | RustFS access key (`RUSTFS_ACCESS_KEY`) |
+| **Password** | RustFS secret key (`RUSTFS_SECRET_KEY`) |
+| **Port** | 9001 (built into `rustfs/rustfs`, no extra image) |
 
-HAProxy routes `/s3-console/*` to the `minio-console:9090` container **stripping the `/s3-console` prefix** before forwarding to the Go server, which prevents MIME errors on the React SPA's static assets. Routing and authentication are handled entirely client-side by the React SPA.
+HAProxy routes `/s3-console/*` to the RustFS nodes on port 9001, **stripping the `/s3-console` prefix** before forwarding so the built-in console receives requests at `/`.
 
 > [!TIP]
 > To enable or disable the console on an existing deployment, re-run `deploy.sh` — the answer is saved in the configuration file and reused on each run.
@@ -443,7 +440,7 @@ The HAProxy statistics page displays the real-time status of **all** backends:
 | `signaling` | Talk HA nodes (WS :8080) — Talk only |
 | `notify-push` | Notify Push (:7867) |
 | `galera` | MariaDB nodes (:3306) |
-| `minio` | MinIO S3 nodes (:9000) |
+| `rustfs` | RustFS S3 nodes (:9000) |
 | `redis-cluster` | Redis nodes (:6379) |
 
 </details>
@@ -583,7 +580,7 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 | **Collabora CODE** | ✅ | ✅ | `home_mode` binary patch reapplied on new nodes |
 | **Whiteboard** | ✅ | ✅ | |
 | **Talk HA** | ✅ | ✅ | HAProxy updated automatically — NATS and coturn unaffected |
-| **MinIO** | ✅ | ❌ | Scale-up via pool expansion; scale-down via `mc admin decommission` |
+| **RustFS** | ✅ | ❌ | Scale-up via pool expansion; scale-down via RustFS admin tools |
 
 <details>
 <summary>Internal mechanics — how each service scales step by step</summary>
@@ -604,11 +601,11 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 2. `--cluster del-node` for the replica then the master
 3. `--cluster fix` + `--cluster rebalance` to rebalance remaining slots
 
-**MinIO (scale-up)**
-- New node paths are collected interactively (default: `/data/minio/nodeN/dataN`)
-- The new pool is registered in `.minio-pools` (`start:end` per line)
+**RustFS (scale-up)**
+- New node paths are collected interactively (default: `/data/rustfs/nodeN/dataN`)
+- The new pool is registered in `.rustfs-pools` (`start:end` per line)
 - `gen_compose` rebuilds the `server` command with all pools: `server pool1 pool2 ...`
-- All MinIO nodes restart with the new command (~30 s downtime, data preserved)
+- All RustFS nodes restart with the new command (~30 s downtime, data preserved)
 
 </details>
 
@@ -619,7 +616,7 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 | Redis — even delta | Each batch = 1 master + 1 replica |
 | Redis — minimum 6 | 3 masters + 3 replicas minimum |
 | Galera — odd count | Quorum required |
-| MinIO — scale-down | Not supported — decommission via `mc admin decommission start` |
+| RustFS — scale-down | Not supported — decommission via RustFS admin decommission procedure |
 | Passwords | Never regenerated during scaling — `.env` is preserved |
 
 ### Persistence across reboots
@@ -628,8 +625,8 @@ Scaling configuration is stored in:
 
 | File | Content | Persistence |
 |------|---------|:-----------:|
-| `.env` | Passwords, MinIO paths, MINIO_MODE, MINIO_BYPASS | ✅ Permanent |
-| `.minio-pools` | MinIO pool history | ✅ Permanent |
+| `.env` | Passwords, RustFS paths, RUSTFS_MODE, RUSTFS_BYPASS | ✅ Permanent |
+| `.rustfs-pools` | RustFS pool history | ✅ Permanent |
 | `/tmp/.nxt-maxscale-config.env` | deploy.sh answer cache | ❌ Lost on reboot |
 
 If the `/tmp/` cache is absent, `deploy.sh` automatically rebuilds the configuration from `.env` and the state of running containers.
@@ -727,12 +724,12 @@ docker run --rm \
     /etc/letsencrypt/live/stack/privkey.pem > /certs/stack.pem && chmod 600 /certs/stack.pem"
 ```
 
-### 4. Create MinIO directories
+### 4. Create RustFS directories
 
 ```bash
 for node in 1 2 3 4; do
   for disk in 1 2 3 4; do
-    path=$(grep "^MINIO_NODE${node}_DATA${disk}=" .env | cut -d= -f2)
+    path=$(grep "^RUSTFS_NODE${node}_DATA${disk}=" .env | cut -d= -f2)
     mkdir -p "${path}"
   done
 done
@@ -760,7 +757,7 @@ Three test series cover the platform: **raw HTTP microbenchmarks** (pure through
 
 ### Raw HTTP microbenchmarks — 6 FPM config (reference)
 
-> Measurements taken on **6 FPM · 5 Galera · 6 Redis · 4 MinIO · 3 Collabora · 3 Whiteboard**, from the server itself via HAProxy/TLS.
+> Measurements taken on **6 FPM · 5 Galera · 6 Redis · 4 RustFS · 3 Collabora · 3 Whiteboard**, from the server itself via HAProxy/TLS.
 
 | Endpoint | Concurrency | Throughput | Average | P95 | P99 | Errors |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -783,7 +780,7 @@ All three tests were launched **from the server itself** (k6 locally): TLS netwo
 
 #### Test A — SME configuration, nominal load (k6 v0.55)
 
-Config: **6 FPM · 5 Galera · 6 Redis · 4 MinIO · 3 Collabora · 3 Whiteboard** · 7.6 GB RAM VPS
+Config: **6 FPM · 5 Galera · 6 Redis · 4 RustFS · 3 Collabora · 3 Whiteboard** · 7.6 GB RAM VPS
 
 | Parameter | Value |
 |-----------|-------|
@@ -813,7 +810,7 @@ Config: **6 FPM · 5 Galera · 6 Redis · 4 MinIO · 3 Collabora · 3 Whiteboard
 
 #### Test B — Small team configuration, saturation load (k6 v2.0.0) — 2026-05-27
 
-Config: **3 FPM · 3 Galera · 6 Redis · 4 MinIO · 3 Collabora · 1 Whiteboard** · 7.6 GB RAM VPS
+Config: **3 FPM · 3 Galera · 6 Redis · 4 RustFS · 3 Collabora · 1 Whiteboard** · 7.6 GB RAM VPS
 
 > The 3 FPM configuration is sized for ~1,450 users (nominal peak ~24 VUs). This test intentionally pushes to **60 VUs — 2.5× nominal capacity** — to measure saturation behavior.
 
@@ -847,7 +844,7 @@ Config: **3 FPM · 3 Galera · 6 Redis · 4 MinIO · 3 Collabora · 1 Whiteboard
 
 #### Test C — Full stack with Talk Backend, nominal load (k6 v0.57.0) — 2026-06-01
 
-Config: **6 FPM · 5 Galera · 12 Redis · 4 MinIO · 6 Collabora · 3 Whiteboard · 6 Talk HA · coturn · Notify Push** — Intel Xeon D-1521 @ 2.40 GHz · 15.5 GB RAM · Dedicated server
+Config: **6 FPM · 5 Galera · 12 Redis · 4 RustFS · 6 Collabora · 3 Whiteboard · 6 Talk HA · coturn · Notify Push** — Intel Xeon D-1521 @ 2.40 GHz · 15.5 GB RAM · Dedicated server
 
 > First test run on the full production stack — all services including Talk HA, coturn, and Notify Push deployed simultaneously. Nominal load: 44 VUs across 6 concurrent scenarios.
 
@@ -867,7 +864,7 @@ Config: **6 FPM · 5 Galera · 12 Redis · 4 MinIO · 6 Collabora · 3 Whiteboar
 | Talk signaling (`/api/v1/welcome`) | 6 | ~5 ms | — | — | — | 100% ✅ | — |
 | Notify Push (HTTP) | 3 | 2.8 ms | 2 ms | 5 ms | **7 ms** | < 2 s | ✅ |
 
-> ⚠️ WebDAV download p95 = 3.1 s slightly exceeds the 2 s SLA at nominal load — all reads completed successfully (0 errors). Caused by simultaneous writes on the same MinIO cluster from 10 WebDAV VUs.
+> ⚠️ WebDAV download p95 = 3.1 s slightly exceeds the 2 s SLA at nominal load — all reads completed successfully (0 errors). Caused by simultaneous writes on the same RustFS cluster from 10 WebDAV VUs.
 
 | Metric | Value |
 |--------|-------|
@@ -947,7 +944,7 @@ The 6 Talk HA signaling nodes authenticate users in under **100 ms p(95)** end-t
 
 > **★** Measured SME config at nominal load (Test A) · **▲** Small team config tested at 2.5× nominal load (Test B) — model values correspond to nominal load  
 > **Active** = concurrent × 6 (5-minute session window) · **Total users** = active × 10 (10% connected at peak)  
-> **Min RAM** = 3 GB/FPM node + 13 GB overhead (5 Galera · 6 Redis · 4 MinIO · 3 Collabora · 3 Whiteboard · HAProxy)
+> **Min RAM** = 3 GB/FPM node + 13 GB overhead (5 Galera · 6 Redis · 4 RustFS · 3 Collabora · 3 Whiteboard · HAProxy)
 
 ---
 
@@ -960,7 +957,7 @@ The 6 Talk HA signaling nodes authenticate users in under **100 ms p(95)** end-t
 | Nextcloud FPM (per node) | 500 MB – 1 GB | 5% | 30–60% | Internal :9000 |
 | MariaDB Galera (per node) | 1–2 GB | 5% | 20–40% | IST/SST replication |
 | Redis (per node) | 50–200 MB | < 1% | 2–5% | Cluster gossip + keyspace |
-| MinIO (per node) | 256–512 MB | < 1% | 10–30% | Erasure coding inter-nodes |
+| RustFS (per node) | 256–512 MB | < 1% | 10–30% | Erasure coding inter-nodes |
 | Collabora CODE (per node) | 500 MB – 1 GB | 2% | 40–80% | WOPI + WebSocket |
 | Whiteboard (per node) | ~100 MB | < 1% | 5–10% | Real-time WebSocket |
 | galera-autoheal | ~20 MB | < 1% | < 1% | Local Docker socket |
@@ -1040,7 +1037,7 @@ Once the infrastructure is deployed, **restricting exposed ports** is the first 
 | `22` | TCP | SSH administration (restrict to your IP if possible) |
 | `3478` | UDP + TCP | coturn TURN/STUN relay — **only when coturn is enabled** |
 
-> All other ports (3306 MariaDB, 6379 Redis, 9000 MinIO, 9980 Collabora, 8080 signaling…) are internal to Docker networks and must **never** be exposed on the public interface.
+> All other ports (3306 MariaDB, 6379 Redis, 9000 RustFS, 9980 Collabora, 8080 signaling…) are internal to Docker networks and must **never** be exposed on the public interface.
 
 The two recommended complementary approaches: a **UFW firewall** to filter incoming traffic, and **fail2ban** to block SSH intrusion attempts.
 
@@ -1130,7 +1127,7 @@ sudo fail2ban-client status sshd
 | Common scan paths (`.env`, `.git`, `/wp-admin`, `/phpmyadmin`…) → 403 | ✅ |
 | Collabora admin console (`/browser/dist/admin`) → 403 | ✅ |
 | `/stats` and `/s3-console` protected by credentials | ✅ |
-| No sensitive ports exposed externally (MariaDB, Redis, MinIO, NATS all closed) | ✅ |
+| No sensitive ports exposed externally (MariaDB, Redis, RustFS, NATS all closed) | ✅ |
 | Cookies: `Secure` + `HttpOnly` + `SameSite=Lax/Strict` | ✅ |
 | `Server` and `X-Powered-By` headers removed | ✅ |
 | CSP extended for WebSocket connections to Collabora, Whiteboard and Talk | ✅ |
@@ -1161,9 +1158,9 @@ All Docker images are pinned to precise versions rather than floating tags (`:la
 | `IMG_CERTBOT` | `certbot/certbot` | `v5.6.0` |
 | `IMG_REDIS` | `redis` | `7.4-alpine` |
 | `IMG_MARIADB` | `maxscale-mariadb-galera` | `11.4` |
-| `IMG_MINIO` | `minio/minio` | `RELEASE.2025-09-07T16-13-09Z` |
-| `IMG_MINIO_MC` | `minio/mc` | `RELEASE.2025-08-13T08-35-41Z` |
-| `IMG_MINIO_CONSOLE` | `ghcr.io/georgmangold/console` | `v1.9.1` |
+| `IMG_RUSTFS` | `rustfs/rustfs` | `RELEASE.2025-09-07T16-13-09Z` |
+| `IMG_MC` | `mc` (S3-compatible CLI) | `RELEASE.2025-08-13T08-35-41Z` |
+| `IMG_RUSTFS` console | built-in to `rustfs/rustfs` |
 | `IMG_COLLABORA` | `collabora/code` | `25.04.9.4.1` |
 | `IMG_AUTOHEAL` | `willfarrell/autoheal` | `latest` |
 | `IMG_WHITEBOARD` | `ghcr.io/nextcloud-releases/whiteboard` | `v1.5.8` |
@@ -1202,20 +1199,20 @@ sudo bash deploy.sh   # → choose [1] Quick update
 
 | Data | Location | Content |
 |------|----------|---------|
-| **User files** | MinIO data paths on the host (default: `/data/minio/nodeN/dataN`) | Photos, documents, files — stored in S3 via the `objectstore` driver |
+| **User files** | RustFS data paths on the host (default: `/data/rustfs/nodeN/dataN`) | Photos, documents, files — stored in S3 via the `objectstore` driver |
 | Database | Docker volume `mariadb-data-node*` | Accounts, shares, metadata |
 | Nextcloud config | Docker volume `nextcloud-config` | `config.php`, installed apps |
 | Deployment files | `$INSTALL_DIR` (e.g. `/opt/nxt-maxscale`) | `.env`, `haproxy.cfg`, SSL certificates |
 
-> **Note:** user files are **not** in a Docker volume `nextcloud-data` — they are stored directly in MinIO via the S3 driver (`objectstore`). MinIO backup is therefore the primary backup of user data.
+> **Note:** user files are **not** in a Docker volume `nextcloud-data` — they are stored directly in RustFS via the S3 driver (`objectstore`). RustFS backup is therefore the primary backup of user data.
 
 ### Recommended strategies
 
 **VM snapshots (Azure / cloud)** — the simplest solution: snapshot of the OS disk + data at regular intervals from the Azure portal or via `az snapshot create`. Full restoration in minutes.
 
-**MinIO sync to external storage** *(top priority)* — `mc mirror` to a remote S3 bucket or Azure Blob Storage:
+**RustFS sync to external storage** *(top priority)* — `mc mirror` to a remote S3 bucket or Azure Blob Storage:
 ```bash
-docker exec minio-node1 mc mirror --overwrite local/nextcloud s3-remote/nextcloud-backup
+docker exec rustfs-node1 mc mirror --overwrite local/nextcloud s3-remote/nextcloud-backup
 ```
 
 **MariaDB dump (Galera)** — consistent logical export from any node:
@@ -1253,7 +1250,7 @@ docker run --rm -v nextcloud-config:/data -v /backup:/backup alpine \
 ### ⚖️ Disclaimer
 
 > This project is an **independent initiative** and is neither affiliated with, sponsored by, nor endorsed by
-> **Nextcloud GmbH**, **Collabora Productivity**, **MariaDB Corporation**, **Redis Ltd.**, **MinIO Inc.**
+> **Nextcloud GmbH**, **Collabora Productivity**, **MariaDB Corporation**, **Redis Ltd.**, **RustFS Inc.**
 > or any other company whose technologies are integrated.
 >
 > *Names and trademarks remain the property of their respective owners.*

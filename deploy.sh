@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.3.5
+# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.4.0
 # Usage: sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -20,9 +20,8 @@ CERTBOT_STAGING="no"
 # ─── Images — pinned versions ─────────────────────────────────────────────────
 IMG_CERTBOT="certbot/certbot:v5.6.0"
 IMG_AUTOHEAL="willfarrell/autoheal:latest"
-IMG_MINIO="minio/minio:RELEASE.2025-09-07T16-13-09Z"
-IMG_MINIO_MC="minio/mc:RELEASE.2025-08-13T08-35-41Z"
-IMG_MINIO_CONSOLE="ghcr.io/georgmangold/console:v1.9.1"
+IMG_RUSTFS="rustfs/rustfs:latest"
+IMG_MC="minio/mc:RELEASE.2025-08-13T08-35-41Z"  # S3-compatible CLI — works with RustFS, Ceph, and any S3-compatible storage
 IMG_COLLABORA="collabora/code:25.04.9.4.1"
 IMG_WHITEBOARD="ghcr.io/nextcloud-releases/whiteboard:v1.5.8"
 IMG_NATS="nats:2.10-alpine"
@@ -536,11 +535,11 @@ ask_nodes() {
   ask_int "Redis Cluster — nodes"      "6" is_even_min6    "Even number ≥ 6 required (masters + replicas)"              REDIS_NODES
   ask_int "Collabora — nodes"          "3" is_positive_int "Integer ≥ 1 required"                                       COLLAB_NODES
   ask_int "Whiteboard — nodes"         "2" is_positive_int "Integer ≥ 1 required"                                       WB_NODES
-  ask_int "MinIO — nodes"             "4" is_positive_int "Integer ≥ 1 required"                                       MINIO_NODES
-  ask_int "MinIO — disks per node"    "4" is_positive_int "Integer ≥ 1 required"                                       MINIO_DISKS
+  ask_int "RustFS — nodes"             "4" is_positive_int "Integer ≥ 1 required"                                       RUSTFS_NODES
+  ask_int "RustFS — disks per node"    "4" is_positive_int "Integer ≥ 1 required"                                       RUSTFS_DISKS
 }
 
-# ─── [MINIO] Disk wizard helpers ─────────────────────────────────────────────
+# ─── [RUSTFS] Disk wizard helpers ─────────────────────────────────────────────
 
 # Returns "nvme", "ssd", or "hdd" for a given block device
 _detect_disk_type() {
@@ -562,11 +561,11 @@ _disk_size_gb() {
 }
 
 # Sets globals XFS_MKFS_OPTS (array), XFS_MOUNT_OPTS, XFS_PROFILE_DESC
-# based on disk type and size — tuned for MinIO object storage workloads
+# based on disk type and size — tuned for RustFS object storage workloads
 _xfs_profile() {
   local disk_type="$1" size_gb="$2"
 
-  # Log size: XFS write-ahead log — default 10MB is far too small for MinIO.
+  # Log size: XFS write-ahead log — default 10MB is far too small for RustFS.
   # Larger log reduces per-write latency by amortising commits over more data.
   # Allocation groups: parallelism units. More AGs benefit multi-threaded I/O.
   # HDDs are sequential-bound so fewer AGs are better (less head seeking).
@@ -695,7 +694,7 @@ _show_disk_table() {
 
 # Checks / formats / mounts a disk and adds it to fstab if needed.
 # Args: dev mount_path current_fs preferred_fs
-_prepare_minio_disk() {
+_prepare_rustfs_disk() {
   local dev="$1" mount_path="$2" current_fs="$3" preferred_fs="$4"
 
   # Already mounted at target — nothing to do
@@ -730,7 +729,7 @@ _prepare_minio_disk() {
     warn "⚠  This will PERMANENTLY erase all data on ${dev}."
     prompt_yn "Format ${dev} as ${chosen_fs^^}?" "N" || die "Format cancelled — aborting"
 
-    local label; label="minio-$(basename "$dev")"
+    local label; label="rustfs-$(basename "$dev")"
 
     if [[ "$chosen_fs" == "xfs" ]]; then
       # shellcheck disable=SC2086
@@ -804,8 +803,8 @@ _prepare_minio_disk() {
   fi
 }
 
-# --- ask_minio ---
-minio_fault_tolerance() {
+# --- ask_rustfs ---
+rustfs_fault_tolerance() {
   local nodes="$1" disks="$2" disk_size_gb="${3:-0}"
   local total=$(( nodes * disks ))
   local tol_read=$(( total / 2 ))
@@ -830,13 +829,13 @@ minio_fault_tolerance() {
   fi
 }
 
-ask_minio() {
-  step "MinIO disk configuration (${MINIO_NODES} nodes × ${MINIO_DISKS} disks)"
-  declare -gA MINIO_PATHS
+ask_rustfs() {
+  step "RustFS disk configuration (${RUSTFS_NODES} nodes × ${RUSTFS_DISKS} disks)"
+  declare -gA RUSTFS_PATHS
 
   echo ""
-  echo -e "  ${C_WHITE}How to configure MinIO disks?${C_RESET}"
-  echo -e "  ${C_CYAN}[1]${C_RESET} Single-server test  — /data/minio/ (directories created automatically)"
+  echo -e "  ${C_WHITE}How to configure RustFS disks?${C_RESET}"
+  echo -e "  ${C_CYAN}[1]${C_RESET} Single-server test  — /data/rustfs/ (directories created automatically)"
   echo -e "  ${C_CYAN}[2]${C_RESET} Manual paths        — enter mount points manually (disks already prepared)"
   echo -e "  ${C_CYAN}[3]${C_RESET} Disk wizard         — detect disks, select, format and mount automatically"
   echo ""
@@ -849,59 +848,59 @@ ask_minio() {
     error "Enter 1, 2 or 3"
   done
 
-  MINIO_MODE="test"
+  RUSTFS_MODE="test"
   case "$choice" in
     1)
-      MINIO_MODE="test"
+      RUSTFS_MODE="test"
       local n d
-      for n in $(seq 1 "$MINIO_NODES"); do
-        MINIO_PATHS["${n}_path"]="/data/minio/node${n}"
-        for d in $(seq 1 "$MINIO_DISKS"); do
-          MINIO_PATHS["${n}_${d}"]="/data/minio/node${n}/data${d}"
+      for n in $(seq 1 "$RUSTFS_NODES"); do
+        RUSTFS_PATHS["${n}_path"]="/data/rustfs/node${n}"
+        for d in $(seq 1 "$RUSTFS_DISKS"); do
+          RUSTFS_PATHS["${n}_${d}"]="/data/rustfs/node${n}/data${d}"
         done
       done
       ;;
     2)
-      MINIO_MODE="manual"
-      box "Recommended disk format for MinIO" \
+      RUSTFS_MODE="manual"
+      box "Recommended disk format for RustFS" \
         "Filesystem : XFS  (best for object storage — large sequential I/O)" \
         "             ext4 also supported, but XFS recommended" \
         "" \
-        "Format     : mkfs.xfs -f -L minio-node1-disk1 /dev/sdX" \
+        "Format     : mkfs.xfs -f -L rustfs-node1-disk1 /dev/sdX" \
         "Mount opts : noatime,nodiratime  (avoids access-time write overhead)" \
         "" \
         "/etc/fstab : /dev/sdX  /mnt/node1-disk1  xfs  defaults,noatime,nodiratime  0 2" \
         "" \
-        "Rules      : 1 physical disk per path — no RAID (MinIO handles erasure coding)" \
+        "Rules      : 1 physical disk per path — no RAID (RustFS handles erasure coding)" \
         "             Avoid bind-mounts, LVM stripes, or shared NAS mounts" \
         "             All data disks must be the same size for optimal erasure coding"
       echo ""
       local n d
-      for n in $(seq 1 "$MINIO_NODES"); do
-        prompt_input "Node ${n} — metadata path" "/data/minio/node${n}"
-        MINIO_PATHS["${n}_path"]="$REPLY"
-        for d in $(seq 1 "$MINIO_DISKS"); do
+      for n in $(seq 1 "$RUSTFS_NODES"); do
+        prompt_input "Node ${n} — metadata path" "/data/rustfs/node${n}"
+        RUSTFS_PATHS["${n}_path"]="$REPLY"
+        for d in $(seq 1 "$RUSTFS_DISKS"); do
           prompt_input "Node ${n} — Disk ${d}" "/mnt/node${n}-disk${d}"
-          MINIO_PATHS["${n}_${d}"]="$REPLY"
+          RUSTFS_PATHS["${n}_${d}"]="$REPLY"
         done
       done
       ;;
     3)
-      MINIO_MODE="auto"
+      RUSTFS_MODE="auto"
       _check_disk_tools
       step "Scanning block devices..."
       _scan_available_disks
 
       if (( DISK_COUNT == 0 )); then
         warn "No candidate disk found — falling back to manual path entry"
-        MINIO_MODE="manual"
+        RUSTFS_MODE="manual"
         local n d
-        for n in $(seq 1 "$MINIO_NODES"); do
-          prompt_input "Node ${n} — metadata path" "/data/minio/node${n}"
-          MINIO_PATHS["${n}_path"]="$REPLY"
-          for d in $(seq 1 "$MINIO_DISKS"); do
+        for n in $(seq 1 "$RUSTFS_NODES"); do
+          prompt_input "Node ${n} — metadata path" "/data/rustfs/node${n}"
+          RUSTFS_PATHS["${n}_path"]="$REPLY"
+          for d in $(seq 1 "$RUSTFS_DISKS"); do
             prompt_input "Node ${n} — Disk ${d}" "/mnt/node${n}-disk${d}"
-            MINIO_PATHS["${n}_${d}"]="$REPLY"
+            RUSTFS_PATHS["${n}_${d}"]="$REPLY"
           done
         done
       else
@@ -923,16 +922,16 @@ ask_minio() {
         info "Default filesystem: ${preferred_fs^^}"
         echo ""
 
-        local total_slots=$(( MINIO_NODES * MINIO_DISKS ))
-        info "Assign ${total_slots} disk(s) — ${MINIO_NODES} nodes × ${MINIO_DISKS} disks/node"
+        local total_slots=$(( RUSTFS_NODES * RUSTFS_DISKS ))
+        info "Assign ${total_slots} disk(s) — ${RUSTFS_NODES} nodes × ${RUSTFS_DISKS} disks/node"
         echo ""
 
         # Track already-selected devices to warn on duplicates
         local -a _selected_devs=()
 
         local n d ci
-        for n in $(seq 1 "$MINIO_NODES"); do
-          for d in $(seq 1 "$MINIO_DISKS"); do
+        for n in $(seq 1 "$RUSTFS_NODES"); do
+          for d in $(seq 1 "$RUSTFS_DISKS"); do
             echo ""
             step "Assign: Node ${n} — Disk ${d}"
             _show_disk_table
@@ -953,50 +952,50 @@ ask_minio() {
 
             _selected_devs+=("${DISK_NAMES[$ci]}")
 
-            # Auto-detect disk size from first selected disk (all disks should be identical in MinIO)
+            # Auto-detect disk size from first selected disk (all disks should be identical in RustFS)
             if (( n == 1 && d == 1 )); then
-              MINIO_DISK_SIZE_GB=$(_disk_size_gb "${DISK_NAMES[$ci]}")
+              RUSTFS_DISK_SIZE_GB=$(_disk_size_gb "${DISK_NAMES[$ci]}")
             fi
 
             # Determine mount point (use existing if already mounted)
-            local target_mount="/mnt/minio-node${n}-disk${d}"
+            local target_mount="/mnt/rustfs-node${n}-disk${d}"
             if [[ "${DISK_MOUNTS[$ci]}" != "-" && -n "${DISK_MOUNTS[$ci]}" ]]; then
               target_mount="${DISK_MOUNTS[$ci]}"
             fi
 
-            _prepare_minio_disk \
+            _prepare_rustfs_disk \
               "${DISK_NAMES[$ci]}" "$target_mount" \
               "${DISK_FSTYPES[$ci]}" "$preferred_fs"
 
             # Refresh disk state so the table shows updated FS/mountpoint on next iteration
             _scan_available_disks
 
-            MINIO_PATHS["${n}_${d}"]="$target_mount"
+            RUSTFS_PATHS["${n}_${d}"]="$target_mount"
           done
           # Metadata path = mount point of first disk of this node
-          MINIO_PATHS["${n}_path"]="${MINIO_PATHS["${n}_1"]}"
+          RUSTFS_PATHS["${n}_path"]="${RUSTFS_PATHS["${n}_1"]}"
         done
       fi
       ;;
   esac
 
-  MINIO_BYPASS="false"
-  [[ "$MINIO_MODE" == "test" ]] && MINIO_BYPASS="true"
+  RUSTFS_BYPASS="false"
+  [[ "$RUSTFS_MODE" == "test" ]] && RUSTFS_BYPASS="true"
 
   echo ""
-  if [[ "$MINIO_MODE" == "auto" && "${MINIO_DISK_SIZE_GB:-0}" -gt 0 ]]; then
-    info "Disk size detected automatically: ${MINIO_DISK_SIZE_GB} GB per disk"
+  if [[ "$RUSTFS_MODE" == "auto" && "${RUSTFS_DISK_SIZE_GB:-0}" -gt 0 ]]; then
+    info "Disk size detected automatically: ${RUSTFS_DISK_SIZE_GB} GB per disk"
   else
     step "Estimated usable capacity"
     echo -e "  ${C_GRAY}Disk size per disk — used to calculate real usable storage (erasure coding).${C_RESET}"
     echo -e "  ${C_GRAY}Examples: 4000 ≈ 4 TB · 8000 ≈ 8 TB · 12000 ≈ 12 TB. Enter 0 to skip.${C_RESET}"
     echo ""
-    ask_int "Disk size per disk (GB)" "0" is_non_neg_int "Integer ≥ 0 required" MINIO_DISK_SIZE_GB
+    ask_int "Disk size per disk (GB)" "0" is_non_neg_int "Integer ≥ 0 required" RUSTFS_DISK_SIZE_GB
   fi
 
   local ft_lines
-  mapfile -t ft_lines < <(minio_fault_tolerance "$MINIO_NODES" "$MINIO_DISKS" "${MINIO_DISK_SIZE_GB:-0}")
-  box "MinIO Fault Tolerance" "${ft_lines[@]}"
+  mapfile -t ft_lines < <(rustfs_fault_tolerance "$RUSTFS_NODES" "$RUSTFS_DISKS" "${RUSTFS_DISK_SIZE_GB:-0}")
+  box "RustFS Fault Tolerance" "${ft_lines[@]}"
 }
 
 # --- ask_haproxy ---
@@ -1011,19 +1010,19 @@ ask_haproxy() {
   fi
 }
 
-# --- ask_minio_console ---
-ask_minio_console() {
-  step "MinIO Console (accessible via https://DOMAIN/s3-console)"
+# --- ask_rustfs_console ---
+ask_rustfs_console() {
+  step "RustFS Console (accessible via https://DOMAIN/s3-console)"
   echo ""
-  echo -e "  ${C_WHITE}Web interface to manage MinIO buckets, users and versioning.${C_RESET}"
-  echo -e "  ${C_GRAY}Authentication: MinIO credentials (MINIO_ACCESS_KEY / MINIO_SECRET_KEY).${C_RESET}"
+  echo -e "  ${C_WHITE}Web interface to manage RustFS buckets, users and versioning.${C_RESET}"
+  echo -e "  ${C_GRAY}Authentication: RustFS credentials (RUSTFS_ACCESS_KEY / RUSTFS_SECRET_KEY).${C_RESET}"
   echo ""
-  if prompt_yn "Enable MinIO console?" "N"; then
-    MINIO_CONSOLE="yes"
-    info "MinIO console enabled — accessible via /s3-console"
+  if prompt_yn "Enable RustFS console?" "N"; then
+    RUSTFS_CONSOLE="yes"
+    info "RustFS console enabled — accessible via /s3-console"
   else
-    MINIO_CONSOLE="no"
-    info "MinIO console disabled"
+    RUSTFS_CONSOLE="no"
+    info "RustFS console disabled"
   fi
 }
 
@@ -1081,15 +1080,15 @@ show_load_estimate() {
   p99_php=$(awk -v n="$NC_NODES" 'BEGIN{printf "%.0f", 3381 * n^(-0.6)}')
 
   # RAM: 3 GB/FPM node + dynamic overhead (1.5 GB/Galera, 0.125/Redis,
-  #       0.375/MinIO, 0.75/Collabora, 0.1/Whiteboard)
+  #       0.375/RustFS, 0.75/Collabora, 0.1/Whiteboard)
   #       + 0.7 GB fixed (HAProxy 0.05 + nginx-acme 0.03 + certbot 0.03
   #                       + nextcloud-cron 0.5 + galera-autoheal 0.02 + OS 0.07)
-  # Verified: 6 FPM + 5 Galera + 6 Redis + 4 MinIO + 3 Collab + 3 WB = 31 GB (README)
+  # Verified: 6 FPM + 5 Galera + 6 Redis + 4 RustFS + 3 Collab + 3 WB = 31 GB (README)
   ram_total=$(awk \
     -v nc="$NC_NODES" -v db="$MARIADB_NODES" -v redis="$REDIS_NODES" \
-    -v minio="$MINIO_NODES" -v collab="$COLLAB_NODES" -v wb="$WB_NODES" \
+    -v rustfs="$RUSTFS_NODES" -v collab="$COLLAB_NODES" -v wb="$WB_NODES" \
     'BEGIN{printf "%.0f",
-       nc*3 + db*1.5 + redis*0.125 + minio*0.375 + collab*0.75 + wb*0.1 + 0.7}')
+       nc*3 + db*1.5 + redis*0.125 + rustfs*0.375 + collab*0.75 + wb*0.1 + 0.7}')
 
   local write_tps=1500
   (( MARIADB_NODES >= 5 )) && write_tps=2500   # measured: 5 nodes → ~2,500 TPS
@@ -1097,19 +1096,19 @@ show_load_estimate() {
 
   local redis_masters=$(( REDIS_NODES / 2 ))
 
-  local minio_total=$(( MINIO_NODES * MINIO_DISKS ))
-  # Write tolerance (quorum N/2+1 drives) = minio_total/2 - 1
+  local rustfs_total=$(( RUSTFS_NODES * RUSTFS_DISKS ))
+  # Write tolerance (quorum N/2+1 drives) = rustfs_total/2 - 1
   # Ex. 4 nodes × 2 drives = 8 → write tolerates 3 lost drives (README: "Loss of 3 drives")
-  local minio_tol_drives=$(( minio_total / 2 - 1 ))
-  local minio_tol_nodes=$(( MINIO_NODES / 2 ))
+  local rustfs_tol_drives=$(( rustfs_total / 2 - 1 ))
+  local rustfs_tol_nodes=$(( RUSTFS_NODES / 2 ))
 
-  local minio_storage_line=""
-  if (( ${MINIO_DISK_SIZE_GB:-0} > 0 )); then
-    local _raw_gb=$(( MINIO_NODES * MINIO_DISKS * MINIO_DISK_SIZE_GB ))
+  local rustfs_storage_line=""
+  if (( ${RUSTFS_DISK_SIZE_GB:-0} > 0 )); then
+    local _raw_gb=$(( RUSTFS_NODES * RUSTFS_DISKS * RUSTFS_DISK_SIZE_GB ))
     local _usable_tb _raw_tb
     _raw_tb=$(awk    -v r="$_raw_gb"              'BEGIN{printf "%.1f", r/1000}')
     _usable_tb=$(awk -v u="$(( _raw_gb / 2 ))"   'BEGIN{printf "%.1f", u/1000}')
-    minio_storage_line="MinIO storage            : ${_usable_tb} TB usable  (${_raw_tb} TB raw · EC:N/2)"
+    rustfs_storage_line="RustFS storage            : ${_usable_tb} TB usable  (${_raw_tb} TB raw · EC:N/2)"
   fi
 
   local _estimate_args=(
@@ -1121,9 +1120,9 @@ show_load_estimate() {
     "Recommended RAM          : ~${ram_total} GB"
     "MariaDB writes           : ~${write_tps} TPS  (Galera ${MARIADB_NODES} nodes)"
     "Redis cache              : ${redis_masters} masters  > 500,000 ops/s"
-    "MinIO tolerance          : ${minio_tol_nodes} node(s) or ${minio_tol_drives} drives losable (writes)"
+    "RustFS tolerance          : ${rustfs_tol_nodes} node(s) or ${rustfs_tol_drives} drives losable (writes)"
   )
-  [[ -n "$minio_storage_line" ]] && _estimate_args+=("$minio_storage_line")
+  [[ -n "$rustfs_storage_line" ]] && _estimate_args+=("$rustfs_storage_line")
   _estimate_args+=(
     "Collabora                : ${COLLAB_NODES} node(s) — unlimited connections/documents (home_mode binary patch)"
     ""
@@ -1144,9 +1143,9 @@ show_recap() {
     "SSL Email      : $CERTBOT_EMAIL" \
     "MariaDB Galera : ${MARIADB_NODES} nodes" \
     "Redis Cluster  : ${REDIS_NODES} nodes" \
-    "MinIO          : ${MINIO_NODES} nodes × ${MINIO_DISKS} disks (mode: ${MINIO_MODE})" \
+    "RustFS          : ${RUSTFS_NODES} nodes × ${RUSTFS_DISKS} disks (mode: ${RUSTFS_MODE})" \
     "HAProxy Stats  : ${HAPROXY_STATS}" \
-    "MinIO Console  : ${MINIO_CONSOLE}"
+    "RustFS Console  : ${RUSTFS_CONSOLE}"
 
   show_load_estimate
 
@@ -1190,17 +1189,17 @@ save_answers() {
     printf 'REDIS_NODES="%s"\n'   "$REDIS_NODES"
     printf 'COLLAB_NODES="%s"\n'  "$COLLAB_NODES"
     printf 'WB_NODES="%s"\n'      "$WB_NODES"
-    printf 'MINIO_NODES="%s"\n'        "$MINIO_NODES"
-    printf 'MINIO_DISKS="%s"\n'        "$MINIO_DISKS"
-    printf 'MINIO_DISK_SIZE_GB="%s"\n' "${MINIO_DISK_SIZE_GB:-0}"
-    printf 'MINIO_MODE="%s"\n'         "$MINIO_MODE"
-    printf 'MINIO_BYPASS="%s"\n' "$MINIO_BYPASS"
+    printf 'RUSTFS_NODES="%s"\n'        "$RUSTFS_NODES"
+    printf 'RUSTFS_DISKS="%s"\n'        "$RUSTFS_DISKS"
+    printf 'RUSTFS_DISK_SIZE_GB="%s"\n' "${RUSTFS_DISK_SIZE_GB:-0}"
+    printf 'RUSTFS_MODE="%s"\n'         "$RUSTFS_MODE"
+    printf 'RUSTFS_BYPASS="%s"\n' "$RUSTFS_BYPASS"
     printf 'HAPROXY_STATS="%s"\n' "$HAPROXY_STATS"
-    printf 'MINIO_CONSOLE="%s"\n' "$MINIO_CONSOLE"
+    printf 'RUSTFS_CONSOLE="%s"\n' "$RUSTFS_CONSOLE"
     printf 'COTURN_ENABLED="%s"\n' "$COTURN_ENABLED"
     printf 'SIGNALING_NODES="%s"\n' "${SIGNALING_NODES:-2}"
     printf 'CERTBOT_STAGING="%s"\n' "$CERTBOT_STAGING"
-    declare -p MINIO_PATHS | sed 's/^declare -A/declare -gA/'
+    declare -p RUSTFS_PATHS | sed 's/^declare -A/declare -gA/'
   } > "$ANSWERS_CACHE"
   chmod 600 "$ANSWERS_CACHE"
 }
@@ -1216,7 +1215,7 @@ load_answers() {
   done
   echo ""
   prompt_yn "Reuse this configuration?" "Y" || return 1
-  declare -gA MINIO_PATHS 2>/dev/null || true
+  declare -gA RUSTFS_PATHS 2>/dev/null || true
   # shellcheck source=/dev/null
   source "$ANSWERS_CACHE"
   info "Configuration reloaded."
@@ -1252,8 +1251,8 @@ gen_passwords() {
   GEN_DB_PASS=$(gen_pass 18 "base64")
   GEN_REDIS_PASS=$(gen_pass 32 "hex")
   GEN_REDIS_WB_PASS=$(gen_pass 32 "hex")
-  GEN_MINIO_KEY=$(gen_pass 16 "hex")
-  GEN_MINIO_SECRET=$(gen_pass 24 "base64")
+  GEN_RUSTFS_KEY=$(gen_pass 16 "hex")
+  GEN_RUSTFS_SECRET=$(gen_pass 24 "base64")
   GEN_JWT_SECRET=$(gen_pass 36 "base64")
   GEN_TALK_SECRET=$(gen_pass 32 "hex")
   GEN_SIGNALING_INTERNAL_SECRET=$(gen_pass 32 "hex")
@@ -1274,14 +1273,14 @@ gen_env() {
   local dest="${1:-$INSTALL_DIR/.env}"
   step "Generating .env file"
 
-  # Build MinIO path lines dynamically
-  local minio_lines="" n d
-  for n in $(seq 1 "$MINIO_NODES"); do
-    minio_lines+="MINIO_NODE${n}_PATH=${MINIO_PATHS[${n}_path]}"$'\n'
-    for d in $(seq 1 "$MINIO_DISKS"); do
-      minio_lines+="MINIO_NODE${n}_DATA${d}=${MINIO_PATHS[${n}_${d}]}"$'\n'
+  # Build RustFS path lines dynamically
+  local rustfs_lines="" n d
+  for n in $(seq 1 "$RUSTFS_NODES"); do
+    rustfs_lines+="RUSTFS_NODE${n}_PATH=${RUSTFS_PATHS[${n}_path]}"$'\n'
+    for d in $(seq 1 "$RUSTFS_DISKS"); do
+      rustfs_lines+="RUSTFS_NODE${n}_DATA${d}=${RUSTFS_PATHS[${n}_${d}]}"$'\n'
     done
-    minio_lines+=$'\n'
+    rustfs_lines+=$'\n'
   done
 
   cat > "$dest" <<EOF
@@ -1310,13 +1309,13 @@ MARIADB_DATABASE=nextcloud
 REDIS_PASSWORD=${GEN_REDIS_PASS}
 REDIS_WHITEBOARD_PASSWORD=${GEN_REDIS_WB_PASS}
 
-MINIO_ACCESS_KEY=${GEN_MINIO_KEY}
-MINIO_SECRET_KEY=${GEN_MINIO_SECRET}
+RUSTFS_ACCESS_KEY=${GEN_RUSTFS_KEY}
+RUSTFS_SECRET_KEY=${GEN_RUSTFS_SECRET}
 NEXTCLOUD_S3_BUCKET=nextcloud
 
-${minio_lines}
-MINIO_MODE=${MINIO_MODE}
-MINIO_BYPASS=${MINIO_BYPASS}
+${rustfs_lines}
+RUSTFS_MODE=${RUSTFS_MODE}
+RUSTFS_BYPASS=${RUSTFS_BYPASS}
 HAPROXY_STATS=${HAPROXY_STATS}
 
 WHITEBOARD_JWT_SECRET=${GEN_JWT_SECRET}
@@ -1331,23 +1330,24 @@ EOF
   info ".env generated: $dest"
 }
 
-# gen_minio_server_cmd — builds the MinIO server command from the pools file
-# If .minio-pools exists: multi-pool (expansion); otherwise: original behavior
-gen_minio_server_cmd() {
-  local pools_file="$INSTALL_DIR/.minio-pools"
+# gen_rustfs_volumes_env — builds the RUSTFS_VOLUMES value from the pools file
+# Returns space-separated local paths (SNSD) or URL notation (MNMD / multi-pool).
+# RustFS uses the RUSTFS_VOLUMES env var instead of positional CLI arguments.
+gen_rustfs_volumes_env() {
+  local pools_file="$INSTALL_DIR/.rustfs-pools"
   if [[ -f "$pools_file" ]]; then
-    local cmd="server"
+    local volumes=""
     while IFS=: read -r start end; do
-      cmd+=" http://minio-node{${start}...${end}}/data{1...${MINIO_DISKS}}"
+      [[ -n "$start" && -n "$end" ]] || continue
+      volumes+=" http://rustfs-node{${start}...${end}}:9000/data{1...${RUSTFS_DISKS}}"
     done < "$pools_file"
-    cmd+=" --address :9000"
-    echo "$cmd"
-  elif (( MINIO_NODES == 1 )); then
-    local vols_cmd="" _d
-    for _d in $(seq 1 "$MINIO_DISKS"); do vols_cmd+=" /data${_d}"; done
-    echo "server${vols_cmd} --address :9000"
+    echo "${volumes# }"
+  elif (( RUSTFS_NODES == 1 )); then
+    local vols="" _d
+    for _d in $(seq 1 "$RUSTFS_DISKS"); do vols+=" /data${_d}"; done
+    echo "${vols# }"
   else
-    echo "server http://minio-node{1...${MINIO_NODES}}/data{1...${MINIO_DISKS}} --address :9000"
+    echo "http://rustfs-node{1...${RUSTFS_NODES}}:9000/data{1...${RUSTFS_DISKS}}"
   fi
 }
 
@@ -1437,8 +1437,8 @@ HAPROXY
       - TALK_SIGNALING_SECRET=\${TALK_SIGNALING_SECRET}
       - COTURN_SECRET=\${COTURN_SECRET}
       - WHITEBOARD_JWT_SECRET=\${WHITEBOARD_JWT_SECRET}
-      - MINIO_ACCESS_KEY=\${MINIO_ACCESS_KEY}
-      - MINIO_SECRET_KEY=\${MINIO_SECRET_KEY}
+      - RUSTFS_ACCESS_KEY=\${RUSTFS_ACCESS_KEY}
+      - RUSTFS_SECRET_KEY=\${RUSTFS_SECRET_KEY}
       - NEXTCLOUD_S3_BUCKET=\${NEXTCLOUD_S3_BUCKET:-nextcloud}
     networks:
       - next-net
@@ -1559,7 +1559,7 @@ NCPERMS
         condition: service_healthy
       haproxy:
         condition: service_started
-      minio-node1:
+      rustfs-node1:
         condition: service_healthy"
     else
       depends_block="    depends_on:
@@ -1608,8 +1608,8 @@ ${admin_env}
       - OBJECTSTORE_S3_HOST=haproxy
       - OBJECTSTORE_S3_PORT=9000
       - OBJECTSTORE_S3_BUCKET=\${NEXTCLOUD_S3_BUCKET:-nextcloud}
-      - OBJECTSTORE_S3_KEY=\${MINIO_ACCESS_KEY}
-      - OBJECTSTORE_S3_SECRET=\${MINIO_SECRET_KEY}
+      - OBJECTSTORE_S3_KEY=\${RUSTFS_ACCESS_KEY}
+      - OBJECTSTORE_S3_SECRET=\${RUSTFS_SECRET_KEY}
       - OBJECTSTORE_S3_USEPATH_STYLE=true
       - OBJECTSTORE_S3_SSL=false
       - OBJECTSTORE_S3_AUTOCREATE=true
@@ -1819,83 +1819,63 @@ ${redis_deps_block}
     restart: on-failure:5
 RCINIT
 
-  # ── MinIO nodes (dynamic) ──────────────────────────────────────────────
-  # Server command: SNMD / MNMD single-pool / MNMD multi-pool (expansion)
-  local minio_server_cmd
-  minio_server_cmd=$(gen_minio_server_cmd)
+  # ── RustFS nodes (dynamic) ──────────────────────────────────────────────
+  # RUSTFS_VOLUMES: space-separated paths (SNSD) or URL notation (MNMD / multi-pool)
+  local rustfs_volumes_val
+  rustfs_volumes_val=$(gen_rustfs_volumes_env)
 
-  for i in $(seq 1 "$MINIO_NODES"); do
+  for i in $(seq 1 "$RUSTFS_NODES"); do
     local rfs_ip="172.50.0.$((10 + i))"
     local rfs_vol_lines=""
     local d
-    for d in $(seq 1 "$MINIO_DISKS"); do
-      rfs_vol_lines+="      - \${MINIO_NODE${i}_DATA${d}:-${MINIO_PATHS[${i}_${d}]}}:/data${d}"$'\n'
+    for d in $(seq 1 "$RUSTFS_DISKS"); do
+      rfs_vol_lines+="      - \${RUSTFS_NODE${i}_DATA${d}:-${RUSTFS_PATHS[${i}_${d}]}}:/data${d}"$'\n'
     done
 
-    local bypass_env=""
-    [[ "$MINIO_BYPASS" == "true" ]] && bypass_env="      - MINIO_CI_CD=on"
+    # Enable built-in console on port 9001 when requested; HAProxy routes /s3-console there
+    local console_enable="false"
+    [[ "$RUSTFS_CONSOLE" == "yes" ]] && console_enable="true"
+    local console_expose=""
+    [[ "$RUSTFS_CONSOLE" == "yes" ]] && console_expose="      - \"9001\""$'\n'
 
     local rfs_hc=""
     if (( i == 1 )); then
       rfs_hc="    healthcheck:
-      test: [\"CMD-SHELL\", \"curl -sf http://localhost:9000/minio/health/live || exit 1\"]
+      test: [\"CMD-SHELL\", \"curl -so /dev/null -w '%{http_code}' http://localhost:9000/ 2>/dev/null | grep -q '^[^0]' || exit 1\"]
       interval: 15s
       timeout: 5s
       retries: 10
       start_period: 90s"
     fi
 
-    cat >> "$dest" <<MINIONODE
+    cat >> "$dest" <<RUSTFSNODE
 
-  minio-node${i}:
-    image: ${IMG_MINIO}
-    container_name: minio-node${i}
-    hostname: minio-node${i}
+  rustfs-node${i}:
+    image: ${IMG_RUSTFS}
+    container_name: rustfs-node${i}
+    hostname: rustfs-node${i}
     restart: always
     user: root
-    command: ${minio_server_cmd}
     expose:
       - "9000"
-    volumes:
+${console_expose}    volumes:
 ${rfs_vol_lines}
     environment:
-      - MINIO_ROOT_USER=\${MINIO_ACCESS_KEY}
-      - MINIO_ROOT_PASSWORD=\${MINIO_SECRET_KEY}
-${bypass_env}
+      - RUSTFS_ACCESS_KEY=\${RUSTFS_ACCESS_KEY}
+      - RUSTFS_SECRET_KEY=\${RUSTFS_SECRET_KEY}
+      - RUSTFS_VOLUMES=${rustfs_volumes_val}
+      - RUSTFS_ADDRESS=0.0.0.0:9000
+      - RUSTFS_CONSOLE_ENABLE=${console_enable}
     networks:
       storage-net: {}
-      minionet:
+      rustfsnet:
         ipv4_address: ${rfs_ip}
 ${rfs_hc}
-MINIONODE
+RUSTFSNODE
   done
 
 
-  # ── minio-console (optionnel) ───────────────────────────────────────────
-  if [[ "$MINIO_CONSOLE" == "yes" ]]; then
-    cat >> "$dest" <<MCONSOLE
-
-  minio-console:
-    image: ${IMG_MINIO_CONSOLE}
-    container_name: minio-console
-    restart: always
-    expose:
-      - "9090"
-    environment:
-      - CONSOLE_MINIO_SERVER=http://haproxy:9000
-      - CONSOLE_MINIO_REGION=us-east-1
-      - CONSOLE_SUBPATH=/s3-console
-      - CONSOLE_PORT=9090
-    networks:
-      - storage-net
-      - next-net
-    depends_on:
-      minio-node1:
-        condition: service_healthy
-    healthcheck:
-      disable: true
-MCONSOLE
-  fi
+  # ── RustFS console — built-in on port 9001, no separate container needed ──
 
   # ── Collabora nodes (dynamic) ───────────────────────────────────────────
   for i in $(seq 1 "$COLLAB_NODES"); do
@@ -2134,8 +2114,8 @@ networks:
     ipam:
       config:
         - subnet: 172.100.0.0/24
-  minionet:
-    name: minionet
+  rustfsnet:
+    name: rustfsnet
     driver: bridge
     ipam:
       config:
@@ -2171,10 +2151,10 @@ NETWORKS
   done
   echo "  redis_whiteboard_data:" >> "$dest"
 
-  # Initialize the MinIO pools file on first deployment
-  local _pools_file="$INSTALL_DIR/.minio-pools"
-  if [[ ! -f "$_pools_file" ]] && (( MINIO_NODES > 1 )); then
-    echo "1:${MINIO_NODES}" > "$_pools_file"
+  # Initialize the RustFS pools file on first deployment
+  local _pools_file="$INSTALL_DIR/.rustfs-pools"
+  if [[ ! -f "$_pools_file" ]] && (( RUSTFS_NODES > 1 )); then
+    echo "1:${RUSTFS_NODES}" > "$_pools_file"
   fi
 
   info "docker-compose.yml generated ($dest)"
@@ -2309,18 +2289,20 @@ PYEOF
   info "nextcloud-init.sh ready: ${REDIS_NODES} seeds (redis-node1..${REDIS_NODES}) — ${masters} masters + ${masters} replicas"
 }
 
-create_minio_dirs() {
-  step "Creating MinIO directories"
+create_rustfs_dirs() {
+  step "Creating RustFS directories"
   start_spinner "Preparing directories..."
   local n d
-  for n in $(seq 1 "$MINIO_NODES"); do
-    for d in $(seq 1 "$MINIO_DISKS"); do
-      local path="${MINIO_PATHS[${n}_${d}]}"
+  for n in $(seq 1 "$RUSTFS_NODES"); do
+    for d in $(seq 1 "$RUSTFS_DISKS"); do
+      local path="${RUSTFS_PATHS[${n}_${d}]}"
       mkdir -p "$path"
       find "${path:?}" -mindepth 1 -delete 2>/dev/null || true
+      # RustFS container runs as UID 10001 (user rustfs) — ensure write access
+      chown -R 10001:10001 "$path" 2>/dev/null || true
     done
   done
-  stop_spinner "MinIO directories ready"
+  stop_spinner "RustFS directories ready"
 }
 
 patch_haproxy() {
@@ -2361,9 +2343,9 @@ patch_haproxy() {
     galera_servers+="  server mariadb-node${i} mariadb-node${i}:3306 check"$'\n'
   done
 
-  local minio_servers=""
-  for i in $(seq 1 "$MINIO_NODES"); do
-    minio_servers+="  server minio-node${i} minio-node${i}:9000 check"$'\n'
+  local rustfs_servers=""
+  for i in $(seq 1 "$RUSTFS_NODES"); do
+    rustfs_servers+="  server rustfs-node${i} rustfs-node${i}:9000 check"$'\n'
   done
 
   local redis_servers=""
@@ -2392,8 +2374,14 @@ patch_haproxy() {
   _replace_servers "COLLABORA"     "${collab_servers%$'\n'}"    "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
   _replace_servers "WHITEBOARD"    "${wb_servers%$'\n'}"        "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
   _replace_servers "GALERA"        "${galera_servers%$'\n'}"    "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "MINIO"         "${minio_servers%$'\n'}"     "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-  _replace_servers "REDIS"         "${redis_servers%$'\n'}"     "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "RUSTFS"              "${rustfs_servers%$'\n'}"     "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  # Console servers: same nodes as S3 but on port 9001
+  local console_servers=""
+  for i in $(seq 1 "$RUSTFS_NODES"); do
+    console_servers+="  server rustfs-node${i} rustfs-node${i}:9001 check"$'\n'
+  done
+  _replace_servers "RUSTFS_CONSOLE"  "${console_servers%$'\n'}"    "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+  _replace_servers "REDIS"           "${redis_servers%$'\n'}"      "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
 
   # Talk HA: populate signaling servers or strip the whole Talk section
   if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
@@ -2433,7 +2421,7 @@ block = (
   "  # END_SERVERS_SIGNALING\n"
   "# END_TALK_BACKEND\n\n"
 )
-anchor = "# BEGIN_MINIO_CONSOLE_BACKEND"
+anchor = "# BEGIN_RUSTFS_CONSOLE_BACKEND"
 content = content.replace(anchor, block + anchor) if anchor in content else content + "\n" + block
 open(path, "w").write(content)
 PYEOF
@@ -2454,17 +2442,17 @@ PYEOF
       "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
   fi
 
-  # Remove MinIO console blocks if disabled
-  if [[ "$MINIO_CONSOLE" != "yes" ]]; then
-    awk '/# BEGIN_MINIO_CONSOLE$/{skip=1} /# END_MINIO_CONSOLE$/{skip=0; next} !skip{print}' \
+  # Remove RustFS console blocks if disabled
+  if [[ "$RUSTFS_CONSOLE" != "yes" ]]; then
+    awk '/# BEGIN_RUSTFS_CONSOLE$/{skip=1} /# END_RUSTFS_CONSOLE$/{skip=0; next} !skip{print}' \
       "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-    awk '/# BEGIN_MINIO_CONSOLE_BACKEND/{skip=1} /# END_MINIO_CONSOLE_BACKEND/{skip=0; next} !skip{print}' \
+    awk '/# BEGIN_RUSTFS_CONSOLE_BACKEND/{skip=1} /# END_RUSTFS_CONSOLE_BACKEND/{skip=0; next} !skip{print}' \
       "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
   fi
 
   mv "$tmp" "$file"
   local _talk_status="${TALK_ENABLED:-no}"; [[ "$_talk_status" == "yes" ]] && _talk_status="yes (${SIGNALING_NODES:-2} nodes)"
-  info "haproxy.cfg patched (NC:${NC_NODES} Collab:${COLLAB_NODES} WB:${WB_NODES} DB:${MARIADB_NODES} MinIO:${MINIO_NODES} Talk:${_talk_status})"
+  info "haproxy.cfg patched (NC:${NC_NODES} Collab:${COLLAB_NODES} WB:${WB_NODES} DB:${MARIADB_NODES} RustFS:${RUSTFS_NODES} Talk:${_talk_status})"
 }
 
 # ─── [PATCH] Collabora binary patch — removing home_mode limit ───────────────
@@ -2856,8 +2844,8 @@ run_deploy() {
     "${IMG_CERTBOT}"
     "nextcloud:${NC_VERSION}"
     "${IMG_REDIS}"
-    "${IMG_MINIO}"
-    "${IMG_MINIO_MC}"
+    "${IMG_RUSTFS}"
+    "${IMG_MC}"
     "${IMG_COLLABORA}"
     "${IMG_WHITEBOARD}"
   )
@@ -2956,18 +2944,18 @@ run_deploy() {
       exit_code=$(docker inspect --format='{{.State.ExitCode}}' nextcloud-setup 2>/dev/null || echo "1")
       if [[ "$exit_code" == "0" ]]; then
         info "nextcloud-setup completed successfully ✓"
-        # Enable MinIO versioning — bucket necessarily exists at this point
-        start_spinner "Enabling MinIO versioning..."
+        # Enable RustFS versioning — bucket necessarily exists at this point
+        start_spinner "Enabling RustFS versioning..."
         if docker run --rm \
             --network storage-net \
-            --entrypoint sh "${IMG_MINIO_MC}" -c \
-            "mc alias set r http://minio-node1:9000 ${GEN_MINIO_KEY} ${GEN_MINIO_SECRET} --quiet 2>/dev/null \
+            --entrypoint sh "${IMG_MC}" -c \
+            "mc alias set r http://rustfs-node1:9000 ${GEN_RUSTFS_KEY} ${GEN_RUSTFS_SECRET} --quiet 2>/dev/null \
              && mc version enable r/${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null \
              && mc ilm rule add --expire-delete-marker r/${NEXTCLOUD_S3_BUCKET:-nextcloud} 2>/dev/null || true" \
             &>/dev/null; then
-          stop_spinner "MinIO versioning enabled ✓"
+          stop_spinner "RustFS versioning enabled ✓"
         else
-          stop_spinner "MinIO versioning: failed (can be enabled from /s3-console)"
+          stop_spinner "RustFS versioning: failed (can be enabled from /s3-console)"
         fi
       else
         warn "nextcloud-setup completed with error (code $exit_code)"
@@ -2992,9 +2980,9 @@ wait_healthy() {
   phase 7 7 "Infrastructure Verification"
   step "Waiting for all services to be healthy"
 
-  # Adaptive timeout based on node count (base 600s + 60s/NC + 20s/DB + 20s/MinIO + 30s/Collab)
+  # Adaptive timeout based on node count (base 600s + 60s/NC + 20s/DB + 20s/RustFS + 30s/Collab)
   local timeout interval=10
-  timeout=$(( 600 + NC_NODES * 60 + MARIADB_NODES * 20 + MINIO_NODES * 20 + COLLAB_NODES * 30 ))
+  timeout=$(( 600 + NC_NODES * 60 + MARIADB_NODES * 20 + RUSTFS_NODES * 20 + COLLAB_NODES * 30 ))
   (( timeout > 1800 )) && timeout=1800
   local elapsed=0
 
@@ -3005,9 +2993,9 @@ wait_healthy() {
   for i in $(seq 1 "$NC_NODES");      do containers+=("nginx-next-$(printf '%02d' "$i")"); done
   for i in $(seq 1 "$MARIADB_NODES"); do containers+=("mariadb-node${i}"); done
   containers+=("redis-node1")
-  for i in $(seq 1 "$MINIO_NODES");  do containers+=("minio-node${i}"); done
+  for i in $(seq 1 "$RUSTFS_NODES");  do containers+=("rustfs-node${i}"); done
 
-  info "Calculated timeout: ${timeout}s (${NC_NODES} NC + ${MARIADB_NODES} DB + ${MINIO_NODES} MinIO + ${COLLAB_NODES} Collabora)"
+  info "Calculated timeout: ${timeout}s (${NC_NODES} NC + ${MARIADB_NODES} DB + ${RUSTFS_NODES} RustFS + ${COLLAB_NODES} Collabora)"
 
   # Consecutive restart counters per container (crash loop detection)
   declare -A _restart_counts=()
@@ -3240,8 +3228,8 @@ check_services() {
   _check "Redis Cluster OK" \
     bash -c "docker exec redis-node1 redis-cli -a '${GEN_REDIS_PASS}' --no-auth-warning cluster info | grep -q 'cluster_state:ok'"
 
-  _check "MinIO S3 health" \
-    bash -c "docker exec minio-node1 curl -sf http://localhost:9000/minio/health/live 2>/dev/null"
+  _check "RustFS S3 health" \
+    bash -c "docker exec rustfs-node1 curl -so /dev/null -w '%{http_code}' http://localhost:9000/ 2>/dev/null | grep -q '^[^0]'"
 
   _check "nextcloud-setup completed" \
     bash -c "docker logs nextcloud-setup 2>&1 | grep -q 'Setup Nextcloud terminé'"
@@ -3276,8 +3264,8 @@ NEXTCLOUD_PASSWORD=${GEN_NC_ADMIN_PASS}
 MARIADB_ROOT_PASSWORD=${GEN_DB_ROOT_PASS}
 MARIADB_PASSWORD=${GEN_DB_PASS}
 REDIS_PASSWORD=${GEN_REDIS_PASS}
-MINIO_ACCESS_KEY=${GEN_MINIO_KEY}
-MINIO_SECRET_KEY=${GEN_MINIO_SECRET}
+RUSTFS_ACCESS_KEY=${GEN_RUSTFS_KEY}
+RUSTFS_SECRET_KEY=${GEN_RUSTFS_SECRET}
 HAPROXY_STATS_PASSWORD=${GEN_HAPROXY_STATS_PASS}
 CREDS
   chmod 600 "$creds_file"
@@ -3289,9 +3277,9 @@ CREDS
   [[ "$HAPROXY_STATS" == "yes" ]] && \
     stats_line="HAProxy Stats  : https://${NC_DOMAIN}/stats  (admin / ${GEN_HAPROXY_STATS_PASS})"
 
-  local console_line="MinIO Console  : disabled"
-  [[ "$MINIO_CONSOLE" == "yes" ]] && \
-    console_line="MinIO Console  : https://${NC_DOMAIN}/s3-console  (login: MINIO_ACCESS_KEY / MINIO_SECRET_KEY)"
+  local console_line="RustFS Console  : disabled"
+  [[ "$RUSTFS_CONSOLE" == "yes" ]] && \
+    console_line="RustFS Console  : https://${NC_DOMAIN}/s3-console  (login: RUSTFS_ACCESS_KEY / RUSTFS_SECRET_KEY)"
 
   local talk_line
   if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
@@ -3312,10 +3300,10 @@ CREDS
       "$stats_line" \
       "$console_line" \
       "Nextcloud ${NC_NODES}×FPM + ${NC_NODES}×nginx  │  MariaDB ${MARIADB_NODES} nodes  │  Redis ${REDIS_NODES} nodes" \
-      "MinIO ${MINIO_NODES}×${MINIO_DISKS}  │  Collabora ${COLLAB_NODES} nodes  │  Whiteboard ${WB_NODES} nodes" \
+      "RustFS ${RUSTFS_NODES}×${RUSTFS_DISKS}  │  Collabora ${COLLAB_NODES} nodes  │  Whiteboard ${WB_NODES} nodes" \
       "Credentials : ${creds_file}" \
-      "AFTER A MINIO NODE FAILURE — repair command:" \
-      "docker run --rm --network storage-net --entrypoint sh minio/mc \\"; do
+      "AFTER A RUSTFS NODE FAILURE:" \
+      "  RustFS restores data automatically via erasure coding."; do
     _lw=$(_vlen "$_line")
     (( _lw > I )) && I=$_lw
   done
@@ -3342,14 +3330,13 @@ CREDS
   echo "$_SEP"
   _sl "INFRASTRUCTURE"
   _sl "Nextcloud ${NC_NODES}×FPM + ${NC_NODES}×nginx  │  MariaDB ${MARIADB_NODES} nodes  │  Redis ${REDIS_NODES} nodes"
-  _sl "MinIO ${MINIO_NODES}×${MINIO_DISKS}  │  Collabora ${COLLAB_NODES} nodes  │  Whiteboard ${WB_NODES} nodes"
+  _sl "RustFS ${RUSTFS_NODES}×${RUSTFS_DISKS}  │  Collabora ${COLLAB_NODES} nodes  │  Whiteboard ${WB_NODES} nodes"
   echo "$_SEP"
   _sl "Credentials : ${creds_file}"
   echo "$_SEP"
-  _sl "AFTER A MINIO NODE FAILURE — repair command:"
-  _sl "docker run --rm --network storage-net --entrypoint sh minio/mc \\"
-  _sl "  -c \"mc alias set r http://minio-node1:9000 KEY SECRET --quiet"
-  _sl "        && mc admin heal -r r/nextcloud\""
+  _sl "AFTER A RUSTFS NODE FAILURE:"
+  _sl "  RustFS restores data automatically via erasure coding."
+  _sl "  Check cluster status: docker logs rustfs-node1"
   echo "$_BOT"
   echo -e "${C_RESET}"
 }
@@ -3396,10 +3383,10 @@ update_images() {
 
   # Load nodes from cache or detect from containers
   if [[ -f "$ANSWERS_CACHE" ]]; then
-    declare -gA MINIO_PATHS 2>/dev/null || true
+    declare -gA RUSTFS_PATHS 2>/dev/null || true
     # shellcheck source=/dev/null
     source "$ANSWERS_CACHE"
-    info "Configuration reloaded (${NC_NODES} NC · ${MARIADB_NODES} DB · ${REDIS_NODES} Redis · ${COLLAB_NODES} Collab · ${MINIO_NODES} MinIO)"
+    info "Configuration reloaded (${NC_NODES} NC · ${MARIADB_NODES} DB · ${REDIS_NODES} Redis · ${COLLAB_NODES} Collab · ${RUSTFS_NODES} RustFS)"
   else
     warn "Cache missing — auto-detecting from running containers"
     NC_NODES=$(_detect_node_count     "app-next-"       "^app-next-[0-9]")
@@ -3407,13 +3394,13 @@ update_images() {
     REDIS_NODES=$(_detect_node_count   "redis-node"     "^redis-node[0-9]")
     COLLAB_NODES=$(_detect_node_count  "collabora-node" "^collabora-node[0-9]")
     WB_NODES=$(_detect_node_count      "whiteboard-node" "^whiteboard-node[0-9]")
-    MINIO_NODES=$(_detect_node_count   "minio-node"     "^minio-node[0-9]")
+    RUSTFS_NODES=$(_detect_node_count   "rustfs-node"     "^rustfs-node[0-9]")
     SIGNALING_NODES=$(_detect_node_count "spreed-signaling-" "^spreed-signaling-[0-9]")
     SIGNALING_NODES="${SIGNALING_NODES:-0}"
     TALK_ENABLED=$(grep -m1 '^TALK_ENABLED=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
     TALK_ENABLED="${TALK_ENABLED:-no}"
     (( SIGNALING_NODES > 0 )) && TALK_ENABLED="yes"
-    info "Detected nodes: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES} · Talk:${TALK_ENABLED}"
+    info "Detected nodes: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · RustFS=${RUSTFS_NODES} · Talk:${TALK_ENABLED}"
   fi
 
   step "Pulling new Docker images"
@@ -3586,38 +3573,38 @@ _redis_scale_down() {
   info "Redis: ${new_count} nodes ($((new_count/2)) masters + $((new_count/2)) replicas)"
 }
 
-# ─── [MINIO] Registering a new pool ──────────────────────────────────────────
+# ─── [RUSTFS] Registering a new pool ──────────────────────────────────────────
 
-_minio_register_pool() {
+_rustfs_register_pool() {
   local old_count="$1" new_count="$2"
-  local pools_file="$INSTALL_DIR/.minio-pools"
+  local pools_file="$INSTALL_DIR/.rustfs-pools"
   local new_start=$(( old_count + 1 ))
 
   # Backward compatibility: create file if absent
   if [[ ! -f "$pools_file" ]]; then
     echo "1:${old_count}" > "$pools_file"
-    info "MinIO pools file initialized (pool 1: nodes 1–${old_count})"
+    info "RustFS pools file initialized (pool 1: nodes 1–${old_count})"
   fi
 
   # Dedup: do not register the same pool twice
   if grep -qF "${new_start}:${new_count}" "$pools_file" 2>/dev/null; then
-    warn "MinIO pool ${new_start}:${new_count} already present in .minio-pools — duplicate ignored"
+    warn "RustFS pool ${new_start}:${new_count} already present in .rustfs-pools — duplicate ignored"
     return 0
   fi
 
   echo "${new_start}:${new_count}" >> "$pools_file"
-  info "New MinIO pool registered: nodes ${new_start}–${new_count}"
+  info "New RustFS pool registered: nodes ${new_start}–${new_count}"
 
   local n d
   for n in $(seq $new_start $new_count); do
-    grep -q "^MINIO_NODE${n}_PATH=" "$INSTALL_DIR/.env" || \
-      echo "MINIO_NODE${n}_PATH=${MINIO_PATHS[${n}_path]}" >> "$INSTALL_DIR/.env"
-    for d in $(seq 1 "$MINIO_DISKS"); do
-      grep -q "^MINIO_NODE${n}_DATA${d}=" "$INSTALL_DIR/.env" || \
-        echo "MINIO_NODE${n}_DATA${d}=${MINIO_PATHS[${n}_${d}]}" >> "$INSTALL_DIR/.env"
+    grep -q "^RUSTFS_NODE${n}_PATH=" "$INSTALL_DIR/.env" || \
+      echo "RUSTFS_NODE${n}_PATH=${RUSTFS_PATHS[${n}_path]}" >> "$INSTALL_DIR/.env"
+    for d in $(seq 1 "$RUSTFS_DISKS"); do
+      grep -q "^RUSTFS_NODE${n}_DATA${d}=" "$INSTALL_DIR/.env" || \
+        echo "RUSTFS_NODE${n}_DATA${d}=${RUSTFS_PATHS[${n}_${d}]}" >> "$INSTALL_DIR/.env"
     done
   done
-  info "New MinIO node paths added to .env"
+  info "New RustFS node paths added to .env"
 }
 
 # ─── [SCALE] Modifying node count on existing stack ──────────────────────────
@@ -3627,19 +3614,19 @@ scale_nodes() {
   cd "$INSTALL_DIR"
 
   # ── Configuration loading ────────────────────────────────────────────────────
-  declare -gA MINIO_PATHS 2>/dev/null || true
+  declare -gA RUSTFS_PATHS 2>/dev/null || true
 
   if [[ -f "$ANSWERS_CACHE" ]]; then
     # shellcheck source=/dev/null
     source "$ANSWERS_CACHE"
     info "Configuration reloaded from cache"
-    # Safety check: verify MINIO_NODES from cache matches actual containers
-    # (prevents stale ORIG_MINIO_NODES → double call to _minio_register_pool)
-    local _actual_minio
-    _actual_minio=$(_detect_node_count "minio-node" "^minio-node[0-9]")
-    if (( _actual_minio > MINIO_NODES )); then
-      warn "MINIO_NODES cache (${MINIO_NODES}) < actual containers (${_actual_minio}) — correcting"
-      MINIO_NODES="$_actual_minio"
+    # Safety check: verify RUSTFS_NODES from cache matches actual containers
+    # (prevents stale ORIG_RUSTFS_NODES → double call to _rustfs_register_pool)
+    local _actual_rustfs
+    _actual_rustfs=$(_detect_node_count "rustfs-node" "^rustfs-node[0-9]")
+    if (( _actual_rustfs > RUSTFS_NODES )); then
+      warn "RUSTFS_NODES cache (${RUSTFS_NODES}) < actual containers (${_actual_rustfs}) — correcting"
+      RUSTFS_NODES="$_actual_rustfs"
     fi
   elif [[ -f "$INSTALL_DIR/.env" ]]; then
     warn "Cache missing — rebuilding from .env and running containers"
@@ -3653,20 +3640,20 @@ scale_nodes() {
     REDIS_NODES=$(_detect_node_count   "redis-node"     "^redis-node[0-9]")
     COLLAB_NODES=$(_detect_node_count  "collabora-node" "^collabora-node[0-9]")
     WB_NODES=$(_detect_node_count      "whiteboard-node" "^whiteboard-node[0-9]")
-    MINIO_NODES=$(_detect_node_count   "minio-node"     "^minio-node[0-9]")
+    RUSTFS_NODES=$(_detect_node_count   "rustfs-node"     "^rustfs-node[0-9]")
     NC_VERSION=$(docker inspect --format='{{index .Config.Image}}' app-next-01 2>/dev/null \
                  | cut -d: -f2 || echo "latest-fpm")
-    MINIO_DISKS="${MINIO_DISKS:-4}"
-    MINIO_DISK_SIZE_GB=$(grep -m1 '^MINIO_DISK_SIZE_GB=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "0")
-    MINIO_DISK_SIZE_GB="${MINIO_DISK_SIZE_GB:-0}"
-    MINIO_MODE=$(grep -m1 '^MINIO_MODE=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "test")
-    MINIO_MODE="${MINIO_MODE:-test}"
-    MINIO_BYPASS=$(grep -m1 '^MINIO_BYPASS=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "true")
-    MINIO_BYPASS="${MINIO_BYPASS:-true}"
+    RUSTFS_DISKS="${RUSTFS_DISKS:-4}"
+    RUSTFS_DISK_SIZE_GB=$(grep -m1 '^RUSTFS_DISK_SIZE_GB=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "0")
+    RUSTFS_DISK_SIZE_GB="${RUSTFS_DISK_SIZE_GB:-0}"
+    RUSTFS_MODE=$(grep -m1 '^RUSTFS_MODE=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "test")
+    RUSTFS_MODE="${RUSTFS_MODE:-test}"
+    RUSTFS_BYPASS=$(grep -m1 '^RUSTFS_BYPASS=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "true")
+    RUSTFS_BYPASS="${RUSTFS_BYPASS:-true}"
     HAPROXY_STATS=$(grep -m1 '^HAPROXY_STATS=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
     HAPROXY_STATS="${HAPROXY_STATS:-no}"
-    MINIO_CONSOLE=$(grep -m1 '^MINIO_CONSOLE=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
-    MINIO_CONSOLE="${MINIO_CONSOLE:-no}"
+    RUSTFS_CONSOLE=$(grep -m1 '^RUSTFS_CONSOLE=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
+    RUSTFS_CONSOLE="${RUSTFS_CONSOLE:-no}"
     COTURN_ENABLED=$(grep -m1 '^COTURN_ENABLED=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
     COTURN_ENABLED="${COTURN_ENABLED:-no}"
     TALK_ENABLED=$(grep -m1 '^TALK_ENABLED=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
@@ -3675,15 +3662,15 @@ scale_nodes() {
     SIGNALING_NODES="${SIGNALING_NODES:-2}"
     CERTBOT_STAGING="${CERTBOT_STAGING:-no}"
     local n d
-    for n in $(seq 1 "$MINIO_NODES"); do
-      MINIO_PATHS["${n}_path"]=$(grep -m1 "^MINIO_NODE${n}_PATH=" "$INSTALL_DIR/.env" 2>/dev/null \
-                                  | cut -d= -f2 || echo "/data/minio/node${n}")
-      for d in $(seq 1 "$MINIO_DISKS"); do
-        MINIO_PATHS["${n}_${d}"]=$(grep -m1 "^MINIO_NODE${n}_DATA${d}=" "$INSTALL_DIR/.env" 2>/dev/null \
-                                    | cut -d= -f2 || echo "/data/minio/node${n}/data${d}")
+    for n in $(seq 1 "$RUSTFS_NODES"); do
+      RUSTFS_PATHS["${n}_path"]=$(grep -m1 "^RUSTFS_NODE${n}_PATH=" "$INSTALL_DIR/.env" 2>/dev/null \
+                                  | cut -d= -f2 || echo "/data/rustfs/node${n}")
+      for d in $(seq 1 "$RUSTFS_DISKS"); do
+        RUSTFS_PATHS["${n}_${d}"]=$(grep -m1 "^RUSTFS_NODE${n}_DATA${d}=" "$INSTALL_DIR/.env" 2>/dev/null \
+                                    | cut -d= -f2 || echo "/data/rustfs/node${n}/data${d}")
       done
     done
-    info "Configuration rebuilt: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · MinIO=${MINIO_NODES} · Signaling=${SIGNALING_NODES}"
+    info "Configuration rebuilt: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · RustFS=${RUSTFS_NODES} · Signaling=${SIGNALING_NODES}"
   else
     die "Neither config cache nor .env file found in $INSTALL_DIR — cannot scale"
   fi
@@ -3698,7 +3685,7 @@ scale_nodes() {
     "$( [[ "${TALK_ENABLED:-no}" == "yes" ]] \
         && echo "Talk signaling      : ${SIGNALING_NODES:-2} nodes  (stateless — scale up or down freely)" \
         || echo "Talk signaling      : disabled" )" \
-    "MinIO               : ${MINIO_NODES} nodes × ${MINIO_DISKS} disks  (scale-up by pool)"
+    "RustFS               : ${RUSTFS_NODES} nodes × ${RUSTFS_DISKS} disks  (scale-up by pool)"
   echo ""
 
   # ── Enter new values ─────────────────────────────────────────────────────────
@@ -3707,7 +3694,7 @@ scale_nodes() {
   local ORIG_REDIS_NODES="$REDIS_NODES"
   local ORIG_COLLAB_NODES="$COLLAB_NODES"
   local ORIG_WB_NODES="$WB_NODES"
-  local ORIG_MINIO_NODES="$MINIO_NODES"
+  local ORIG_RUSTFS_NODES="$RUSTFS_NODES"
   local ORIG_SIGNALING_NODES="${SIGNALING_NODES:-2}"
   SIGNALING_NODES="$ORIG_SIGNALING_NODES"
 
@@ -3721,14 +3708,14 @@ scale_nodes() {
     ask_int "Talk signaling — nodes (↑↓ free)"   "$SIGNALING_NODES" is_positive_int "Integer ≥ 1 required"        SIGNALING_NODES
   fi
 
-  # MinIO: scale-up only (pool expansion) — scale-down via manual decommission
+  # RustFS: scale-up only (pool expansion) — scale-down via manual decommission
   echo ""
-  ask_int "MinIO — total nodes (≥ ${ORIG_MINIO_NODES}, ↑ only)" \
-    "$MINIO_NODES" is_positive_int "Integer ≥ 1 required" MINIO_NODES
-  if (( MINIO_NODES < ORIG_MINIO_NODES )); then
-    warn "MinIO scale-down not supported — value reset to ${ORIG_MINIO_NODES}"
-    warn "To reduce MinIO: mc admin decommission start (manual procedure)"
-    MINIO_NODES="$ORIG_MINIO_NODES"
+  ask_int "RustFS — total nodes (≥ ${ORIG_RUSTFS_NODES}, ↑ only)" \
+    "$RUSTFS_NODES" is_positive_int "Integer ≥ 1 required" RUSTFS_NODES
+  if (( RUSTFS_NODES < ORIG_RUSTFS_NODES )); then
+    warn "RustFS scale-down not supported — value reset to ${ORIG_RUSTFS_NODES}"
+    warn "To reduce RustFS: decommission via RustFS admin tools (manual procedure)"
+    RUSTFS_NODES="$ORIG_RUSTFS_NODES"
   fi
 
   # Validate that the Redis delta is even (master+replica per pair)
@@ -3739,18 +3726,18 @@ scale_nodes() {
     redis_delta=0
   fi
 
-  # If MinIO scale-up: collect paths for new nodes NOW
-  local minio_scaled_up=false
-  if (( MINIO_NODES > ORIG_MINIO_NODES )); then
-    minio_scaled_up=true
-    local new_pool_start=$(( ORIG_MINIO_NODES + 1 ))
-    step "New MinIO pool — nodes ${new_pool_start}–${MINIO_NODES}  (${MINIO_DISKS} disk(s) each)"
-    warn "All existing MinIO nodes will restart with the new pool (~30s downtime)."
+  # If RustFS scale-up: collect paths for new nodes NOW
+  local rustfs_scaled_up=false
+  if (( RUSTFS_NODES > ORIG_RUSTFS_NODES )); then
+    rustfs_scaled_up=true
+    local new_pool_start=$(( ORIG_RUSTFS_NODES + 1 ))
+    step "New RustFS pool — nodes ${new_pool_start}–${RUSTFS_NODES}  (${RUSTFS_DISKS} disk(s) each)"
+    warn "All existing RustFS nodes will restart with the new pool (~30s downtime)."
     warn "Data is preserved — only the server command changes."
-    info "New nodes must use exactly ${MINIO_DISKS} disk(s) each (must match existing pool)"
+    info "New nodes must use exactly ${RUSTFS_DISKS} disk(s) each (must match existing pool)"
     echo ""
 
-    if [[ "$MINIO_MODE" == "auto" ]]; then
+    if [[ "$RUSTFS_MODE" == "auto" ]]; then
       # ── Disk wizard for new nodes ──────────────────────────────────────────
       _check_disk_tools
       _scan_available_disks
@@ -3758,12 +3745,12 @@ scale_nodes() {
       if (( DISK_COUNT == 0 )); then
         warn "No candidate disk found — falling back to manual path entry"
         local n d
-        for n in $(seq $new_pool_start $MINIO_NODES); do
-          prompt_input "Node ${n} — metadata path" "/data/minio/node${n}"
-          MINIO_PATHS["${n}_path"]="$REPLY"
-          for d in $(seq 1 "$MINIO_DISKS"); do
-            prompt_input "Node ${n} — Disk ${d}" "/data/minio/node${n}/data${d}"
-            MINIO_PATHS["${n}_${d}"]="$REPLY"
+        for n in $(seq $new_pool_start $RUSTFS_NODES); do
+          prompt_input "Node ${n} — metadata path" "/data/rustfs/node${n}"
+          RUSTFS_PATHS["${n}_path"]="$REPLY"
+          for d in $(seq 1 "$RUSTFS_DISKS"); do
+            prompt_input "Node ${n} — Disk ${d}" "/data/rustfs/node${n}/data${d}"
+            RUSTFS_PATHS["${n}_${d}"]="$REPLY"
           done
         done
       else
@@ -3784,8 +3771,8 @@ scale_nodes() {
 
         local -a _selected_devs=()
         local n d ci
-        for n in $(seq $new_pool_start $MINIO_NODES); do
-          for d in $(seq 1 "$MINIO_DISKS"); do
+        for n in $(seq $new_pool_start $RUSTFS_NODES); do
+          for d in $(seq 1 "$RUSTFS_DISKS"); do
             echo ""
             step "New node ${n} — Disk ${d}"
             _show_disk_table
@@ -3803,27 +3790,27 @@ scale_nodes() {
             done
 
             _selected_devs+=("${DISK_NAMES[$ci]}")
-            local target_mount="/mnt/minio-node${n}-disk${d}"
+            local target_mount="/mnt/rustfs-node${n}-disk${d}"
             if [[ "${DISK_MOUNTS[$ci]}" != "-" && -n "${DISK_MOUNTS[$ci]}" ]]; then
               target_mount="${DISK_MOUNTS[$ci]}"
             fi
 
-            _prepare_minio_disk \
+            _prepare_rustfs_disk \
               "${DISK_NAMES[$ci]}" "$target_mount" \
               "${DISK_FSTYPES[$ci]}" "$preferred_fs"
 
             # Refresh disk state so the table shows updated FS/mountpoint on next iteration
             _scan_available_disks
 
-            MINIO_PATHS["${n}_${d}"]="$target_mount"
+            RUSTFS_PATHS["${n}_${d}"]="$target_mount"
           done
-          MINIO_PATHS["${n}_path"]="${MINIO_PATHS["${n}_1"]}"
+          RUSTFS_PATHS["${n}_path"]="${RUSTFS_PATHS["${n}_1"]}"
         done
       fi
 
     else
       # ── Manual / test path entry ───────────────────────────────────────────
-      if [[ "$MINIO_MODE" == "manual" ]]; then
+      if [[ "$RUSTFS_MODE" == "manual" ]]; then
         box "Reminder — ensure disks are ready before proceeding" \
           "Format : mkfs.xfs -f /dev/sdX  (or mkfs.ext4 -F /dev/sdX)" \
           "Mount  : mount -t xfs -o noatime,nodiratime,allocsize=64m /dev/sdX /mnt/..." \
@@ -3831,12 +3818,12 @@ scale_nodes() {
         echo ""
       fi
       local n d
-      for n in $(seq $new_pool_start $MINIO_NODES); do
-        prompt_input "Node ${n} — metadata path" "/data/minio/node${n}"
-        MINIO_PATHS["${n}_path"]="$REPLY"
-        for d in $(seq 1 "$MINIO_DISKS"); do
-          prompt_input "Node ${n} — Disk ${d}" "/data/minio/node${n}/data${d}"
-          MINIO_PATHS["${n}_${d}"]="$REPLY"
+      for n in $(seq $new_pool_start $RUSTFS_NODES); do
+        prompt_input "Node ${n} — metadata path" "/data/rustfs/node${n}"
+        RUSTFS_PATHS["${n}_path"]="$REPLY"
+        for d in $(seq 1 "$RUSTFS_DISKS"); do
+          prompt_input "Node ${n} — Disk ${d}" "/data/rustfs/node${n}/data${d}"
+          RUSTFS_PATHS["${n}_${d}"]="$REPLY"
         done
       done
     fi
@@ -3850,7 +3837,7 @@ scale_nodes() {
   [[ "$COLLAB_NODES"     != "$ORIG_COLLAB_NODES"     ]] && changed=true
   [[ "$WB_NODES"         != "$ORIG_WB_NODES"         ]] && changed=true
   [[ "$SIGNALING_NODES"  != "$ORIG_SIGNALING_NODES"  ]] && changed=true
-  $minio_scaled_up && changed=true
+  $rustfs_scaled_up && changed=true
 
   if ! $changed; then
     info "No changes requested — operation cancelled"
@@ -3867,7 +3854,7 @@ scale_nodes() {
     "$( [[ "${TALK_ENABLED:-no}" == "yes" ]] \
         && echo "Signaling  : ${ORIG_SIGNALING_NODES} → ${SIGNALING_NODES} nodes" \
         || echo "Signaling  : disabled" )" \
-    "MinIO      : ${ORIG_MINIO_NODES} → ${MINIO_NODES} nodes"
+    "RustFS      : ${ORIG_RUSTFS_NODES} → ${RUSTFS_NODES} nodes"
 
   if (( MARIADB_NODES > ORIG_MARIADB_NODES )); then
     info "Galera: new nodes will join the cluster via SST (automatic)."
@@ -3894,32 +3881,32 @@ scale_nodes() {
     _redis_scale_down "$REDIS_NODES" "$ORIG_REDIS_NODES"
   fi
 
-  # Step 2: MinIO pool expansion — register BEFORE gen_compose
-  if $minio_scaled_up; then
-    _minio_register_pool "$ORIG_MINIO_NODES" "$MINIO_NODES"
+  # Step 2: RustFS pool expansion — register BEFORE gen_compose
+  if $rustfs_scaled_up; then
+    _rustfs_register_pool "$ORIG_RUSTFS_NODES" "$RUSTFS_NODES"
 
-    if [[ "$MINIO_MODE" == "auto" ]]; then
+    if [[ "$RUSTFS_MODE" == "auto" ]]; then
       # Wizard already formatted, mounted and configured fstab — verify only
-      step "Verifying new MinIO node mount points"
+      step "Verifying new RustFS node mount points"
       local n d
-      for n in $(seq $(( ORIG_MINIO_NODES + 1 )) $MINIO_NODES); do
-        for d in $(seq 1 "$MINIO_DISKS"); do
-          local path="${MINIO_PATHS[${n}_${d}]}"
+      for n in $(seq $(( ORIG_RUSTFS_NODES + 1 )) $RUSTFS_NODES); do
+        for d in $(seq 1 "$RUSTFS_DISKS"); do
+          local path="${RUSTFS_PATHS[${n}_${d}]}"
           if mountpoint -q "$path" 2>/dev/null; then
             info "Node ${n} disk ${d}: $path ✓ (mounted)"
           else
-            warn "Node ${n} disk ${d}: $path is not a mount point — MinIO may fail to start"
+            warn "Node ${n} disk ${d}: $path is not a mount point — RustFS may fail to start"
           fi
         done
       done
     else
-      # Test / manual mode: create directories and clear them for MinIO
-      # (MinIO refuses to start if data dirs contain unexpected files)
-      step "Creating MinIO directories (new nodes)"
+      # Test / manual mode: create directories and clear them for RustFS
+      # (RustFS refuses to start if data dirs contain unexpected files)
+      step "Creating RustFS directories (new nodes)"
       local n d
-      for n in $(seq $(( ORIG_MINIO_NODES + 1 )) $MINIO_NODES); do
-        for d in $(seq 1 "$MINIO_DISKS"); do
-          local path="${MINIO_PATHS[${n}_${d}]}"
+      for n in $(seq $(( ORIG_RUSTFS_NODES + 1 )) $RUSTFS_NODES); do
+        for d in $(seq 1 "$RUSTFS_DISKS"); do
+          local path="${RUSTFS_PATHS[${n}_${d}]}"
           mkdir -p "$path"
           find "${path:?}" -mindepth 1 -delete 2>/dev/null || true
         done
@@ -3968,7 +3955,7 @@ scale_nodes() {
     "Collabora  : ${COLLAB_NODES} nodes" \
     "Whiteboard : ${WB_NODES} nodes" \
     "$( [[ "${TALK_ENABLED:-no}" == "yes" ]] && echo "Signaling  : ${SIGNALING_NODES} nodes" || echo "Signaling  : disabled" )" \
-    "MinIO      : ${MINIO_NODES} nodes × ${MINIO_DISKS} disks"
+    "RustFS      : ${RUSTFS_NODES} nodes × ${RUSTFS_DISKS} disks"
 }
 
 # ─── [MAIN] Entry point ──────────────────────────────────────────────────────
@@ -4026,9 +4013,9 @@ main() {
     ask_domains
     ask_versions
     ask_nodes
-    ask_minio
+    ask_rustfs
     ask_haproxy
-    ask_minio_console
+    ask_rustfs_console
     ask_talk
     ask_cert_mode
   fi
@@ -4043,7 +4030,7 @@ main() {
   gen_galera_cnf
   patch_haproxy
   patch_nextcloud_init
-  create_minio_dirs
+  create_rustfs_dirs
 
   # Phase 6: Deployment
   gen_certs

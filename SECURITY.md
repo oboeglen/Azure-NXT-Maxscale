@@ -62,7 +62,7 @@ To speed up processing, please specify:
 
 ### Out of scope ❌
 
-- Vulnerabilities in upstream Docker images (`nextcloud`, `haproxy`, `collabora/code`, `redis`, `minio/minio`…) — report directly to the relevant publishers
+- Vulnerabilities in upstream Docker images (`nextcloud`, `haproxy`, `collabora/code`, `redis`, `rustfs/rustfs`…) — report directly to the relevant publishers
 - Vulnerabilities in Nextcloud itself — [Nextcloud Security](https://nextcloud.com/security/)
 - Vulnerabilities in Collabora CODE — [Collabora Security](https://www.collaboraonline.com/security/)
 - Configuration specific to the user's environment (weak passwords, misconfigured DNS…)
