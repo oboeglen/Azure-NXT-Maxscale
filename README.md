@@ -30,6 +30,9 @@
 
 ---
 
+<details>
+<summary><strong>Screenshots</strong> — Login · Dashboard · Files · Collabora · Talk · Whiteboard · MinIO · HAProxy</summary>
+
 <div align="center">
 <table>
 <tr>
@@ -50,6 +53,8 @@
 </tr>
 </table>
 </div>
+
+</details>
 
 ---
 
