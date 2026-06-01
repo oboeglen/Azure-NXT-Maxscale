@@ -6,6 +6,29 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.4.2] — 2026-06-01
+
+### Fixed
+- **RustFS console login** — three cascading bugs prevented browser login: (1) ACL `path_beg /s3-console` did not match `/rustfs/*` paths after the console's internal redirect to `/rustfs/console/` — the browser landed on Nextcloud 404; (2) `RUSTFS_SERVER_DOMAINS` was not set, causing RustFS to reject logins from the external domain; (3) the console JS makes browser-side S3 API calls (`POST /`, `GET /`) which HAProxy was forwarding to Nextcloud — a new ACL `is_s3_api` routes requests with `Authorization: AWS4-HMAC-SHA256` header to the RustFS S3 backend (port 9000)
+- **HAProxy method filter blocked console operations** — PUT/DELETE on `/rustfs/*` were denied by the WebDAV method ACL (`is_api_path`); `/rustfs` added to the allowed-path list so bucket/object management from the console works correctly
+- **Sticky session cookie for console** — without `cookie RUSTFS_CONSOLE insert`, HAProxy could route mid-session requests to a different node, causing auth loops; sticky session now pins the browser session to one node via `RC1..RCN` cookie values
+- **IFS word-split bug in `gen_compose`** — `IFS=$'\n\t'` (set globally in deploy.sh line 7) prevented space-based word-splitting of `$rustfs_volumes_val` in the `for _url in ...` loop. All URLs were concatenated into a single YAML list item instead of separate items, so the entrypoint received one big string as a single argument. Fixed with `read -r -a` array split
+- **`RUSTFS_SERVER_DOMAINS` missing from generated compose** — `gen_compose()` and `docker-compose.yml` now include `RUSTFS_SERVER_DOMAINS=${NC_DOMAIN}` in all RustFS node environments
+
+### Changed
+- **RustFS image pinned to `1.0.0-beta.6`** — replaces `:latest` for reproducible deployments; last tested and validated version
+- **`mc` (minio/mc) removed** — no longer used; bucket versioning step removed from post-install (versioning is already active by default in the deployed bucket and can be managed via `/s3-console`)
+- **RustFS console route** — `/s3-console` now issues a 301 redirect to `/rustfs/console/` (the console's native base path); HAProxy routes `path_beg /rustfs` to port 9001 without path stripping; a dedicated `backend rustfs-s3api` handles browser-side S3 calls via the `is_s3_api` ACL
+
+### Docs
+- RustFS beta warning added to object storage section: pool rebalancing and decommission return 501 (not implemented in v1.0.0-beta.6); `mc admin` protocol not supported
+- RustFS console section updated with accurate HAProxy routing, `RUSTFS_SERVER_DOMAINS` requirement, sticky session, and AWS4 S3 routing explanation
+- Image update procedure corrected: quick update does not change versions (no `gen_compose` call); a full deploy is required when modifying `IMG_*` variables
+- Historical CHANGELOG entries restored: pre-migration sections (v2.1.x–v2.3.x) incorrectly had "MinIO" replaced by "RustFS"; original entries now accurate
+- RustFS scale-up documented as unsupported in beta (`formats length for erasure.sets does not match`)
+
+---
+
 ## [2.4.1] — 2026-06-01
 
 ### Fixed
