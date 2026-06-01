@@ -36,6 +36,18 @@
 <td align="center"><img src="img/login-preview.png" width="480" alt="NXT Maxscale Login Page"/><br/><sub>Login page</sub></td>
 <td align="center"><img src="img/dashboard-preview.png" width="480" alt="NXT Maxscale Dashboard"/><br/><sub>Dashboard</sub></td>
 </tr>
+<tr>
+<td align="center"><img src="img/files.png" width="480" alt="Nextcloud Files"/><br/><sub>Files</sub></td>
+<td align="center"><img src="img/collabora.png" width="480" alt="Collabora Online"/><br/><sub>Collabora Online</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="img/talk.png" width="480" alt="Nextcloud Talk"/><br/><sub>Talk</sub></td>
+<td align="center"><img src="img/whiteboard.png" width="480" alt="Whiteboard"/><br/><sub>Whiteboard</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="img/minio-console.png" width="480" alt="MinIO Console"/><br/><sub>MinIO Console</sub></td>
+<td align="center"><img src="img/haproxy-stats.png" width="480" alt="HAProxy Stats"/><br/><sub>HAProxy Stats</sub></td>
+</tr>
 </table>
 </div>
 
