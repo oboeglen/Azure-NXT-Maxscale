@@ -282,6 +282,11 @@ occ background:cron
 
 info "Paramètres système configurés."
 
+# Brute-force protection whitelist — Docker next-net + localhost
+# Prevents false positives when notify_push, cron or internal services call Nextcloud
+occ config:system:set auth.bruteforce.protection.whitelist 0 --value "127.0.0.1"
+occ config:system:set auth.bruteforce.protection.whitelist 1 --value "172.10.0.0/24"
+
 # Limites de génération de previews — désactiver les formats lourds (vidéo, HEIC, Office)
 occ config:system:set preview_max_x            --type integer --value 2048
 occ config:system:set preview_max_y            --type integer --value 2048
