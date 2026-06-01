@@ -1,6 +1,10 @@
 <div align="center">
 
-<img src="nxt-maxscale-logo.png" width="500" alt="Azure NXT Maxscale">
+<picture>
+  <source media="(prefers-color-scheme: dark)"  srcset="nxt-maxscale-logo.png">
+  <source media="(prefers-color-scheme: light)" srcset="nxt-maxscale-logo-light.png">
+  <img src="nxt-maxscale-logo-light.png" width="500" alt="Azure NXT Maxscale">
+</picture>
 
 
 **High-availability Nextcloud infrastructure — deployable with a single command**
