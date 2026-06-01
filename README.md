@@ -375,16 +375,23 @@ docker ps --filter "name=rustfs-node" --format "table {{.Names}}\t{{.Status}}\t{
 > [!WARNING]
 > The console is protected by RustFS credentials (`RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`), but it is exposed on Nextcloud's public URL without IP restriction or additional network layer. It provides direct access to all RustFS buckets. Use only in test or diagnostic environments, and disable afterwards.
 
+> [!NOTE]
+> **Beta limitation** — Admin features visible in the console menu (pool rebalancing, decommission) are not yet implemented in RustFS v1.0.0-beta.6. Core operations (bucket browsing, object management, access keys, users) work correctly.
+
 Enabled during deployment by `deploy.sh` (same principle as HAProxy stats on `/stats`). The console is built into RustFS — no separate container is needed. Once enabled (`RUSTFS_CONSOLE_ENABLE=true`), port 9001 is active on all RustFS nodes.
 
 | | |
 |---|---|
-| **URL** | `https://<NEXTCLOUD_DOMAIN>/s3-console/` |
+| **Entry point** | `https://<NEXTCLOUD_DOMAIN>/s3-console` → 301 redirect → `/rustfs/console/` |
 | **Login** | RustFS access key (`RUSTFS_ACCESS_KEY`) |
 | **Password** | RustFS secret key (`RUSTFS_SECRET_KEY`) |
 | **Port** | 9001 (built into `rustfs/rustfs`, no extra image) |
 
-HAProxy routes `/s3-console/*` to the RustFS nodes on port 9001, **stripping the `/s3-console` prefix** before forwarding so the built-in console receives requests at `/`.
+**HAProxy routing for the console:**
+- `path_beg /rustfs` → routed to `rustfs-node*:9001` (console UI + Next.js assets)
+- `Authorization: AWS4-HMAC-SHA256` → routed to `rustfs-node*:9000` (S3 API calls made by the browser-side JS during login and bucket listing)
+- `RUSTFS_SERVER_DOMAINS` must be set to the Nextcloud domain — otherwise RustFS rejects logins from the external domain
+- Sticky session cookie `RUSTFS_CONSOLE` pins the browser session to one node
 
 > [!TIP]
 > To enable or disable the console on an existing deployment, re-run `deploy.sh` — the answer is saved in the configuration file and reused on each run.
