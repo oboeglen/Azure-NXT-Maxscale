@@ -282,10 +282,24 @@ occ background:cron
 
 info "Paramètres système configurés."
 
-# Brute-force protection whitelist — Docker next-net + localhost
-# Prevents false positives when notify_push, cron or internal services call Nextcloud
+# Brute-force protection whitelist — Docker next-net + localhost + server public IP
+# Prevents false positives when notify_push, cron or internal services call Nextcloud.
+# The server's own public IP is detected at setup time and added to avoid self-triggered blocks.
 occ config:system:set auth.bruteforce.protection.whitelist 0 --value "127.0.0.1"
 occ config:system:set auth.bruteforce.protection.whitelist 1 --value "172.10.0.0/24"
+SERVER_PUBLIC_IP=$(curl -4 -sf --max-time 5 https://ifconfig.me 2>/dev/null \
+  || ip route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')
+if [ -n "${SERVER_PUBLIC_IP}" ]; then
+    occ config:system:set auth.bruteforce.protection.whitelist 2 --value "${SERVER_PUBLIC_IP}"
+    info "Brute-force whitelist: 127.0.0.1, 172.10.0.0/24, ${SERVER_PUBLIC_IP}"
+else
+    info "Brute-force whitelist: 127.0.0.1, 172.10.0.0/24"
+fi
+
+# Rate limiting — increase login attempt limits to avoid locking out admins during setup
+# Default: 10 anon / 300s. Raised to 100 to tolerate post-deployment verification loops.
+occ config:app:set core ratelimit.login.anon.limit --value "100" 2>/dev/null || true
+occ config:app:set core ratelimit.login.user.limit --value "50" 2>/dev/null || true
 
 # Limites de génération de previews — désactiver les formats lourds (vidéo, HEIC, Office)
 occ config:system:set preview_max_x            --type integer --value 2048
