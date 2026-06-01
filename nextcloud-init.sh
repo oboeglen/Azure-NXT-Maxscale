@@ -296,10 +296,6 @@ else
     info "Brute-force whitelist: 127.0.0.1, 172.10.0.0/24"
 fi
 
-# Rate limiting — increase login attempt limits to avoid locking out admins during setup
-# Default: 10 anon / 300s. Raised to 100 to tolerate post-deployment verification loops.
-occ config:app:set core ratelimit.login.anon.limit --value "100" 2>/dev/null || true
-occ config:app:set core ratelimit.login.user.limit --value "50" 2>/dev/null || true
 
 # Limites de génération de previews — désactiver les formats lourds (vidéo, HEIC, Office)
 occ config:system:set preview_max_x            --type integer --value 2048
