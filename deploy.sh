@@ -2431,7 +2431,7 @@ patch_haproxy() {
   # Console servers: same nodes as S3 but on port 9001
   local console_servers=""
   for i in $(seq 1 "$RUSTFS_NODES"); do
-    console_servers+="  server rustfs-node${i} rustfs-node${i}:9001 check"$'\n'
+    console_servers+="  server rustfs-node${i} rustfs-node${i}:9001 check cookie RC${i}"$'\n'
   done
   _replace_servers "RUSTFS_CONSOLE"  "${console_servers%$'\n'}"    "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
   _replace_servers "REDIS"           "${redis_servers%$'\n'}"      "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
