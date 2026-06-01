@@ -6,6 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.4.1] — 2026-06-01
+
+### Fixed
+- **RustFS distributed mode — command args, not env var** — after auditing the official `entrypoint.sh`, `RUSTFS_VOLUMES` with HTTP URLs is silently skipped by the entrypoint (only absolute paths are processed). Volume URLs for multi-node mode are now passed as YAML list-form `command:` args so the entrypoint receives each URL as a separate `$@` argument and prepends `/usr/bin/rustfs`. `RUSTFS_VOLUMES=none` suppresses the entrypoint's default `/data` fallback
+- **Shell-form command would break entrypoint dispatch** — a quoted YAML `command: "http://..."` string is wrapped by Docker Compose as `/bin/sh -c "string"`, causing the entrypoint to receive `/bin/sh` as `$1` and call rustfs incorrectly. Switched to YAML list form (`command: [url1, url2, ...]`) which passes each URL as a separate positional argument
+- **Health check endpoint** — changed from generic HTTP response check to the documented `/health` endpoint (`curl -sf http://localhost:9000/health`), now also used in `check_deploy()`
+- **Removed `user: root`** — RustFS container defaults to UID 10001; `create_rustfs_dirs()` pre-chowns data directories on the host before container start
+- **`gen_rustfs_volumes_env()` rewritten** — single-node returns space-separated absolute paths (for `RUSTFS_VOLUMES`); multi-node and multi-pool return fully-expanded explicit HTTP URLs (for `command:` args), with no brace notation
+
+---
+
 ## [2.4.0] — 2026-06-01
 
 ### Changed
