@@ -1179,7 +1179,7 @@ All Docker images are pinned to precise versions rather than floating tags (`:la
 | `IMG_CERTBOT` | `certbot/certbot` | `v5.6.0` |
 | `IMG_REDIS` | `redis` | `7.4-alpine` |
 | `IMG_MARIADB` | `maxscale-mariadb-galera` | `11.4` |
-| `IMG_RUSTFS` | `rustfs/rustfs` | `latest` |
+| `IMG_RUSTFS` | `rustfs/rustfs` | `1.0.0-beta.6` |
 | `IMG_COLLABORA` | `collabora/code` | `25.04.9.4.1` |
 | `IMG_AUTOHEAL` | `willfarrell/autoheal` | `latest` |
 | `IMG_WHITEBOARD` | `ghcr.io/nextcloud-releases/whiteboard` | `v1.5.8` |

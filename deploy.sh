@@ -20,7 +20,7 @@ CERTBOT_STAGING="no"
 # ─── Images — pinned versions ─────────────────────────────────────────────────
 IMG_CERTBOT="certbot/certbot:v5.6.0"
 IMG_AUTOHEAL="willfarrell/autoheal:latest"
-IMG_RUSTFS="rustfs/rustfs:latest"
+IMG_RUSTFS="rustfs/rustfs:1.0.0-beta.6"
 IMG_COLLABORA="collabora/code:25.04.9.4.1"
 IMG_WHITEBOARD="ghcr.io/nextcloud-releases/whiteboard:v1.5.8"
 IMG_NATS="nats:2.10-alpine"
