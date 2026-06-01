@@ -216,13 +216,13 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 | `collabora-node1..N` | Online collaborative office editing — `/hosting/discovery` healthcheck on all nodes |
 | `whiteboard-node1..N` | Real-time collaborative whiteboard |
 | `redis-whiteboard` | Shared whiteboard state (Redis Streams) |
-| RustFS built-in console *(optional)* | RustFS web console on port 9001 — accessible via `/s3-console` |
+| RustFS console *(optional, built-in)* | Built into `rustfs/rustfs` on port 9001 — no extra container — accessible via `https://domain/s3-console` |
 | `notify-push` | Notify Push — real-time sync notifications over WebSocket (`/push`) |
 | `nats` *(Talk only)* | NATS message broker — distributes signaling events across Talk HA nodes |
 | `spreed-signaling-01..N` *(Talk only)* | WebSocket signaling server — HAProxy load-balances across all nodes |
 | `coturn` *(Talk, optional)* | TURN/STUN relay — media relay for clients behind NAT or strict firewalls |
 
-> RustFS bucket versioning is automatically enabled by `deploy.sh` at the end of the Nextcloud installation, via the `mc` S3 CLI (image pulled at deployment but without a persistent container).
+> RustFS bucket versioning is enabled by default on the `nextcloud` bucket. It can be managed from the web console (`/s3-console`) under bucket settings → **Contrôle de version**.
 
 **Exposed ports:** `80` (HTTPS redirect) · `443` (Nextcloud, Collabora, Whiteboard, Talk, Push) · `3478/udp+tcp` (coturn TURN/STUN — only when coturn is enabled)
 
@@ -579,9 +579,9 @@ Automatic — `deploy.sh` runs `occ notify_push:setup "https://NEXTCLOUD_DOMAIN/
 When a stack is already deployed, re-running `deploy.sh` presents a three-option menu:
 
 ```
-[1] Quick update        — pull images + restart
-[2] Scale up / down nodes
-[3] Full deployment     — start from scratch
+[1] Quick update    — pull images + Collabora patch (configuration preserved)
+[2] Scale nodes     — increase/decrease nodes without reinitialization
+[3] Full deployment — regenerates all files (⚠  starts from scratch)
 ```
 
 **Scaling** mode modifies the number of nodes per service **without data loss** — Docker volumes are never deleted, `.env` is not regenerated.
@@ -1198,7 +1198,7 @@ IMG_COLLABORA="collabora/code:25.04.9.5"   # → new version
 
 # 2. Run a full deploy — this regenerates docker-compose.yml with the new tag,
 #    pulls the new image, and recreates containers
-sudo bash deploy.sh   # → choose [2] Update existing deployment (full)
+sudo bash deploy.sh   # → choose [3] Full deployment
 ```
 
 > **Quick update does NOT change versions.** `update_images()` (option [1]) runs `docker compose pull` + `docker compose up -d` on the **existing** `docker-compose.yml` — it does not call `gen_compose()`. Modifying an `IMG_*` variable has no effect until a full deploy regenerates the compose file.
