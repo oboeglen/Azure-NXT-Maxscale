@@ -1190,15 +1190,18 @@ All Docker images are pinned to precise versions rather than floating tags (`:la
 > `autoheal` does not publish recent versioned tags on Docker Hub (`1.2.0` dates from 2021) — kept on `latest`.
 > `spreed-signaling` does not publish granular versioned tags — kept on `latest`. The `notify-push` container reuses the Nextcloud image (`nextcloud:${NC_VERSION}`), pinned via the `NC_VERSION` variable set in `deploy.sh`.
 
-### Update an image
+### Update an image to a new version
 
 ```bash
-# Edit the corresponding variable in deploy.sh
-IMG_COLLABORA="collabora/code:25.04.9.4.1"   # → new version
+# 1. Edit the corresponding IMG_* variable in deploy.sh
+IMG_COLLABORA="collabora/code:25.04.9.5"   # → new version
 
-# Then run the quick update
-sudo bash deploy.sh   # → choose [1] Quick update
+# 2. Run a full deploy — this regenerates docker-compose.yml with the new tag,
+#    pulls the new image, and recreates containers
+sudo bash deploy.sh   # → choose [2] Update existing deployment (full)
 ```
+
+> **Quick update does NOT change versions.** `update_images()` (option [1]) runs `docker compose pull` + `docker compose up -d` on the **existing** `docker-compose.yml` — it does not call `gen_compose()`. Modifying an `IMG_*` variable has no effect until a full deploy regenerates the compose file.
 
 > **Collabora**: always test the `home_mode` binary patch after a version upgrade — the pattern may change if the `coolwsd` binary is restructured.
 
