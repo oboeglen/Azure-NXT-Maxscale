@@ -589,7 +589,7 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 | **Collabora CODE** | ✅ | ✅ | `home_mode` binary patch reapplied on new nodes |
 | **Whiteboard** | ✅ | ✅ | |
 | **Talk HA** | ✅ | ✅ | HAProxy updated automatically — NATS and coturn unaffected |
-| **RustFS** | ✅ | ❌ | Scale-up via pool expansion; scale-down via RustFS admin tools |
+| **RustFS** | ⚠️ | ❌ | Scale-up not supported in beta — see note below; scale-down not supported |
 
 <details>
 <summary>Internal mechanics — how each service scales step by step</summary>
@@ -611,10 +611,14 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 3. `--cluster fix` + `--cluster rebalance` to rebalance remaining slots
 
 **RustFS (scale-up)**
+
+> [!WARNING]
+> Pool expansion is **not supported in RustFS v1.0.0-beta.6**. Adding nodes to an existing cluster fails with `formats length for erasure.sets does not match: got N, expected M` because the on-disk format records the initial erasure set count and cannot be changed dynamically. This is a known beta limitation (pool rebalancing is marked 🚧 Under Testing in the RustFS roadmap). To change the node count, the cluster must be redeployed from scratch.
+
 - New node paths are collected interactively (default: `/data/rustfs/nodeN/dataN`)
 - The new pool is registered in `.rustfs-pools` (`start:end` per line)
-- `gen_compose` rebuilds the `server` command with all pools: `server pool1 pool2 ...`
-- All RustFS nodes restart with the new command (~30 s downtime, data preserved)
+- `gen_compose` rebuilds the command with all pool URLs
+- All RustFS nodes restart with the new command — **currently fails in beta** (see warning above)
 
 </details>
 
@@ -625,7 +629,8 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 | Redis — even delta | Each batch = 1 master + 1 replica |
 | Redis — minimum 6 | 3 masters + 3 replicas minimum |
 | Galera — odd count | Quorum required |
-| RustFS — scale-down | Not supported — decommission via RustFS admin decommission procedure |
+| RustFS — scale-up | Not supported in beta — pool expansion fails with erasure set mismatch |
+| RustFS — scale-down | Not supported — requires full cluster redeploy |
 | Passwords | Never regenerated during scaling — `.env` is preserved |
 
 ### Persistence across reboots
