@@ -1993,7 +1993,9 @@ WBREDIS
     restart: always
     entrypoint: ["/bin/sh", "-c"]
     command: >
-      "exec /var/www/html/apps/notify_push/bin/\$\$(uname -m)/notify_push /var/www/html/config/config.php"
+      "BIN=/var/www/html/apps/notify_push/bin/\$\$(uname -m)/notify_push;
+       until [ -f \$$BIN ]; do echo 'notify-push: waiting for binary...'; sleep 5; done;
+       exec \$$BIN /var/www/html/config/config.php"
     environment:
       - PORT=7867
       - LOG=warn
