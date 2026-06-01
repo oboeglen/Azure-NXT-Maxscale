@@ -1180,7 +1180,6 @@ All Docker images are pinned to precise versions rather than floating tags (`:la
 | `IMG_REDIS` | `redis` | `7.4-alpine` |
 | `IMG_MARIADB` | `maxscale-mariadb-galera` | `11.4` |
 | `IMG_RUSTFS` | `rustfs/rustfs` | `latest` |
-| `IMG_MC` | `minio/mc` (S3-compatible CLI, works with RustFS) | `RELEASE.2025-08-13T08-35-41Z` |
 | `IMG_COLLABORA` | `collabora/code` | `25.04.9.4.1` |
 | `IMG_AUTOHEAL` | `willfarrell/autoheal` | `latest` |
 | `IMG_WHITEBOARD` | `ghcr.io/nextcloud-releases/whiteboard` | `v1.5.8` |
@@ -1230,10 +1229,7 @@ sudo bash deploy.sh   # → choose [1] Quick update
 
 **VM snapshots (Azure / cloud)** — the simplest solution: snapshot of the OS disk + data at regular intervals from the Azure portal or via `az snapshot create`. Full restoration in minutes.
 
-**RustFS sync to external storage** *(top priority)* — `mc mirror` to a remote S3 bucket or Azure Blob Storage:
-```bash
-docker exec rustfs-node1 mc mirror --overwrite local/nextcloud s3-remote/nextcloud-backup
-```
+**RustFS sync to external storage** *(top priority)* — use an S3-compatible CLI (`aws s3 sync`, `rclone`, etc.) to mirror the `nextcloud` bucket to a remote S3-compatible storage or Azure Blob Storage.
 
 **MariaDB dump (Galera)** — consistent logical export from any node:
 ```bash

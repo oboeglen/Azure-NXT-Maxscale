@@ -21,7 +21,6 @@ CERTBOT_STAGING="no"
 IMG_CERTBOT="certbot/certbot:v5.6.0"
 IMG_AUTOHEAL="willfarrell/autoheal:latest"
 IMG_RUSTFS="rustfs/rustfs:latest"
-IMG_MC="minio/mc:RELEASE.2025-08-13T08-35-41Z"  # S3-compatible CLI — works with RustFS, Ceph, and any S3-compatible storage
 IMG_COLLABORA="collabora/code:25.04.9.4.1"
 IMG_WHITEBOARD="ghcr.io/nextcloud-releases/whiteboard:v1.5.8"
 IMG_NATS="nats:2.10-alpine"
@@ -2901,7 +2900,6 @@ run_deploy() {
     "nextcloud:${NC_VERSION}"
     "${IMG_REDIS}"
     "${IMG_RUSTFS}"
-    "${IMG_MC}"
     "${IMG_COLLABORA}"
     "${IMG_WHITEBOARD}"
   )
@@ -3000,19 +2998,6 @@ run_deploy() {
       exit_code=$(docker inspect --format='{{.State.ExitCode}}' nextcloud-setup 2>/dev/null || echo "1")
       if [[ "$exit_code" == "0" ]]; then
         info "nextcloud-setup completed successfully ✓"
-        # Enable RustFS versioning — bucket necessarily exists at this point
-        start_spinner "Enabling RustFS versioning..."
-        if docker run --rm \
-            --network storage-net \
-            --entrypoint sh "${IMG_MC}" -c \
-            "mc alias set r http://rustfs-node1:9000 ${GEN_RUSTFS_KEY} ${GEN_RUSTFS_SECRET} --quiet 2>/dev/null \
-             && mc version enable r/${NEXTCLOUD_S3_BUCKET:-nextcloud} --quiet 2>/dev/null \
-             && mc ilm rule add --expire-delete-marker r/${NEXTCLOUD_S3_BUCKET:-nextcloud} 2>/dev/null || true" \
-            &>/dev/null; then
-          stop_spinner "RustFS versioning enabled ✓"
-        else
-          stop_spinner "RustFS versioning: failed (can be enabled from /s3-console)"
-        fi
       else
         warn "nextcloud-setup completed with error (code $exit_code)"
         docker logs nextcloud-setup --tail 20
