@@ -72,6 +72,7 @@
 - [🚢 Manual deployment](#-manual-deployment)
 - [📊 Performance & sizing](#-performance--sizing)
 - [🛡️ Network security recommendations](#️-network-security-recommendations)
+- [🔐 Security audit](#-security-audit)
 - [🐳 Docker images — pinned versions](#-docker-images--pinned-versions)
 - [🗄️ Backup](#️-backup)
 
@@ -940,6 +941,40 @@ sudo systemctl restart fail2ban
 # Check banned IPs
 sudo fail2ban-client status sshd
 ```
+
+---
+
+## 🔐 Security audit
+
+> Scope: **external attack surface only** — deployed services and production URLs. Server-level hardening (SSH, fail2ban, Docker socket) is excluded from this score.
+> Last audit: **June 2026** — v2.3.3
+
+### Score: 89 / 100 — Very good
+
+| Finding | Severity | Detail |
+|---------|:--------:|--------|
+| Version disclosure | 🟠 Medium | `/status.php` returns `33.0.3.2` and `/api/v1/welcome` returns `2.1.1~docker` without authentication. Allows targeting known CVEs. |
+| coturn without TLS | 🟡 Low | TURN signaling transits in plaintext between client and server. WebRTC media remains encrypted (DTLS). |
+| No rate limiting at reverse proxy level | 🟡 Low | HAProxy does not throttle HTTP flood. Nextcloud's built-in brute-force protection applies, but no upstream limiter. |
+| No CSP on Collabora / Whiteboard subdomains | 🟡 Low | By design — both services need to be embeddable in Nextcloud iframes. X-Frame-Options not set on these subdomains intentionally. |
+| CSP `connect-src *` on 302 redirects | 🟡 Low | Nextcloud generates a wildcard CSP on redirect responses. Not enforced by browsers on redirects — no practical impact. |
+
+### What is well secured
+
+| Area | Status |
+|------|--------|
+| TLS 1.2 min / 1.3 preferred, ECDHE suites, `no-tls-tickets` | ✅ |
+| HSTS 2 years · `includeSubDomains` · `preload` | ✅ |
+| Security headers on all responses (XCTO, XSS, Referrer, Permissions-Policy, HSTS) | ✅ |
+| `X-Frame-Options: SAMEORIGIN` on Nextcloud | ✅ |
+| `TRACE`, `DEBUG`, `CONNECT` blocked → 403 | ✅ |
+| Common scan paths (`.env`, `.git`, `/wp-admin`, `/phpmyadmin`…) → 403 | ✅ |
+| Collabora admin console (`/browser/dist/admin`) → 403 | ✅ |
+| `/stats` and `/s3-console` protected by credentials | ✅ |
+| No sensitive ports exposed externally (MariaDB, Redis, MinIO, NATS all closed) | ✅ |
+| Cookies: `Secure` + `HttpOnly` + `SameSite=Lax/Strict` | ✅ |
+| `Server` and `X-Powered-By` headers removed | ✅ |
+| CSP extended for WebSocket connections to Collabora, Whiteboard and Talk | ✅ |
 
 ---
 
