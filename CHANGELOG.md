@@ -6,6 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.3.5] — 2026-06-01
+
+### Fixed
+- **notify-push missing from docker-compose.yml** — `gen_compose()` used `\$$BIN` in a heredoc, causing a `set -u` error on the undefined variable `$BIN` that silently aborted writing the service. The variable is removed; the binary path is now repeated inline with `\$\$(uname -m)`
+- **notify-push restart loop on first deploy** — container started before the `notify_push` binary was copied to the volume by `app-next-01`. Added a wait loop: `until [ -f .../notify_push ]; do sleep 5; done` before `exec`
+- **Brute force / rate limiting lockout** — repeated login attempts during deployment triggered Nextcloud's rate limiter. `nextcloud-init.sh` now auto-whitelists `127.0.0.1`, `172.10.0.0/24` (Docker net), and the server's public IP detected at setup time
+- **Wrong OIDC app installed** — `user_oidc` (OpenID Connect user backend) replaced by `oidc` (OIDC Identity Provider v1.17.0) in the app installation list
+- **Mail and Assistant missing** — `mail` and `assistant` added to the auto-installed apps list in `nextcloud-init.sh`
+
+---
+
 ## [2.3.4] — 2026-06-01
 
 ### Added
