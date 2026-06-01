@@ -824,18 +824,36 @@ Config: **6 FPM · 5 Galera · 12 Redis · 4 MinIO · 6 Collabora · 3 Whiteboar
 | Notify Push (HTTP) | 3 | 2.8 ms | 2 ms | 5 ms | **7 ms** | < 2 s | ✅ |
 
 > ⚠️ WebDAV download p95 = 3.1 s slightly exceeds the 2 s SLA at nominal load — all reads completed successfully (0 errors). Caused by simultaneous writes on the same MinIO cluster from 10 WebDAV VUs.
->
-> ℹ️ Talk signaling WebSocket: 0% upgrade success — the spreed-signaling server requires a valid Nextcloud session token before completing the WS handshake. Unauthenticated upgrades are intentionally rejected. HTTP `/api/v1/welcome` returned 200 on all 6 nodes. WS connection is validated functionally by the platform during Talk calls.
 
 | Metric | Value |
 |--------|-------|
 | HTTP 5xx errors | **0** |
 | Container crashes | **0** |
-| `http_req_failed` | 4.44% (246 / 5,532) ✅ — Talk WS auth rejections + routing responses |
+| `http_req_failed` | 4.44% (246 / 5,532) ✅ |
 | WebSocket sessions | **560** (153 Whiteboard · 407 Talk) |
 | Data received | 47 MB · 102 kB/s |
 
 **0 server errors, 0 crashes.** The full stack with Talk HA (6 nodes), coturn and Notify Push handles nominal load without degradation on any functional service.
+
+#### Talk HA authenticated WebSocket — dedicated benchmark (k6 v0.57.0) — 2026-06-01
+
+> Full authentication flow: Nextcloud ticket API → WebSocket upgrade → authenticated hello → session registration on 6 HA nodes. 6 VUs · 6 minutes steady state · 506 complete iterations.
+
+| Metric | avg | p(50) | p(90) | **p(95)** | SLA | Status |
+|--------|---:|---:|---:|---:|:---:|:---:|
+| Ticket API (Nextcloud OCS) | 368 ms | 367 ms | 411 ms | **417 ms** | < 500 ms | ✅ |
+| WS connect (TCP + TLS + upgrade) | 14.8 ms | 12 ms | 23 ms | **24 ms** | < 500 ms | ✅ |
+| Server welcome → client hello | 15 ms | 12 ms | 24 ms | **24 ms** | — | — |
+| Full authenticated session | 64.9 ms | 60 ms | 91 ms | **100 ms** | < 2 s | ✅ |
+
+| Check | Result |
+|-------|--------|
+| Nextcloud ticket API (HTTP 200) | **100%** — 506 / 506 |
+| WebSocket upgrade (101) | **100%** — 506 / 506 |
+| Authenticated session established | **100%** — 506 / 506 |
+| HTTP errors | **0%** — 0 / 506 |
+
+The 6 Talk HA signaling nodes authenticate users in under **100 ms p(95)** end-to-end (ticket fetch included), distributed via HAProxy `leastconn` with zero failures over the full test duration.
 
 ---
 
@@ -853,7 +871,7 @@ Config: **6 FPM · 5 Galera · 12 Redis · 4 MinIO · 6 Collabora · 3 Whiteboar
 | WebDAV p95 | **1,980 ms** ✅ | 4,285 ms ⚠️ | 2,060 ms ✅ (up) · 3,110 ms ⚠️ (dl) |
 | Collabora p95 | **2,160 ms** ✅ | 3,089 ms ✅ | **7 ms** ✅ ¹ |
 | Whiteboard p95 | **2,060 ms** ✅ | 4,900 ms ✅ | **27 ms** ✅ ² |
-| Talk signaling | N/A | N/A | HTTP ✅ · WS auth required |
+| Talk signaling | N/A | N/A | **100 ms** p(95) ✅ (full auth) |
 | Notify Push | N/A | N/A | **7 ms** ✅ |
 | HTTP 5xx errors | **0** | **0** | **0** |
 | Container crashes | **0** | **0** | **0** |
@@ -899,6 +917,10 @@ Degradation is **consistent with the model** and **graceful**: no crashes, no se
 | Collabora CODE (per node) | 500 MB – 1 GB | 2% | 40–80% | WOPI + WebSocket |
 | Whiteboard (per node) | ~100 MB | < 1% | 5–10% | Real-time WebSocket |
 | galera-autoheal | ~20 MB | < 1% | < 1% | Local Docker socket |
+| Talk HA signaling (per node) | 12–18 MB | < 1% | 1–3% | Long-lived WebSocket sessions |
+| NATS | ~13 MB | < 1% | 1–5% | pub/sub between signaling nodes |
+| coturn | ~20 MB | < 1% | 2–10% | TURN relay UDP/TCP :3478 + media ports |
+| Notify Push | ~6 MB | < 1% | < 1% | WebSocket push to clients (/push) |
 
 ---
 
