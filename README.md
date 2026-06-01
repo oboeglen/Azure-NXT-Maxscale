@@ -300,6 +300,15 @@ for i in 1 2 3; do echo "node$i:"; docker run --rm -v maxscale_mariadb_n${i}_dat
 
 ## 💾 RustFS object storage
 
+> [!WARNING]
+> **RustFS is currently in beta (v1.0.0-beta.6) and under active development.**
+> Single-node and multi-node S3 storage, erasure coding, and the web console are functional. However, several admin features visible in the console UI are **not yet implemented** in this release:
+> - Pool rebalancing (`/rustfs/admin/v3/rebalance` → 501 Not Implemented)
+> - Pool decommission (`/rustfs/admin/v3/pools/list` → 501 Not Implemented)
+> - `mc admin` protocol (MinIO admin API not yet supported by RustFS)
+>
+> These features are marked **🚧 Under Testing** in the [official RustFS roadmap](https://github.com/rustfs/rustfs). The project is at [26 k+ GitHub stars](https://github.com/rustfs/rustfs) and evolves rapidly — check releases for updates before a production rollout.
+
 RustFS runs in **distributed erasure coding** mode — N nodes × D drives per node.
 
 | Configuration | Read tolerance | Write tolerance |
