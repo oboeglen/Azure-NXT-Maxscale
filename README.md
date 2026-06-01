@@ -320,6 +320,9 @@ The wizard then uses the confirmed mount paths as MinIO `DATA{N}` paths in `dock
 > [!TIP]
 > The wizard only proposes disks that are not already mounted to critical paths (e.g., `/`, `/boot`). It displays the disk model and current filesystem so you can identify the right devices before formatting.
 
+<details>
+<summary>Cluster inspection, repair commands, and web console</summary>
+
 ### Cluster inspection
 
 ```bash
@@ -359,9 +362,14 @@ HAProxy routes `/s3-console/*` to the `minio-console:9090` container **stripping
 > [!TIP]
 > To enable or disable the console on an existing deployment, re-run `deploy.sh` — the answer is saved in the configuration file and reused on each run.
 
+</details>
+
 ---
 
 ## 🔒 HAProxy security
+
+<details>
+<summary>TLS configuration, HTTP headers, request filtering, /stats monitoring</summary>
 
 ### HAProxy stats (optional)
 
@@ -416,6 +424,8 @@ The HAProxy statistics page displays the real-time status of **all** backends:
 | `galera` | MariaDB nodes (:3306) |
 | `minio` | MinIO S3 nodes (:9000) |
 | `redis-cluster` | Redis nodes (:6379) |
+
+</details>
 
 ---
 
@@ -554,6 +564,9 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 | **Talk HA** | ✅ | ✅ | HAProxy updated automatically — NATS and coturn unaffected |
 | **MinIO** | ✅ | ❌ | Scale-up via pool expansion; scale-down via `mc admin decommission` |
 
+<details>
+<summary>Internal mechanics — how each service scales step by step</summary>
+
 ### Internal mechanics
 
 **Nextcloud / Galera / Collabora / Whiteboard / Talk HA** — `docker compose up -d --remove-orphans` creates new containers and removes orphans. HAProxy is restarted to register the new backends.
@@ -575,6 +588,8 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 - The new pool is registered in `.minio-pools` (`start:end` per line)
 - `gen_compose` rebuilds the `server` command with all pools: `server pool1 pool2 ...`
 - All MinIO nodes restart with the new command (~30 s downtime, data preserved)
+
+</details>
 
 ### Constraints
 
@@ -601,6 +616,9 @@ If the `/tmp/` cache is absent, `deploy.sh` automatically rebuilds the configura
 ---
 
 ## 🛠️ Common operations
+
+<details>
+<summary>Galera status, SSL renewal, Nextcloud setup, log commands</summary>
 
 ### Check Galera cluster status
 
@@ -643,6 +661,8 @@ docker compose rm -f nextcloud-setup && docker compose up -d nextcloud-setup
 ```bash
 docker exec -u www-data app-next-01 php /var/www/html/occ log:tail --lines=50
 ```
+
+</details>
 
 ---
 
@@ -709,6 +729,9 @@ docker compose logs -f nextcloud-setup
 ---
 
 ## 📊 Performance & sizing
+
+<details>
+<summary>Raw microbenchmarks, k6 load tests (A/B/C), Talk HA WS benchmark, FPM sizing model, resource consumption</summary>
 
 Three test series cover the platform: **raw HTTP microbenchmarks** (pure throughput), **k6 realistic load tests** (users on a VPS), and a **full-stack test** (all services including Talk HA + Notify Push on a dedicated server).
 
@@ -937,9 +960,14 @@ The 6 Talk HA signaling nodes authenticate users in under **100 ms p(95)** end-t
 | 🏦 Enterprise | 9–12 | 5–7 | 6–8 | 16–24 cores | 48–64 GB | 3,000–3,600 |
 | 🏛️ Large organization | 15–20 | 7 | 8 | 32+ cores | 64–80 GB | +4,000 |
 
+</details>
+
 ---
 
 ## 🛡️ Network security recommendations
+
+<details>
+<summary>UFW firewall setup and fail2ban SSH brute-force protection</summary>
 
 Once the infrastructure is deployed, **restricting exposed ports** is the first measure to apply. By default, all interfaces are open — only three ports are needed for end users.
 
@@ -1011,6 +1039,8 @@ sudo systemctl restart fail2ban
 sudo fail2ban-client status sshd
 ```
 
+</details>
+
 ---
 
 ## 🔐 Security audit
@@ -1048,6 +1078,9 @@ sudo fail2ban-client status sshd
 ---
 
 ## 🐳 Docker images — pinned versions
+
+<details>
+<summary>Current pinned versions and image update procedure</summary>
 
 All Docker images are pinned to precise versions rather than floating tags (`:latest`, `:stable`). Versions are centralized in `IMG_*` variables at the top of `deploy.sh`, allowing an image update by changing a single line.
 
@@ -1093,12 +1126,17 @@ sudo bash deploy.sh   # → choose [1] Quick update
 
 > **Collabora**: always test the `home_mode` binary patch after a version upgrade — the pattern may change if the `coolwsd` binary is restructured.
 
+</details>
+
 ---
 
 ## 🗄️ Backup
 
 > [!WARNING]
 > **This project does not provide a backup solution.** It is your responsibility to set up an appropriate strategy before going to production.
+
+<details>
+<summary>Critical data, recommended strategies, and key backup principles</summary>
 
 ### Critical data to back up
 
@@ -1139,6 +1177,8 @@ docker run --rm -v nextcloud-config:/data -v /backup:/backup alpine \
 - **Test restoration** — an untested backup is not a backup. Regularly verify that you can restore from your archives.
 - **Encrypt off-site archives** — volumes contain personal data; encrypt before any external transfer.
 - **Automate** — schedule backups via `cron` or an orchestrator (Azure Backup, Restic, Borgbackup…).
+
+</details>
 
 ---
 
