@@ -733,7 +733,7 @@ Three test series cover the platform: **raw HTTP microbenchmarks** (pure through
 
 ### k6 realistic load tests — user scenarios
 
-The two tests below were launched **from the server itself** (k6 locally): TLS network latency is near zero. In real usage, add ~50–150 ms depending on client geography.
+All three tests were launched **from the server itself** (k6 locally): TLS network latency is near zero. In real usage, add ~50–150 ms depending on client geography.
 
 > A VU (Virtual User) simulates a **concurrent session** with realistic think times (10–30 s between requests). The ~1,450 users of a 3 FPM config are never all connected simultaneously: the concurrency peak represents ~5–10% of active users, i.e. ~24 concurrent sessions — **1 VU ≈ 15 DAU**. Server load depends on concurrent requests, not the number of distinct accounts.
 
@@ -820,7 +820,7 @@ Config: **6 FPM · 5 Galera · 12 Redis · 4 MinIO · 6 Collabora · 3 Whiteboar
 | WebDAV download | 10 | 2,060 ms | 1,970 ms | 2,790 ms | **3,110 ms** | < 2 s | ⚠️ |
 | Collabora (HTTP) | 6 | 3.8 ms | 2 ms | 5.8 ms | **7.4 ms** | < 5 s | ✅ |
 | Whiteboard WS connect | 4 | 18.2 ms | 18 ms | 23.8 ms | **27 ms** | < 3 s | ✅ |
-| Talk signaling HTTP | 6 | — | — | — | — | 100% | ✅ |
+| Talk signaling (`/api/v1/welcome`) | 6 | ~5 ms | — | — | — | 100% ✅ | — |
 | Notify Push (HTTP) | 3 | 2.8 ms | 2 ms | 5 ms | **7 ms** | < 2 s | ✅ |
 
 > ⚠️ WebDAV download p95 = 3.1 s slightly exceeds the 2 s SLA at nominal load — all reads completed successfully (0 errors). Caused by simultaneous writes on the same MinIO cluster from 10 WebDAV VUs.
@@ -829,13 +829,15 @@ Config: **6 FPM · 5 Galera · 12 Redis · 4 MinIO · 6 Collabora · 3 Whiteboar
 |--------|-------|
 | HTTP 5xx errors | **0** |
 | Container crashes | **0** |
-| `http_req_failed` | 4.44% (246 / 5,532) ✅ |
-| WebSocket sessions | **560** (153 Whiteboard · 407 Talk) |
+| `http_req_failed` | 4.44% (246 / 5,532) ✅ — unauthenticated Talk WS rejections (expected) |
+| WebSocket sessions | **560** (153 Whiteboard · 407 Talk unauthenticated) |
 | Data received | 47 MB · 102 kB/s |
 
 **0 server errors, 0 crashes.** The full stack with Talk HA (6 nodes), coturn and Notify Push handles nominal load without degradation on any functional service.
 
-#### Talk HA authenticated WebSocket — dedicated benchmark (k6 v0.57.0) — 2026-06-01
+> ℹ️ The Talk WS scenario in this test sent unauthenticated upgrade requests — rejected by design (spreed-signaling requires a valid Nextcloud ticket). Full authenticated Talk WS performance is measured in the dedicated benchmark below.
+
+##### Talk HA authenticated WebSocket — dedicated benchmark (k6 v0.57.0) — 2026-06-01
 
 > Full authentication flow: Nextcloud ticket API → WebSocket upgrade → authenticated hello → session registration on 6 HA nodes. 6 VUs · 6 minutes steady state · 506 complete iterations.
 
@@ -857,7 +859,7 @@ The 6 Talk HA signaling nodes authenticate users in under **100 ms p(95)** end-t
 
 ---
 
-### A vs B vs C comparison
+### A vs B vs C — summary
 
 > ⚠️ The three tests are **not directly comparable**: different server hardware (A/B on 7.6 GB VPS, C on dedicated server), different FPM counts, and different load levels. Each test is representative of its own scenario — nominal, saturation, and full-stack respectively.
 
@@ -871,15 +873,16 @@ The 6 Talk HA signaling nodes authenticate users in under **100 ms p(95)** end-t
 | WebDAV p95 | **1,980 ms** ✅ | 4,285 ms ⚠️ | 2,060 ms ✅ (up) · 3,110 ms ⚠️ (dl) |
 | Collabora p95 | **2,160 ms** ✅ | 3,089 ms ✅ | **7 ms** ✅ ¹ |
 | Whiteboard p95 | **2,060 ms** ✅ | 4,900 ms ✅ | **27 ms** ✅ ² |
-| Talk signaling | N/A | N/A | **100 ms** p(95) ✅ (full auth) |
+| Talk signaling ³ | N/A | N/A | **100 ms** p(95) ✅ (full auth WS) |
 | Notify Push | N/A | N/A | **7 ms** ✅ |
 | HTTP 5xx errors | **0** | **0** | **0** |
 | Container crashes | **0** | **0** | **0** |
 
-> ¹ Test C measures Collabora HTTP discovery only (no WOPI document session) — not comparable with WOPI p95 in A and B.  
-> ² Test C measures Whiteboard WebSocket connection time (18 ms) — not comparable with full session duration in A and B.
+> ¹ Test C measures Collabora HTTP discovery only (no WOPI document session) — not comparable with full WOPI p95 in A and B.  
+> ² Test C measures Whiteboard WebSocket connection time only — not comparable with full session duration in A and B.  
+> ³ Talk WS: full authenticated session p(95) = 100 ms (dedicated benchmark). Test C Talk row = HTTP health check only.
 
-Degradation is **consistent with the model** and **graceful**: no crashes, no server errors, even under saturation.
+**Key takeaway**: Test B at 2.5× nominal load degrades gracefully — browser, Collabora and Whiteboard stay within SLA; WebDAV is the first to saturate. Test C confirms the full stack (Talk HA + Notify Push + coturn) adds no measurable overhead on Nextcloud core services at nominal load.
 
 ---
 
