@@ -771,6 +771,7 @@ services:
       - RUSTFS_VOLUMES=none
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=false
+      - RUSTFS_SERVER_DOMAINS=${NEXTCLOUD_DOMAIN}
     networks:
       storage-net: {}
       rustfsnet:
@@ -817,6 +818,7 @@ services:
       - RUSTFS_VOLUMES=none
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=false
+      - RUSTFS_SERVER_DOMAINS=${NEXTCLOUD_DOMAIN}
     networks:
       storage-net: {}
       rustfsnet:
@@ -857,6 +859,7 @@ services:
       - RUSTFS_VOLUMES=none
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=false
+      - RUSTFS_SERVER_DOMAINS=${NEXTCLOUD_DOMAIN}
     networks:
       storage-net: {}
       rustfsnet:
@@ -897,6 +900,7 @@ services:
       - RUSTFS_VOLUMES=none
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=false
+      - RUSTFS_SERVER_DOMAINS=${NEXTCLOUD_DOMAIN}
     networks:
       storage-net: {}
       rustfsnet:
