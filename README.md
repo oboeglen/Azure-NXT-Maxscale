@@ -981,6 +981,45 @@ The 6 Talk HA signaling nodes authenticate users in under **100 ms p(95)** end-t
 | 🏦 Enterprise | 9–12 | 5–7 | 6–8 | 16–24 cores | 48–64 GB | 3,000–3,600 |
 | 🏛️ Large organization | 15–20 | 7 | 8 | 32+ cores | 64–80 GB | +4,000 |
 
+---
+
+### Swap recommendations
+
+Swap is the last line of defence when RAM is fully committed. On an NVMe-backed server it has negligible latency impact; on spinning disks it is a performance liability and should be avoided for production workloads.
+
+| Profile | RAM | Recommended swap | Notes |
+|---------|:---:|:----------------:|-------|
+| 🧪 Test / dev | 8–16 GB | 2–4 GB | Prevents OOM kills during burst testing |
+| 🏢 Small team | 22–28 GB | 4–8 GB | Safety net for Galera SST syncs |
+| 🏭 SME ★ | 32–40 GB | 8 GB | Covers Collabora + FPM simultaneous spikes |
+| 🏦 Enterprise | 48–64 GB | 8–16 GB | MariaDB buffer pool overflows during heavy writes |
+| 🏛️ Large organization | 64–80 GB | 16 GB | Cap at 16 GB — beyond this, swap is a symptom, not a solution |
+
+**General rules:**
+- On **NVMe** — a swap file directly on the system partition is the simplest approach (no repartitioning required).
+- On **SSD** — same as NVMe; avoid exceeding 2× RAM to preserve drive longevity.
+- On **HDD** — keep swap at 1–2 GB maximum and treat sustained swap usage as a signal to add RAM.
+
+**Create a swap file on the NVMe system disk (one-time, persistent):**
+
+```bash
+# Adjust SIZE to match your profile above (e.g. 8G, 16G)
+SIZE=8G
+fallocate -l $SIZE /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+
+# Persist across reboots
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
+# Use swap only as a last resort (recommended for all profiles)
+echo 'vm.swappiness=10' > /etc/sysctl.d/99-swappiness.conf
+sysctl --system
+```
+
+> **`vm.swappiness=10`** — The kernel starts swapping only when free RAM drops below ~10 % of total. The default (60) is tuned for desktops and causes unnecessary swapping on servers with large buffer caches.
+
 </details>
 
 ---
