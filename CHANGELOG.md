@@ -6,6 +6,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.3.4] — 2026-06-01
+
+### Added
+- **12 Nextcloud apps auto-enabled on first setup** — `nextcloud-init.sh` now installs and enables the following apps automatically: `contacts`, `calendar`, `user_ldap`, `files_external`, `quota_warning` (bundled), and `collectives`, `deck`, `forms`, `tables`, `groupfolders` (Team Folders), `twofactor_nextcloud_notification`, `user_oidc` (OIDC Identity Provider) from the App Store. All installs are non-fatal — unavailable apps are skipped with a warning without interrupting the setup. Apps requiring server-specific configuration (`user_ldap`, `user_oidc`) are installed only; post-deployment configuration is done via the Settings UI
+- **Security audit section** — external attack surface audit (score 89/100) documented in README
+- **Performance benchmarks** — Test C (full stack + Talk HA, dedicated server) and Talk HA authenticated WebSocket benchmark (100% auth success, 100 ms p(95)) added to README performance section
+
+### Fixed
+- **MinIO console login loop** — HAProxy `is_s3_console_root` ACL unconditionally redirected `/s3-console/` → `/s3-console/login`; after login the React SPA navigated back to `/s3-console/` causing an infinite redirect loop. Removed the ACL and redirect rule; routing and authentication are handled entirely client-side by the React SPA
+- **HSTS badge language** — badge displayed "2 ans" (French); corrected to "2 years"
+
+---
+
 ## [2.3.3] — 2026-05-31
 
 ### Fixed
