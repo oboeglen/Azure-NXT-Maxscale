@@ -20,7 +20,7 @@
 
 [![HTTPS](https://img.shields.io/badge/HTTPS-enforced-brightgreen?logo=letsencrypt&logoColor=white)](https://letsencrypt.org)
 [![TLS](https://img.shields.io/badge/TLS-1.2%2B%20%E2%80%94%201.3%20preferred-brightgreen?logo=openssl&logoColor=white)](https://www.openssl.org)
-[![HSTS](https://img.shields.io/badge/HSTS-preload%20%E2%80%94%202%20ans-brightgreen)](https://hstspreload.org)
+[![HSTS](https://img.shields.io/badge/HSTS-preload%20%E2%80%94%202%20years-brightgreen)](https://hstspreload.org)
 [![CSP](https://img.shields.io/badge/CSP-WebSocket%20%2B%20nonce-brightgreen)](https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP)
 [![Security Headers](https://img.shields.io/badge/Security%20Headers-X--Frame%20%7C%20XCTO%20%7C%20HSTS-brightgreen)](https://securityheaders.com)
 
@@ -1101,7 +1101,7 @@ sudo bash deploy.sh   # → choose [1] Quick update
 
 | Data | Location | Content |
 |------|----------|---------|
-| **User files** | MinIO cluster (`/srv/minio/data*` on the host) | Photos, documents, files — stored in S3 via the `objectstore` driver |
+| **User files** | MinIO data paths on the host (default: `/data/minio/nodeN/dataN`) | Photos, documents, files — stored in S3 via the `objectstore` driver |
 | Database | Docker volume `mariadb-data-node*` | Accounts, shares, metadata |
 | Nextcloud config | Docker volume `nextcloud-config` | `config.php`, installed apps |
 | Deployment files | `$INSTALL_DIR` (e.g. `/opt/nxt-maxscale`) | `.env`, `haproxy.cfg`, SSL certificates |
