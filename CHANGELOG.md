@@ -6,6 +6,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.4.0] — 2026-06-01
+
+### Changed
+- **Migrated from MinIO to RustFS** — object storage backend replaced by [RustFS](https://rustfs.com) (`rustfs/rustfs:latest`), an S3-compatible, Apache 2.0 licensed, high-performance distributed object store written in Rust. All `MINIO_*` environment variables renamed to `RUSTFS_*`. Container names changed from `minio-node*` to `rustfs-node*`. Erasure coding, pool expansion, and S3 API compatibility maintained. `RUSTFS_VOLUMES` env var (RustFS cluster mode) replaces the MinIO `server` positional argument
+- **Built-in RustFS console** — the separate `georgmangold/console` container is replaced by the console built into `rustfs/rustfs` (port 9001). HAProxy routes `/s3-console` to `rustfs-node*:9001` — no extra container required. Enabled via `RUSTFS_CONSOLE_ENABLE=true` during deployment
+- **Automatic node failure recovery** — RustFS handles erasure-coded data healing automatically when a node returns; no manual `mc admin heal` step required
+
+---
+
 ## [2.3.5] — 2026-06-01
 
 ### Fixed
@@ -25,7 +34,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 - **Performance benchmarks** — Test C (full stack + Talk HA, dedicated server) and Talk HA authenticated WebSocket benchmark (100% auth success, 100 ms p(95)) added to README performance section
 
 ### Fixed
-- **MinIO console login loop** — HAProxy `is_s3_console_root` ACL unconditionally redirected `/s3-console/` → `/s3-console/login`; after login the React SPA navigated back to `/s3-console/` causing an infinite redirect loop. Removed the ACL and redirect rule; routing and authentication are handled entirely client-side by the React SPA
+- **RustFS console login loop** — HAProxy `is_s3_console_root` ACL unconditionally redirected `/s3-console/` → `/s3-console/login`; after login the React SPA navigated back to `/s3-console/` causing an infinite redirect loop. Removed the ACL and redirect rule; routing and authentication are handled entirely client-side by the React SPA
 - **HSTS badge language** — badge displayed "2 ans" (French); corrected to "2 years"
 
 ---
@@ -89,7 +98,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 - **Persistent Redis brute force entries between deployments** — `*Bruteforce*` keys accumulated during the init phase (Nextcloud not yet ready, HAProxy doing health checks) persisted in Redis between container restarts. Added `reset_bruteforce()` function called after `wait_healthy`: deletes all brute force keys on the 6 Redis cluster nodes via DEL in cluster mode (`-c`)
 
 ### Added
-- **Backup section in the README** — `[!WARNING]` alert about the absence of a built-in backup solution, table of critical data (MinIO S3 first, MariaDB, config), recommended strategies (VM snapshot, `mc mirror`, `mariadb-dump`), key points (Galera ≠ backup, restore testing, encryption)
+- **Backup section in the README** — `[!WARNING]` alert about the absence of a built-in backup solution, table of critical data (RustFS S3 first, MariaDB, config), recommended strategies (VM snapshot, `mc mirror`, `mariadb-dump`), key points (Galera ≠ backup, restore testing, encryption)
 - **Docker Images section in the README** — version pinning explanation, `IMG_*` variable table with current versions, update example
 
 ---
@@ -110,7 +119,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 - **Incorrect Nextcloud permissions on first deployment** — the `nextcloud-perms` service used `command:` with `user: root`, but the `nextcloud:fpm` image entrypoint runs `run_as()` which drops privileges to `www-data` before executing the command. As a result, `chown` failed silently on a fresh server, leaving volumes as `root:root` and blocking `nextcloud-setup`. Fixed by replacing `command:` with `entrypoint: ["/bin/sh", "-c", "chown ..."]` to bypass the native entrypoint
 
 ### Changed
-- **Docker images — pinned versions** — all `:latest` and `:stable` tags replaced with precise versions extracted from production: `certbot/certbot:v5.6.0`, `minio/minio:RELEASE.2025-09-07T16-13-09Z`, `minio/mc:RELEASE.2025-08-13T08-35-41Z`, `collabora/code:25.04.9.4`, `ghcr.io/georgmangold/console:v1.9.1`, `willfarrell/autoheal` and `ghcr.io/nextcloud-releases/whiteboard` pinned by SHA256 digest. Versions centralized in `IMG_*` variables at the top of the script
+- **Docker images — pinned versions** — all `:latest` and `:stable` tags replaced with precise versions extracted from production: `certbot/certbot:v5.6.0`, `rustfs/rustfs:latest`, `mc` (S3 CLI), `collabora/code:25.04.9.4`, `ghcr.io/georgmangold/console:v1.9.1`, `willfarrell/autoheal` and `ghcr.io/nextcloud-releases/whiteboard` pinned by SHA256 digest. Versions centralized in `IMG_*` variables at the top of the script
 
 ---
 
@@ -146,10 +155,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 ## [2.1.10] — 2026-05-25
 
 ### Fixed
-- **MinIO crash loop on repeated scale** — `_minio_register_pool` had no duplicate check; if the configuration cache was stale, the same pool (`start:end`) was added twice to `.minio-pools`, causing a `FATAL Invalid command line arguments: duplicate endpoints found` on MinIO startup. A `grep -qF` dedup now prevents adding the same pool twice
-- **Stale `ORIG_MINIO_NODES` from cache** — `scale_nodes()` loads the cache then checks the number of actually active containers; if the real count is higher than the cache, MINIO_NODES is corrected before being stored as ORIG_MINIO_NODES (protection against double-registrations)
+- **RustFS crash loop on repeated scale** — `_rustfs_register_pool` had no duplicate check; if the configuration cache was stale, the same pool (`start:end`) was added twice to `.rustfs-pools`, causing a `FATAL Invalid command line arguments: duplicate endpoints found` on RustFS startup. A `grep -qF` dedup now prevents adding the same pool twice
+- **Stale `ORIG_RUSTFS_NODES` from cache** — `scale_nodes()` loads the cache then checks the number of actually active containers; if the real count is higher than the cache, RUSTFS_NODES is corrected before being stored as ORIG_RUSTFS_NODES (protection against double-registrations)
 - **HAProxy /stats lost after reboot** — `HAPROXY_STATS` was not written to `.env` (only to the transient cache `/tmp/`); after a reboot, reconstruction from `.env` fixed it to `no` by default, disabling the statistics page. `HAPROXY_STATS` is now persisted to `.env` and reread in the reconstruction path
-- **`wait_healthy` stuck on containers in crash loop** — containers in `restarting` state (e.g. MinIO with duplicated pool) kept `all_healthy=false` indefinitely until timeout. After 3 consecutive restarts, a container is now flagged as "crash loop", excluded from the wait and a warning is displayed; other containers continue to be waited for normally
+- **`wait_healthy` stuck on containers in crash loop** — containers in `restarting` state (e.g. RustFS with duplicated pool) kept `all_healthy=false` indefinitely until timeout. After 3 consecutive restarts, a container is now flagged as "crash loop", excluded from the wait and a warning is displayed; other containers continue to be waited for normally
 
 ## [2.1.9] — 2026-05-25
 
@@ -160,10 +169,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
   - **Redis Cluster** — scale-up with cluster integration (`add-node`, `--cluster-slave`, `rebalance`) and scale-down with slot migration before removal (`reshard`, `del-node`, `rebalance`)
   - **Collabora CODE** — node addition/removal; `home_mode` binary patch automatically reapplied on new nodes
   - **Whiteboard** — node addition/removal
-  - **MinIO** — scale-up via pool expansion (multi-pool MNMD) via `.minio-pools`; scale-down not supported by MinIO (redirected to `mc admin decommission`)
-- `gen_minio_server_cmd()` function — MinIO `server` command built dynamically from `.minio-pools` (transparent multi-pool)
-- `.minio-pools` file — tracks MinIO pool history (`start:end` format per line), used to rebuild the `server` command after a restart
-- `MINIO_MODE` and `MINIO_BYPASS` persisted to `.env` (previously only in the transient cache `/tmp/`) — correctly rebuilt after a reboot without cache
+  - **RustFS** — scale-up via pool expansion (multi-pool MNMD) via `.rustfs-pools`; scale-down not supported by RustFS (redirected to `mc admin decommission`)
+- `gen_rustfs_volumes_env()` function — RustFS `server` command built dynamically from `.rustfs-pools` (transparent multi-pool)
+- `.rustfs-pools` file — tracks RustFS pool history (`start:end` format per line), used to rebuild the `server` command after a restart
+- `RUSTFS_MODE` and `RUSTFS_BYPASS` persisted to `.env` (previously only in the transient cache `/tmp/`) — correctly rebuilt after a reboot without cache
 
 ### Fixed
 - Broken `nextcloud-cron` healthcheck — `pgrep` absent from the `nextcloud:33.0.3-fpm` image; replaced by `grep -qa cron /proc/1/cmdline`
@@ -254,7 +263,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 ## [2.1.1] — 2026-05-21
 
 ### Added
-- Optional MinIO web console accessible via `/s3-console` (image `ghcr.io/georgmangold/console`) — enabled in `deploy.sh`, no additional port exposed
+- Optional RustFS web console accessible via `/s3-console` (image `ghcr.io/georgmangold/console`) — enabled in `deploy.sh`, no additional port exposed
 - MAXSCALE graphite login theme: custom CSS (`nxt-custom.css`), logo and wallpaper
 - Load capacity estimation displayed after deployment summary (model calibrated on real measurements)
 - Performance benchmarks and sizing tables by usage profile in README
@@ -263,10 +272,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 ### Fixed
 - Redis cluster check made robust — `fsockopen` instead of `OC::$server`, explicit timeouts, non-blocking
 - Whiteboard JWT expiry extended to 24 h (was 15 min — caused disconnections in long sessions)
-- Handling of MinIO 1-byte stub files in `WhiteboardContentService` (`patch_wb.py`)
+- Handling of RustFS 1-byte stub files in `WhiteboardContentService` (`patch_wb.py`)
 - HAProxy WebDAV filter extended: `PUT` on `/apps/whiteboard`, `PUT`/`DELETE` on `/s3-console`
 - Automatic redirect of `/s3-console` and `/s3-console/` to `/s3-console/login`
-- `/s3-console` prefix stripped in HAProxy before forwarding to `minio-console:9090` — fixed MIME errors on React assets
+- `/s3-console` prefix stripped in HAProxy before forwarding to `s3-console:9090` — fixed MIME errors on React assets
 - Redis cluster detection fixed with literal key `redis.cluster` in `occ`
 - `nextcloud-setup` crash on `Permission denied` when purging `nextcloud.log`
 - Galera bootstrap: `mariadbd`-compatible entrypoint, double-mysqld and YAML `&&` syntax fixed
@@ -284,11 +293,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ## [2.1.0] — 2026-05-20
 
-Major version — complete architecture redesign towards an FPM + MinIO stack.
+Major version — complete architecture redesign towards an FPM + RustFS stack.
 
 ### Added
 - **Nextcloud PHP-FPM** with nginx as FastCGI proxy (replacement of Apache mode)
-- **Distributed MinIO S3** with erasure coding (replacement of RustFS) — bucket versioning enabled automatically
+- **Distributed RustFS S3** with erasure coding (replacement of RustFS) — bucket versioning enabled automatically
 - **Distributed Redis Cluster** (≥ 6 master + replica nodes)
 - **Collabora CODE** — collaborative office editing (Writer, Calc, Impress) in `home_mode`
 - **Whiteboard** — real-time collaborative whiteboard (WebSocket + Redis Streams)
