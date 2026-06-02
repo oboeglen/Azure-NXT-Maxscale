@@ -53,7 +53,7 @@
 </tr>
 <tr>
 <td align="center"><img src="img/s3-console.png" width="480" alt="RustFS built-in Console"/><br/><sub>RustFS Console (built-in)</sub></td>
-<td align="center"><img src="img/haproxy-stats.png" width="480" alt="HAProxy Stats"/><br/><sub>HAProxy Stats</sub></td>
+<td align="center"><img src="img/haproxy-stats-v2.png" width="480" alt="HAProxy Stats"/><br/><sub>HAProxy Stats</sub></td>
 </tr>
 </table>
 </div>
