@@ -6,6 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.5.1] — 2026-06-02
+
+### Fixed
+- **RustFS console — XML error on expired token** — when the browser-side JS sent a request with a stale AWS4 token, RustFS returned `400/401/403 InvalidRequest` XML and the page went blank. HAProxy now intercepts these responses in the `rustfs-s3api` backend and redirects the browser to `/rustfs/console/auth/login/` instead of showing raw XML
+- **RustFS console — double path on logout** — RustFS beta emits a relative redirect on logout (`rustfs/console/auth/login/` without leading `/`), causing the browser to double the base path to `/rustfs/console/rustfs/console/auth/login/`. HAProxy now intercepts any path beginning with `/rustfs/console/rustfs/console/` and redirects to the correct login URL
+
+---
+
 ## [2.5.0] — 2026-06-02
 
 ### Fixed
