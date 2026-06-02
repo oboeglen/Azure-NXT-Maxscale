@@ -1920,7 +1920,6 @@ ${rfs_vol_lines}
 ${rfs_volumes_line}
       - RUSTFS_ADDRESS=0.0.0.0:9000
       - RUSTFS_CONSOLE_ENABLE=${console_enable}
-      - RUSTFS_SERVER_DOMAINS=${NC_DOMAIN}
     networks:
       storage-net: {}
       rustfsnet:
