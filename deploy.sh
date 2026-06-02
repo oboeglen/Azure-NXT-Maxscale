@@ -1885,9 +1885,9 @@ RCINIT
       # and the entrypoint would receive /bin/sh as $1 — completely wrong.
       # List form passes each URL directly as $1, $2, … to the entrypoint.
       rfs_cmd_line=$'    command:\n'
-      # IFS=$'\n\t' is set globally — use read -r -a to split on spaces instead.
+      # IFS=$'\n\t' is set globally — override to space for this split only.
       local _url _urls=()
-      read -r -a _urls <<< "$rustfs_volumes_val"
+      IFS=' ' read -r -a _urls <<< "$rustfs_volumes_val"
       for _url in "${_urls[@]}"; do
         rfs_cmd_line+=$'      - "'${_url}$'"\n'
       done
@@ -3007,7 +3007,7 @@ run_deploy() {
     (( elapsed_setup += 10 )) || true
     local last_log
     last_log=$(docker logs nextcloud-setup --tail 1 2>/dev/null \
-      | sed 's/\x1b\[[0-9;]*[mK]//g' | tr -d '\r' | xargs)
+      | sed 's/\x1b\[[0-9;]*[mK]//g' | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     printf "\r\033[K  ${C_YELLOW}⟳${C_RESET}  [%ds]  %s" \
       "$elapsed_setup" "${last_log:-Nextcloud installation in progress...}"
     sleep 10
