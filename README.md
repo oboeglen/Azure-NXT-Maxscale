@@ -390,7 +390,7 @@ Enabled during deployment by `deploy.sh` (same principle as HAProxy stats on `/s
 **HAProxy routing for the console:**
 - `path_beg /rustfs` → routed to `rustfs-node*:9001` (console UI + Next.js assets)
 - `Authorization: AWS4-HMAC-SHA256` → routed to `rustfs-node*:9000` (S3 API calls made by the browser-side JS during login and bucket listing)
-- `RUSTFS_SERVER_DOMAINS` must be set to the Nextcloud domain — otherwise RustFS rejects logins from the external domain
+- `RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS=*` handles console CORS — `RUSTFS_SERVER_DOMAINS` must **not** be set (it forces virtual-hosted routing and breaks path-style S3 requests)
 - Sticky session cookie `RUSTFS_CONSOLE` pins the browser session to one node
 
 > [!TIP]
