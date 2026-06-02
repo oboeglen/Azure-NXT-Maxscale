@@ -159,8 +159,7 @@ flowchart TD
 
     wb --> redis_wb["🔴 redis-whiteboard\nStreams · whiteboard-net"]
 
-    sig --> nats["📨 NATS\ntalk-net · pub/sub"]
-    nats --> sig
+    sig <-->|"gRPC :9090\ntalk-net · cross-node relay"| sig
 
     npush --> redis
     npush --> galera
@@ -218,8 +217,7 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 | `redis-whiteboard` | Shared whiteboard state (Redis Streams) |
 | RustFS console *(optional, built-in)* | Built into `rustfs/rustfs` on port 9001 — no extra container — accessible via `https://domain/s3-console` |
 | `notify-push` | Notify Push — real-time sync notifications over WebSocket (`/push`) |
-| `nats` *(Talk only)* | NATS message broker — distributes signaling events across Talk HA nodes |
-| `spreed-signaling-01..N` *(Talk only)* | WebSocket signaling server — HAProxy load-balances across all nodes |
+| `spreed-signaling-01..N` *(Talk only)* | WebSocket signaling — HAProxy load-balances across all nodes; gRPC handles cross-node relay |
 | `coturn` *(Talk, optional)* | TURN/STUN relay — media relay for clients behind NAT or strict firewalls |
 
 > RustFS bucket versioning is enabled by default on the `nextcloud` bucket. It can be managed from the web console (`/s3-console`) under bucket settings → **Contrôle de version**.
@@ -241,7 +239,7 @@ Everything is applied automatically by `nextcloud-setup` on first startup.
 - **Collabora Online** — office editing (Writer, Calc, Impress)
 - **Whiteboard** — real-time collaborative whiteboard
 - **RustFS S3** — object storage for all user files
-- **Nextcloud Talk** — HA signaling via Talk HA + NATS; optional coturn TURN relay
+- **Nextcloud Talk** — HA signaling via Talk HA (gRPC cross-node relay); optional coturn TURN relay
 - **Notify Push** — real-time desktop/mobile sync notifications over WebSocket
 - `trusted_proxies` + `forwarded_for_headers` — real client IPs forwarded behind HAProxy
 
@@ -278,7 +276,6 @@ Everything is applied automatically by `nextcloud-setup` on first startup.
 | 🎨 Whiteboard | ✅ Automatic | Automatic WebSocket reconnection (state persisted in Redis) |
 | 🎙️ Talk HA | ✅ Automatic | HAProxy removes the failing node — active calls may reconnect once |
 | 📬 Notify Push | ✅ Automatic | Container restarts automatically; clients reconnect the WebSocket |
-| 📨 NATS | ⚠️ Single node | Service interruption until the container restarts (`restart: always`) |
 | 🔄 coturn | ⚠️ Single node | Falls back to STUN-only — peer-to-peer if NAT allows, otherwise media blocked |
 
 ### Full Galera cluster restart
@@ -506,8 +503,7 @@ Talk HA (`spreed-signaling`) is required so that Talk calls work correctly when 
 
 | Container | Role |
 |-----------|------|
-| `spreed-signaling-01..N` | WebSocket signaling — HAProxy `leastconn` distributes long-lived connections across all nodes |
-| `nats` | Message broker — routes signaling events between nodes so any two clients can communicate regardless of which node they landed on |
+| `spreed-signaling-01..N` | WebSocket signaling — HAProxy `leastconn` distributes long-lived connections across all nodes; gRPC `:9090` handles cross-node session relay |
 | `coturn` *(optional)* | TURN/STUN relay — required when clients are behind symmetric NAT or strict corporate firewalls |
 
 ### High availability
@@ -515,7 +511,6 @@ Talk HA (`spreed-signaling`) is required so that Talk calls work correctly when 
 | Component | Tolerance | Behavior during failure |
 |-----------|:---------:|------------------------|
 | 🎙️ Talk HA | ✅ Automatic | HAProxy removes the failing node — active calls may drop once then reconnect |
-| 📨 NATS | ⚠️ Single node | Service interruption until the container restarts (`restart: always`) |
 | 🔄 coturn | ⚠️ Single node | Falls back to STUN-only — peer-to-peer if NAT allows, otherwise media blocked |
 
 ### STUN / TURN
@@ -591,7 +586,7 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 | **Redis Cluster** | ✅ | ✅ | Even delta mandatory — automatic cluster integration |
 | **Collabora CODE** | ✅ | ✅ | `home_mode` binary patch reapplied on new nodes |
 | **Whiteboard** | ✅ | ✅ | |
-| **Talk HA** | ✅ | ✅ | HAProxy updated automatically — NATS and coturn unaffected |
+| **Talk HA** | ✅ | ✅ | HAProxy updated automatically — coturn unaffected |
 | **RustFS** | ⚠️ | ❌ | Scale-up not supported in beta — see note below; scale-down not supported |
 
 <details>
@@ -978,7 +973,6 @@ The 6 Talk HA signaling nodes authenticate users in under **100 ms p(95)** end-t
 | Whiteboard (per node) | ~100 MB | < 1% | 5–10% | Real-time WebSocket |
 | galera-autoheal | ~20 MB | < 1% | < 1% | Local Docker socket |
 | Talk HA signaling (per node) | 12–18 MB | < 1% | 1–3% | Long-lived WebSocket sessions |
-| NATS | ~13 MB | < 1% | 1–5% | pub/sub between signaling nodes |
 | coturn | ~20 MB | < 1% | 2–10% | TURN relay UDP/TCP :3478 + media ports |
 | Notify Push | ~6 MB | < 1% | < 1% | WebSocket push to clients (/push) |
 
@@ -1148,7 +1142,7 @@ sudo fail2ban-client status sshd
 | S3 endpoint invisible without `Authorization: AWS4-HMAC-SHA256` — unauthenticated requests never reach RustFS | ✅ |
 | RustFS ports 9000 / 9001 not exposed externally | ✅ |
 | Expired S3 token redirects to console login — no raw XML error exposed to browser | ✅ |
-| No sensitive ports exposed externally (MariaDB, Redis, RustFS, NATS all closed) | ✅ |
+| No sensitive ports exposed externally (MariaDB, Redis, RustFS all closed) | ✅ |
 | Cookies: `Secure` + `HttpOnly` + `SameSite=Lax/Strict` | ✅ |
 | `Server` and `X-Powered-By` headers removed | ✅ |
 | CSP extended for WebSocket connections to Collabora, Whiteboard and Talk | ✅ |
@@ -1183,7 +1177,6 @@ All Docker images are pinned to precise versions rather than floating tags (`:la
 | `IMG_COLLABORA` | `collabora/code` | `25.04.9.4.1` |
 | `IMG_AUTOHEAL` | `willfarrell/autoheal` | `latest` |
 | `IMG_WHITEBOARD` | `ghcr.io/nextcloud-releases/whiteboard` | `v1.5.8` |
-| `IMG_NATS` | `nats` | `2.10-alpine` |
 | `IMG_SPREED_SIGNALING` | `strukturag/nextcloud-spreed-signaling` | `latest` |
 | `IMG_COTURN` | `coturn/coturn` | `4.6` |
 
