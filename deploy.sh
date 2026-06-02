@@ -2081,6 +2081,7 @@ NATSSVC
     restart: always
     expose:
       - "8080"
+      - "9090"
     volumes:
       - ./signaling.conf:/config/server.conf:ro
     networks:
@@ -2218,6 +2219,13 @@ gen_signaling_conf() {
   local dest="${1:-$INSTALL_DIR/signaling.conf}"
   step "Generating signaling.conf (nextcloud-spreed-signaling)"
 
+  # Build gRPC targets list — all signaling nodes (each node skips its own address at runtime)
+  local grpc_targets=""
+  local _sig_n="${SIGNALING_NODES:-2}"
+  for _i in $(seq 1 "$_sig_n"); do
+    grpc_targets+="${grpc_targets:+,}spreed-signaling-$(printf '%02d' "$_i"):9090"
+  done
+
   # Build optional [turn] section when coturn is deployed
   local turn_section=""
   if [[ "$COTURN_ENABLED" == "yes" ]]; then
@@ -2266,6 +2274,12 @@ secret = ${GEN_TALK_SECRET}
 ${turn_section}
 [nats]
 url = nats://nats:4222
+
+[grpc]
+# Listen for cross-node gRPC connections (required for multi-node session relay)
+listen = 0.0.0.0:9090
+# All signaling nodes as targets — each node detects and skips its own address
+targets = ${grpc_targets}
 EOF
 
   chmod 644 "$dest"
