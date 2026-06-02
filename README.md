@@ -149,7 +149,7 @@ flowchart TD
     HAProxy -->|next-net| nginx["🔀 nginx-next-01..N\nstatic files · FastCGI"]
     HAProxy -->|collabora-net| collab["📝 collabora-node1..N\nCollabora CODE · WOPI"]
     HAProxy -->|whiteboard-net| wb["🎨 whiteboard-node1..N\nWhiteboard · WebSocket"]
-    HAProxy -->|"talk-net · wss://"| sig["🎙️ Talk HA\nspreed-signaling-01..N\nWebSocket · gRPC cross-node"]
+    HAProxy -->|"talk-net · wss://"| sig["🎙️ Talk HA\nspreed-signaling-01..N · WebSocket"]
 
     nginx --> fpm["⚙️ app-next-01..N\nNextcloud PHP-FPM 8.4"]
 
@@ -158,6 +158,8 @@ flowchart TD
     fpm --> rustfs[("📦 RustFS S3\nErasure coding · storage-net")]
 
     wb --> redis_wb["🔴 redis-whiteboard\nStreams · whiteboard-net"]
+
+    sig <-->|"gRPC :9090"| sig
 
     npush --> redis
     npush --> galera
