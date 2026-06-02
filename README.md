@@ -372,11 +372,9 @@ docker ps --filter "name=rustfs-node" --format "table {{.Names}}\t{{.Status}}\t{
 
 ### RustFS web console (optional)
 
-> [!WARNING]
-> The console is protected by RustFS credentials (`RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`), but it is exposed on Nextcloud's public URL without IP restriction or additional network layer. It provides direct access to all RustFS buckets. Use only in test or diagnostic environments, and disable afterwards.
+> ⚠️ **Warning:** The console is protected by RustFS credentials (`RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`), but it is exposed on Nextcloud's public URL without IP restriction or additional network layer. It provides direct access to all RustFS buckets. Use only in test or diagnostic environments, and disable afterwards.
 
-> [!NOTE]
-> **Beta limitation** — Admin features visible in the console menu (pool rebalancing, decommission) are not yet implemented in RustFS v1.0.0-beta.6. Core operations (bucket browsing, object management, access keys, users) work correctly.
+> ℹ️ **Note:** **Beta limitation** — Admin features visible in the console menu (pool rebalancing, decommission) are not yet implemented in RustFS v1.0.0-beta.6. Core operations (bucket browsing, object management, access keys, users) work correctly.
 
 Enabled during deployment by `deploy.sh` (same principle as HAProxy stats on `/stats`). The console is built into RustFS — no separate container is needed. Once enabled (`RUSTFS_CONSOLE_ENABLE=true`), port 9001 is active on all RustFS nodes.
 
@@ -393,8 +391,7 @@ Enabled during deployment by `deploy.sh` (same principle as HAProxy stats on `/s
 - `RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS=*` handles console CORS — `RUSTFS_SERVER_DOMAINS` must **not** be set (it forces virtual-hosted routing and breaks path-style S3 requests)
 - Sticky session cookie `RUSTFS_CONSOLE` pins the browser session to one node
 
-> [!TIP]
-> To enable or disable the console on an existing deployment, re-run `deploy.sh` — the answer is saved in the configuration file and reused on each run.
+> 💡 **Tip:** To enable or disable the console on an existing deployment, re-run `deploy.sh` — the answer is saved in the configuration file and reused on each run.
 
 </details>
 
@@ -407,8 +404,7 @@ Enabled during deployment by `deploy.sh` (same principle as HAProxy stats on `/s
 
 ### HAProxy stats (optional)
 
-> [!WARNING]
-> Stats (`/stats`) are protected by a dedicated password (`HAPROXY_STATS_PASSWORD`), but remain exposed on Nextcloud's public URL. They reveal the internal infrastructure topology (container names, backend states, network metrics). Reserve for test environments or disable after use.
+> ⚠️ **Warning:** Stats (`/stats`) are protected by a dedicated password (`HAPROXY_STATS_PASSWORD`), but remain exposed on Nextcloud's public URL. They reveal the internal infrastructure topology (container names, backend states, network metrics). Reserve for test environments or disable after use.
 
 Enabled during deployment by `deploy.sh`. Accessible at `https://<NEXTCLOUD_DOMAIN>/stats` with credentials set during installation (`HAPROXY_STATS_PASSWORD`).
 
@@ -619,8 +615,7 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 
 **RustFS (scale-up)**
 
-> [!WARNING]
-> Pool expansion is **not supported in RustFS v1.0.0-beta.6**. Adding nodes to an existing cluster fails with `formats length for erasure.sets does not match: got N, expected M` because the on-disk format records the initial erasure set count and cannot be changed dynamically. This is a known beta limitation (pool rebalancing is marked 🚧 Under Testing in the RustFS roadmap). To change the node count, the cluster must be redeployed from scratch.
+> ⚠️ **Warning:** Pool expansion is **not supported in RustFS v1.0.0-beta.6**. Adding nodes to an existing cluster fails with `formats length for erasure.sets does not match: got N, expected M` because the on-disk format records the initial erasure set count and cannot be changed dynamically. This is a known beta limitation (pool rebalancing is marked 🚧 Under Testing in the RustFS roadmap). To change the node count, the cluster must be redeployed from scratch.
 
 - New node paths are collected interactively (default: `/data/rustfs/nodeN/dataN`)
 - The new pool is registered in `.rustfs-pools` (`start:end` per line)
