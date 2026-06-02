@@ -23,7 +23,6 @@ IMG_AUTOHEAL="willfarrell/autoheal:latest"
 IMG_RUSTFS="rustfs/rustfs:1.0.0-beta.6"
 IMG_COLLABORA="collabora/code:25.04.9.4.1"
 IMG_WHITEBOARD="ghcr.io/nextcloud-releases/whiteboard:v1.5.8"
-IMG_NATS="nats:2.10-alpine"
 IMG_SPREED_SIGNALING="strukturag/nextcloud-spreed-signaling:latest"
 IMG_COTURN="coturn/coturn:4.6"
 IMG_HAPROXY="haproxy:2.8-alpine"
@@ -2049,27 +2048,9 @@ WBREDIS
       start_period: 60s
 NOTIFYPUSH
 
-  # ── Talk: NATS + spreed-signaling nodes (opt-in) ───────────────────────
+  # ── Talk: spreed-signaling nodes (opt-in) ──────────────────────────────
+  # NATS removed in v2.x — cross-node relay handled by gRPC (nats://loopback used internally)
   if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
-  cat >> "$dest" <<NATSSVC
-
-  nats:
-    image: ${IMG_NATS}
-    container_name: nats
-    restart: always
-    expose:
-      - "4222"
-    command: ["-m", "8222"]
-    networks:
-      - talk-net
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8222/healthz >/dev/null 2>&1 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-NATSSVC
-
   local _sig_n="${SIGNALING_NODES:-2}"
   for i in $(seq 1 "$_sig_n"); do
     local _name; _name="spreed-signaling-$(printf '%02d' "$i")"
@@ -2087,9 +2068,6 @@ NATSSVC
     networks:
       - talk-net
       - next-net
-    depends_on:
-      nats:
-        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 8080 > /dev/null 2>&1 || exit 1"]
       interval: 15s
@@ -2273,7 +2251,8 @@ urls = https://${NC_DOMAIN}
 secret = ${GEN_TALK_SECRET}
 ${turn_section}
 [nats]
-url = nats://nats:4222
+# loopback = built-in in-memory bus (no external NATS server needed since v2.x)
+url = nats://loopback
 
 [grpc]
 # Listen for cross-node gRPC connections (required for multi-node session relay)
@@ -2917,7 +2896,7 @@ run_deploy() {
     "${IMG_WHITEBOARD}"
   )
   if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
-    images+=("${IMG_NATS}" "${IMG_SPREED_SIGNALING}")
+    images+=("${IMG_SPREED_SIGNALING}")
     [[ "$COTURN_ENABLED" == "yes" ]] && images+=("${IMG_COTURN}")
   fi
   local total=${#images[@]}
