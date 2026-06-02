@@ -492,7 +492,27 @@ ${OCC_BIN} config:app:set theming_customcss customcss --value "$(cat /nxt-custom
 info "Thème NXT configuré (logos, fond, favicon, CSS, user-theming désactivé)."
 
 # ---------------------------------------------------------------------------
-# 12. Maintenance finale
+# 12. notify_push — real-time desktop/mobile push notifications
+# The notify-push container starts after app-next-01 is healthy, so it may
+# not be ready yet. Retry for up to 2 minutes before giving up.
+# ---------------------------------------------------------------------------
+step "Configuration notify_push"
+install_app "notify_push"
+_push_ok=0
+for _i in $(seq 1 24); do
+    if ${OCC_BIN} notify_push:setup "https://${NEXTCLOUD_DOMAIN}/push" 2>&1 \
+        | grep -q 'configuration saved'; then
+        info "notify_push configured (https://${NEXTCLOUD_DOMAIN}/push)"
+        _push_ok=1
+        break
+    fi
+    warn "notify_push: push server not ready yet (attempt ${_i}/24), retrying in 5s..."
+    sleep 5
+done
+[ $_push_ok -eq 0 ] && warn "notify_push: setup failed after 120s — run manually: occ notify_push:setup https://${NEXTCLOUD_DOMAIN}/push"
+
+# ---------------------------------------------------------------------------
+# 13. Maintenance finale
 # ---------------------------------------------------------------------------
 step "Maintenance et optimisation finale"
 occ maintenance:repair --include-expensive
@@ -501,7 +521,7 @@ occ db:add-missing-primary-keys
 occ db:convert-filecache-bigint --no-interaction
 
 # ---------------------------------------------------------------------------
-# 13. Purge des logs de démarrage
+# 14. Purge des logs de démarrage
 # Les erreurs Redis (Connection refused / Couldn't map cluster keyspace) sont
 # normales pendant les premières secondes avant que le cluster soit initialisé.
 # On les supprime ici pour ne pas polluer les logs applicatifs.
