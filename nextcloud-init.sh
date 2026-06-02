@@ -144,7 +144,9 @@ step "Installation Collabora Online (richdocuments)"
 
 if ! ${OCC_BIN} app:enable richdocuments 2>/dev/null; then
     echo "[setup] Téléchargement depuis le Nextcloud App Store..."
-    occ app:install richdocuments
+    ${OCC_BIN} app:install richdocuments 2>/dev/null \
+        && info "richdocuments installed" \
+        || warn "richdocuments: not available — skipping (Collabora will not work until installed)"
 else
     info "richdocuments déjà présent — activé"
 fi
@@ -165,7 +167,9 @@ step "Installation Nextcloud Talk (spreed)"
 
 if ! ${OCC_BIN} app:enable spreed 2>/dev/null; then
     echo "[setup] Downloading from Nextcloud App Store..."
-    occ app:install spreed
+    ${OCC_BIN} app:install spreed 2>/dev/null \
+        && info "spreed installed" \
+        || warn "spreed: not available — skipping (Talk will not work until installed)"
 else
     info "spreed (Talk) already present — enabled"
 fi
@@ -177,7 +181,9 @@ step "Installation Nextcloud Whiteboard"
 
 if ! ${OCC_BIN} app:enable whiteboard 2>/dev/null; then
     echo "[setup] Téléchargement depuis le Nextcloud App Store..."
-    occ app:install whiteboard
+    ${OCC_BIN} app:install whiteboard 2>/dev/null \
+        && info "whiteboard installed" \
+        || warn "whiteboard: not available — skipping (Whiteboard will not work until installed)"
 else
     info "whiteboard déjà présent — activé"
 fi
