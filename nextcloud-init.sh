@@ -499,17 +499,17 @@ info "Thème NXT configuré (logos, fond, favicon, CSS, user-theming désactivé
 step "Configuration notify_push"
 install_app "notify_push"
 _push_ok=0
-for _i in $(seq 1 24); do
+for _i in $(seq 1 6); do
     if ${OCC_BIN} notify_push:setup "https://${NEXTCLOUD_DOMAIN}/push" 2>&1 \
         | grep -q 'configuration saved'; then
         info "notify_push configured (https://${NEXTCLOUD_DOMAIN}/push)"
         _push_ok=1
         break
     fi
-    warn "notify_push: push server not ready yet (attempt ${_i}/24), retrying in 5s..."
+    warn "notify_push: push server not ready yet (attempt ${_i}/6), retrying in 5s..."
     sleep 5
 done
-[ $_push_ok -eq 0 ] && warn "notify_push: setup failed after 120s — run manually: occ notify_push:setup https://${NEXTCLOUD_DOMAIN}/push"
+[ $_push_ok -eq 0 ] && warn "notify_push: setup failed after 30s — run manually: occ notify_push:setup https://${NEXTCLOUD_DOMAIN}/push"
 
 # ---------------------------------------------------------------------------
 # 13. Maintenance finale
