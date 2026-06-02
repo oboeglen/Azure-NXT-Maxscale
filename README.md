@@ -1119,13 +1119,14 @@ sudo fail2ban-client status sshd
 ## 🔐 Security audit
 
 > Scope: **external attack surface only** — deployed services and production URLs. Server-level hardening (SSH, fail2ban, Docker socket) is excluded from this score.
-> Last audit: **June 2026** — v2.4.2
+> Last audit: **June 2026** — v2.5.1
 
-### Score: 89 / 100 — Very good
+### Score: 91 / 100 — Very good
 
 | Finding | Severity | Detail |
 |---------|:--------:|--------|
 | Version disclosure | 🟠 Medium | `/status.php` returns `33.0.3.2` and `/api/v1/welcome` returns `2.1.1~docker` without authentication. Allows targeting known CVEs. |
+| RustFS console publicly reachable | 🟡 Low | `/rustfs/console/` is accessible from any IP — credentials required but no IP restriction or second auth factor. Disable when not in use (`RUSTFS_CONSOLE=no`). |
 | coturn without TLS | 🟡 Low | TURN signaling transits in plaintext between client and server. WebRTC media remains encrypted (DTLS). |
 | No rate limiting at reverse proxy level | 🟡 Low | HAProxy does not throttle HTTP flood. Nextcloud's built-in brute-force protection applies, but no upstream limiter. |
 | No CSP on Collabora / Whiteboard subdomains | 🟡 Low | By design — both services need to be embeddable in Nextcloud iframes. X-Frame-Options not set on these subdomains intentionally. |
@@ -1135,14 +1136,18 @@ sudo fail2ban-client status sshd
 
 | Area | Status |
 |------|--------|
-| TLS 1.2 min / 1.3 preferred, ECDHE suites, `no-tls-tickets` | ✅ |
+| TLS 1.3 only in practice, post-quantum key exchange (`X25519MLKEM768`), `no-tls-tickets` | ✅ |
 | HSTS 2 years · `includeSubDomains` · `preload` | ✅ |
 | Security headers on all responses (XCTO, XSS, Referrer, Permissions-Policy, HSTS) | ✅ |
 | `X-Frame-Options: SAMEORIGIN` on Nextcloud | ✅ |
 | `TRACE`, `DEBUG`, `CONNECT` blocked → 403 | ✅ |
 | Common scan paths (`.env`, `.git`, `/wp-admin`, `/phpmyadmin`…) → 403 | ✅ |
+| `/rustfs/admin`, `/metrics` → 403 | ✅ |
 | Collabora admin console (`/browser/dist/admin`) → 403 | ✅ |
 | `/stats` and `/s3-console` protected by credentials | ✅ |
+| S3 endpoint invisible without `Authorization: AWS4-HMAC-SHA256` — unauthenticated requests never reach RustFS | ✅ |
+| RustFS ports 9000 / 9001 not exposed externally | ✅ |
+| Expired S3 token redirects to console login — no raw XML error exposed to browser | ✅ |
 | No sensitive ports exposed externally (MariaDB, Redis, RustFS, NATS all closed) | ✅ |
 | Cookies: `Secure` + `HttpOnly` + `SameSite=Lax/Strict` | ✅ |
 | `Server` and `X-Powered-By` headers removed | ✅ |
