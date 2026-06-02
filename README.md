@@ -978,7 +978,7 @@ The 6 Talk HA signaling nodes authenticate users in under **100 ms p(95)** end-t
 | Nextcloud FPM (per node) | 500 MB – 1 GB | 5% | 30–60% | Internal :9000 |
 | MariaDB Galera (per node) | 1–2 GB | 5% | 20–40% | IST/SST replication |
 | Redis (per node) | 50–200 MB | < 1% | 2–5% | Cluster gossip + keyspace |
-| RustFS (per node) | 256–512 MB | < 1% | 10–30% | Erasure coding inter-nodes |
+| RustFS (per node) | ~120–180 MB | < 1% | 10–30% | Erasure coding inter-nodes |
 | Collabora CODE (per node) | 500 MB – 1 GB | 2% | 40–80% | WOPI + WebSocket |
 | Whiteboard (per node) | ~100 MB | < 1% | 5–10% | Real-time WebSocket |
 | galera-autoheal | ~20 MB | < 1% | < 1% | Local Docker socket |
