@@ -6,6 +6,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.5.2] — 2026-06-02
+
+### Fixed
+- **Talk — participants stuck on "waiting" across signaling nodes** — `nextcloud-spreed-signaling` v2.x replaced NATS with gRPC for cross-node session relay. Without a `[grpc]` section in the config, each node ran in complete isolation; participants on different nodes could never see each other. Added `listen = 0.0.0.0:9090` and `targets` listing all nodes — each node auto-detects and removes its own address at startup
+- **Talk — WebSocket cut after ~60 s** — `timeout client 60s` in HAProxy defaults applied to signaling WebSocket connections. `timeout tunnel` in the backend only protects the server side; the client side remained at 60 s, causing HAProxy to RST the connection mid-call. Added `timeout tunnel 3600s` to the defaults section so both sides of all tunnels (Talk, notify_push, Whiteboard, Collabora) are covered
+
+### Changed
+- **NATS container removed** — replaced by the built-in `nats://loopback` bus (in-process, no external server). Cross-node relay is now handled exclusively by gRPC. One less container, no operational change
+
+---
+
 ## [2.5.1] — 2026-06-02
 
 ### Fixed
