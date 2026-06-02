@@ -452,7 +452,9 @@ occ app:enable theming || true
 # Installer et activer Custom CSS
 if ! ${OCC_BIN} app:enable theming_customcss 2>/dev/null; then
     echo "[setup] Installation de theming_customcss depuis l'App Store..."
-    occ app:install theming_customcss
+    ${OCC_BIN} app:install theming_customcss 2>/dev/null \
+        && info "theming_customcss installed" \
+        || warn "theming_customcss: not available for this Nextcloud version — skipping"
 else
     info "theming_customcss déjà présent — activé"
 fi
@@ -478,7 +480,8 @@ theming favicon     /tmp/nxt-favicon.png
 ${OCC_BIN} config:app:set theming disable-user-theming --value "yes" 2>/dev/null || true
 
 # Appliquer le CSS personnalisé (login page + éléments globaux)
-occ config:app:set theming_customcss customcss --value "$(cat /nxt-custom.css)"
+${OCC_BIN} config:app:set theming_customcss customcss --value "$(cat /nxt-custom.css)" 2>/dev/null \
+    || warn "theming_customcss CSS not applied — app not installed"
 
 info "Thème NXT configuré (logos, fond, favicon, CSS, user-theming désactivé)."
 
