@@ -10,7 +10,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ### Fixed
 - **`RUSTFS_SERVER_DOMAINS` breaks S3 bucket creation** — the variable forces the `s3s` library into virtual-hosted bucket routing; path-style `PUT /nextcloud` sent by Nextcloud's objectstore returned `400 InvalidBucketName`. Removed from all RustFS node environments in `gen_compose()` and `docker-compose.yml`. Console CORS is already handled by `RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS=*`
-- **nextcloud-setup infinite restart loop (theming_customcss)** — Nextcloud 33 removed support for `logo`, `logoheader`, `background`, `favicon` keys in `occ theming:config`; the fatal `occ()` wrapper called `exit 1` after 5 retries, triggering `restart: on-failure` indefinitely when the App Store returned HTTP 429. The call is now non-fatal (warns and continues)
 - **All `app:install` calls are non-fatal** — `richdocuments`, `spreed`, `whiteboard`, and `theming_customcss` now use `${OCC_BIN} app:install ... || warn "..."` instead of the fatal `occ()` wrapper. App Store rate-limiting or unavailability no longer causes setup to restart
 - **Shell quoting error in deploy.sh monitoring loop** — `| xargs` used to trim whitespace broke on log lines containing apostrophes; replaced with `sed 's/^[[:space:]]*//;s/[[:space:]]*$//'`
 
