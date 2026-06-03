@@ -10,7 +10,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/nextcloud-spreed-signaling
+  IMAGE_NAME: ${{ github.repository_owner }}/azure-nxt-maxscale/nextcloud-spreed-signaling
 
 jobs:
   build:
