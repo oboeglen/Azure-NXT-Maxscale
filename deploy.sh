@@ -2555,6 +2555,13 @@ PYEOF
       "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
   fi
 
+  # In staging mode, disable HSTS to prevent browsers from permanently blocking
+  # the domain after seeing an untrusted staging cert + HSTS max-age=2years.
+  if [[ "${CERTBOT_STAGING:-no}" == "yes" ]]; then
+    sed -i 's|Strict-Transport-Security.*"max-age=[0-9]*[^"]*"|Strict-Transport-Security     "max-age=0"|' "$tmp"
+    warn "STAGING mode: HSTS disabled (max-age=0) — browsers will not be permanently blocked"
+  fi
+
   mv "$tmp" "$file"
   local _talk_status="${TALK_ENABLED:-no}"; [[ "$_talk_status" == "yes" ]] && _talk_status="yes (${SIGNALING_NODES:-2} nodes)"
   info "haproxy.cfg patched (NC:${NC_NODES} Collab:${COLLAB_NODES} WB:${WB_NODES} DB:${MARIADB_NODES} RustFS:${RUSTFS_NODES} Talk:${_talk_status})"
