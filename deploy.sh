@@ -2470,8 +2470,7 @@ patch_haproxy() {
   tmp=$(mktemp)
   tmp2=$(mktemp)
   # Ensure temp files are cleaned up even if the script exits unexpectedly
-  local _haproxy_cleanup() { rm -f "$tmp" "$tmp2"; }
-  trap '_haproxy_cleanup' EXIT
+  trap 'rm -f "$tmp" "$tmp2"' EXIT
   cp "$file" "$tmp"
 
   _replace_servers "NEXTCLOUD"     "${nc_servers%$'\n'}"        "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
