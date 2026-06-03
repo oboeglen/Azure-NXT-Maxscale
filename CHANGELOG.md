@@ -6,6 +6,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.5.5] — 2026-06-03
+
+### Fixed
+- **deploy.sh — AppArmor blocking every container start** — On kernels with AppArmor compiled in but `securityfs` not mounted (OVH VPS, some bare-metal Debian), Docker fails with `open /sys/kernel/security/apparmor/profiles: no such file or directory`. Fix: mount `securityfs` at startup, install `apparmor` package, add `--security-opt apparmor=unconfined` to all standalone `docker run` calls and all compose services
+- **deploy.sh — invalid `default-security-opts` key crashes Docker daemon** — Neither `default-security-opt` nor `default-security-opts` are valid `daemon.json` keys. Added self-healing: script detects and removes both variants at startup before attempting to start Docker
+- **deploy.sh — Docker daemon not running at version check** — `check_prerequisites()` runs before `install_packages()` which mounts securityfs and starts Docker. Added daemon startup + securityfs mount to `check_prerequisites()` so the version check doesn't fail with `Docker 0`
+- **deploy.sh — syntax error `local function()`** — `local _haproxy_cleanup() { ... }` is invalid bash syntax. Replaced with plain `trap`
+- **deploy.sh — `_run_tmpdir` unbound variable on EXIT** — Fixed trap to use `${_run_tmpdir:-}` to prevent unbound variable error when trap fires after local vars go out of scope
+- **deploy.sh — `jq` not installed, signaling JSON empty** — `configure_talk()` used `jq` which was not in the package list, causing `signaling_servers` to be set to empty string. Added `jq` to `pkgs_apt`/`pkgs_dnf` and added `python3` fallback
+- **deploy.sh — `notify_push:setup` fails with "can't load mount info"** — On fresh installs the DB structures notify_push reads aren't populated. Running `occ maintenance:repair` before `notify_push:setup` populates the required tables
+- **deploy.sh — `gen_pass` infinite loop** — Capped retry loop at 20 attempts with explicit `die`
+- **deploy.sh — securityfs not persisted across reboots** — Added `securityfs` mount to `/etc/fstab`
+
+### Changed
+- `apparmor` and `jq` added to package dependencies (`pkgs_apt`/`pkgs_dnf`)
+
+---
+
 ## [2.5.4] — 2026-06-03
 
 ### Fixed
