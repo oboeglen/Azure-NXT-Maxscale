@@ -1,6 +1,6 @@
 # Azure NXT Maxscale — Deployment Guide
 
-> **Version:** 2.5.3 · **Script:** `deploy.sh` · **Supported OS:** Debian 11/12 · Ubuntu 22.04/24.04 · RHEL/Rocky/AlmaLinux 8/9
+> **Version:** 2.5.4 · **Script:** `deploy.sh` · **Supported OS:** Debian 11/12 · Ubuntu 22.04/24.04 · RHEL/Rocky/AlmaLinux 8/9
 
 ---
 
@@ -326,12 +326,12 @@ sudo bash /tmp/deploy.sh   # select [3] Scale
 | Nextcloud FPM | ✅ Supported — HAProxy updated automatically | ✅ Supported — HAProxy updated automatically |
 | MariaDB Galera | ✅ Must remain **odd** | ✅ Must remain **odd** ≥ 3 |
 | Redis | ✅ Must remain **even** ≥ 6; slots rebalanced automatically | ✅ Slots drained to remaining nodes |
-| RustFS | ⚠️ **Not supported via deploy.sh** — see note below | ❌ Not supported (data loss risk) |
+| RustFS | ⚠️ **Not supported in RustFS v1.0.0-beta.6** — see note below | ❌ Not supported (requires full redeploy) |
 | Collabora | ✅ Add/remove freely | ✅ Add/remove freely |
 | Signaling | ✅ Add/remove freely | ✅ Add/remove freely |
 
 > [!WARNING]
-> **RustFS scaling is not handled by deploy.sh.** RustFS uses a distributed erasure coding pool — adding nodes mid-deployment requires manual intervention via the RustFS admin CLI (`mc admin`) and is not automated. Changing `RUSTFS_NODES` in `.env` will start new containers but the data distribution will **not** automatically rebalance. Scale RustFS only from the initial deployment.
+> **RustFS scale-up fails in v1.0.0-beta.6.** Adding nodes to an existing cluster triggers `formats length for erasure.sets does not match` because the on-disk format records the initial erasure set count and cannot be changed dynamically. `deploy.sh` attempts the operation but it will fail. Pool rebalancing is marked 🚧 Under Testing in the RustFS roadmap. To change the node count the cluster must be **redeployed from scratch**. Plan your node count before initial deployment.
 
 ### Redis scale-up process
 
@@ -340,19 +340,9 @@ sudo bash /tmp/deploy.sh   # select [3] Scale
 3. New replicas assigned automatically
 4. Health check waits for `cluster_state:ok`
 
-### RustFS — no automated scale-up
+### RustFS — scale-up not supported (beta limitation)
 
-RustFS supports pool expansion but requires manual steps outside deploy.sh:
-
-```bash
-# Manual RustFS pool expansion (not handled by deploy.sh)
-# 1. Add new nodes with empty disks
-# 2. Run via mc admin:
-mc admin config set local/ storage add /data  # add new pool
-mc admin rebalance start local/               # rebalance objects
-```
-
-> ⚠️ This is a future improvement. For now, plan your RustFS node count **before initial deployment**.
+> ⚠️ Plan your `RUSTFS_NODES` count at initial deployment time. Changing it later requires a full cluster redeploy.
 
 ### HAProxy after scaling
 
@@ -391,4 +381,4 @@ Key variables stored in `/opt/nxt-maxscale/.env`:
 
 ---
 
-*Generated for Azure NXT Maxscale v2.5.3 — [GitHub](https://github.com/oboeglen/Azure-NXT-Maxscale)*
+*Generated for Azure NXT Maxscale v2.5.4 — [GitHub](https://github.com/oboeglen/Azure-NXT-Maxscale)*
