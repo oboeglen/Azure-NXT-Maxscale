@@ -1129,7 +1129,7 @@ sudo fail2ban-client status sshd
 ## 🔐 Security audit
 
 > Scope: **external attack surface only** — deployed services and production URLs. Server-level hardening (SSH, fail2ban, Docker socket) is excluded from this score.
-> Last audit: **June 2026** — v2.5.1
+> Last audit: **June 2026** — v2.5.1 (infrastructure unchanged since; Talk/signaling fixes in v2.5.2–v2.5.3 do not affect the external attack surface)
 
 ### Score: 91 / 100 — Very good
 
