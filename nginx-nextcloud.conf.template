@@ -62,6 +62,9 @@ server {
         return 301 /index.php$request_uri;
     }
 
+    # Redirect /favicon.ico to the theming app so the login page uses the custom favicon
+    location = /favicon.ico { return 301 /apps/theming/favicon; }
+
     location ~ ^/(?:build|tests|config|lib|3rdparty|templates|data)(?:$|/) { return 404; }
     location ~ ^/(?:\.|autotest|occ|issue|indie|db_|console)               { return 404; }
 
