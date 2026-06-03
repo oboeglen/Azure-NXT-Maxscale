@@ -3446,6 +3446,11 @@ configure_notify_push() {
     fi
   done
 
+  # Run maintenance:repair first — populates DB structures that notify_push needs
+  # to read filesystem mounts. Without this, "can't load mount info from database"
+  # fails on fresh installs where the mounts table is empty.
+  "${occ[@]}" maintenance:repair --quiet 2>/dev/null || true
+
   # Retry setup up to 6 times — "can't load mount info" is transient on first boot
   local _push_ok=0 _attempt
   for _attempt in $(seq 1 6); do
