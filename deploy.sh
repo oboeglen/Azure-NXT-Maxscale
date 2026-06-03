@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.5.2
+# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.5.3
 # Usage: sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -23,7 +23,8 @@ IMG_AUTOHEAL="willfarrell/autoheal:latest"
 IMG_RUSTFS="rustfs/rustfs:1.0.0-beta.6"
 IMG_COLLABORA="collabora/code:25.04.9.4.1"
 IMG_WHITEBOARD="ghcr.io/nextcloud-releases/whiteboard:v1.5.8"
-IMG_SPREED_SIGNALING="strukturag/nextcloud-spreed-signaling:latest"
+IMG_SPREED_SIGNALING="ghcr.io/oboeglen/azure-nxt-maxscale/nextcloud-spreed-signaling:latest"
+IMG_NATS="nats:2.10-alpine"
 IMG_COTURN="coturn/coturn:4.6"
 IMG_HAPROXY="haproxy:2.8-alpine"
 IMG_NGINX="nginx:1.27-alpine"
@@ -206,7 +207,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Automatic Deployer v2.5.2"; do
+    "        NXT Maxscale — Automatic Deployer v2.5.3"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -2048,8 +2049,20 @@ WBREDIS
       start_period: 60s
 NOTIFYPUSH
 
+  # ── Talk: NATS (required for cross-node WebRTC message relay) ────────────
+  if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
+    cat >> "$dest" <<NATSBLOCK
+
+  nats:
+    image: ${IMG_NATS}
+    container_name: nats
+    restart: always
+    networks:
+      - talk-net
+NATSBLOCK
+  fi
+
   # ── Talk: spreed-signaling nodes (opt-in) ──────────────────────────────
-  # NATS removed in v2.x — cross-node relay handled by gRPC (nats://loopback used internally)
   if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
   local _sig_n="${SIGNALING_NODES:-2}"
   for i in $(seq 1 "$_sig_n"); do
@@ -2068,6 +2081,8 @@ NOTIFYPUSH
     networks:
       - talk-net
       - next-net
+    depends_on:
+      - nats
     healthcheck:
       test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 8080 > /dev/null 2>&1 || exit 1"]
       interval: 15s
@@ -2251,8 +2266,8 @@ urls = https://${NC_DOMAIN}
 secret = ${GEN_TALK_SECRET}
 ${turn_section}
 [nats]
-# loopback = built-in in-memory bus (no external NATS server needed since v2.x)
-url = nats://loopback
+# External NATS server — required for cross-node WebRTC message relay (offer/answer/ICE)
+url = nats://nats:4222
 
 [grpc]
 # Listen for cross-node gRPC connections (required for multi-node session relay)
@@ -2896,7 +2911,7 @@ run_deploy() {
     "${IMG_WHITEBOARD}"
   )
   if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
-    images+=("${IMG_SPREED_SIGNALING}")
+    images+=("${IMG_SPREED_SIGNALING}" "${IMG_NATS}")
     [[ "$COTURN_ENABLED" == "yes" ]] && images+=("${IMG_COTURN}")
   fi
   local total=${#images[@]}

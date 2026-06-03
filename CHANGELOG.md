@@ -6,6 +6,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.5.3] — 2026-06-03
+
+### Fixed
+- **Talk — cross-node calls broken (WebRTC offer/answer/ICE not delivered)** — `nats://loopback` is an in-process bus per node. All WebRTC signaling messages sent to a session on another node were silently dropped because each node's loopback bus is isolated. Restored the external NATS container and changed `url = nats://nats:4222`; NATS is required for cross-node message relay even though gRPC handles session lookup
+- **Talk — gRPC `LookupSessionId` race condition** — when a remote node queried a session that was concurrently being registered, the one-shot lookup returned `codes.Unknown desc = "unknown room session id"` before `SetRoomSession` completed. Added a retry loop (10 × 50 ms) in the gRPC server handler so lookups succeed within the registration window. Custom patched image published at `ghcr.io/oboeglen/azure-nxt-maxscale/nextcloud-spreed-signaling:latest` (upstream issue [#1261](https://github.com/strukturag/nextcloud-spreed-signaling/issues/1261))
+- **deploy.sh — notify_push readiness check always timed out** — `curl -sf | grep -q 'false'` never matched because `/test/cookie` returns HTTP 400 (missing `token` header), not the string `false`. Replaced with `curl -s -o /dev/null` (any HTTP response = binary ready) checked via `app-next-01` over the Docker network
+- **deploy.sh — notify_push wait loop could hang indefinitely** — no timeout cap on the `until` loop. Added a 300 s safety break to prevent infinite hang if the binary never starts
+
+### Changed
+- **NATS container restored** — `nats://loopback` cannot relay cross-node messages; external NATS is mandatory for multi-node Talk HA
+- **Signaling image** — switched from `strukturag/nextcloud-spreed-signaling:latest` to the patched custom build `ghcr.io/oboeglen/azure-nxt-maxscale/nextcloud-spreed-signaling:latest`
+
+---
+
 ## [2.5.2] — 2026-06-02
 
 ### Fixed
