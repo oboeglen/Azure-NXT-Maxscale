@@ -504,7 +504,7 @@ Talk HA (`spreed-signaling`) is required so that Talk calls work correctly when 
 
 Two distinct mechanisms work together for multi-node Talk HA:
 
-- **gRPC `:9090`** — session lookup: finds which node holds a given participant's session (patched to handle the registration race condition — see [issue #1261](https://github.com/strukturag/nextcloud-spreed-signaling/issues/1261))
+- **gRPC `:9090`** — session lookup: finds which node holds a given participant's session. A race condition exists in upstream ([issue #1261](https://github.com/strukturag/nextcloud-spreed-signaling/issues/1261)) — `balance source` in HAProxy mitigates it for same-network participants
 - **NATS cluster** (`nats-01..03`) — message relay: delivers WebRTC offer/answer/ICE candidate messages between nodes. `nats://loopback` is in-memory per-node and **cannot** relay cross-node. A 3-node NATS cluster provides HA: if one node fails, signaling nodes reconnect automatically to the surviving nodes within seconds.
 
 > [!IMPORTANT]
@@ -1193,12 +1193,12 @@ All Docker images are pinned to precise versions rather than floating tags (`:la
 | `IMG_COLLABORA` | `collabora/code` | `25.04.9.4.1` |
 | `IMG_AUTOHEAL` | `willfarrell/autoheal` | `latest` |
 | `IMG_WHITEBOARD` | `ghcr.io/nextcloud-releases/whiteboard` | `v1.5.8` |
-| `IMG_SPREED_SIGNALING` | `ghcr.io/oboeglen/azure-nxt-maxscale/nextcloud-spreed-signaling` | `latest` |
+| `IMG_SPREED_SIGNALING` | `strukturag/nextcloud-spreed-signaling` | `master` |
 | `IMG_NATS` | `nats` | `2.10-alpine` *(× 3 nodes — cluster)* |
 | `IMG_COTURN` | `coturn/coturn` | `4.6` |
 
 > `autoheal` does not publish recent versioned tags on Docker Hub (`1.2.0` dates from 2021) — kept on `latest`.
-> `spreed-signaling` uses a patched custom build fixing the cross-node gRPC race condition ([issue #1261](https://github.com/strukturag/nextcloud-spreed-signaling/issues/1261)), published at `ghcr.io/oboeglen/azure-nxt-maxscale/nextcloud-spreed-signaling`. The `notify-push` container reuses the Nextcloud image (`nextcloud:${NC_VERSION}`), pinned via the `NC_VERSION` variable set in `deploy.sh`.
+> `spreed-signaling` uses the official upstream `master` branch build. A cross-node gRPC race condition ([issue #1261](https://github.com/strukturag/nextcloud-spreed-signaling/issues/1261)) exists in the current upstream — `balance source` in HAProxy mitigates it for participants on the same network. The `notify-push` container reuses the Nextcloud image (`nextcloud:${NC_VERSION}`), pinned via the `NC_VERSION` variable set in `deploy.sh`.
 
 ### Update an image to a new version
 
