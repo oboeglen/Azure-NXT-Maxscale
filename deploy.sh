@@ -1272,11 +1272,17 @@ gen_env() {
   local dest="${1:-$INSTALL_DIR/.env}"
   step "Generating .env file"
 
-  # Build RustFS path lines dynamically
+  # Build RustFS path lines dynamically — validate paths are set (wizard may have been aborted)
   local rustfs_lines="" n d
   for n in $(seq 1 "$RUSTFS_NODES"); do
+    if [[ -z "${RUSTFS_PATHS[${n}_path]:-}" ]]; then
+      die "RustFS path not configured for node ${n} — re-run the script and complete the disk wizard"
+    fi
     rustfs_lines+="RUSTFS_NODE${n}_PATH=${RUSTFS_PATHS[${n}_path]}"$'\n'
     for d in $(seq 1 "$RUSTFS_DISKS"); do
+      if [[ -z "${RUSTFS_PATHS[${n}_${d}]:-}" ]]; then
+        die "RustFS data path not configured for node ${n} disk ${d} — re-run the script and complete the disk wizard"
+      fi
       rustfs_lines+="RUSTFS_NODE${n}_DATA${d}=${RUSTFS_PATHS[${n}_${d}]}"$'\n'
     done
     rustfs_lines+=$'\n'
@@ -2980,6 +2986,7 @@ run_deploy() {
   fi
   local total=${#images[@]}
   local tmpdir; tmpdir=$(mktemp -d)
+  trap 'rm -rf "$tmpdir"' EXIT
 
   # Launch all pulls in parallel — keep PIDs for targeted wait
   # (wait without args would block on the tee process from setup_logging)
@@ -3115,6 +3122,8 @@ wait_healthy() {
   info "Calculated timeout: ${timeout}s (${NC_NODES} NC + ${MARIADB_NODES} DB + ${RUSTFS_NODES} RustFS + ${COLLAB_NODES} Collabora)"
 
   # Consecutive restart counters per container (crash loop detection)
+  # _restart_counts[name]       = consecutive observed restarts this session
+  # _restart_counts[name_prev]  = docker RestartCount at last check (catches fast crash/restart)
   declare -A _restart_counts=()
   local _crash_loop=()
 
@@ -3144,6 +3153,20 @@ wait_healthy() {
           [[ "$cstate" == "running" ]] && status="healthy" || status="${cstate:-absent}"
         else
           status="$health"
+        fi
+      fi
+
+      # Detect fast crash-restart cycles that never hit "restarting" state
+      local _docker_rc
+      _docker_rc=$(docker inspect --format='{{.RestartCount}}' "$name" 2>/dev/null | tr -d '[:space:]' || echo "0")
+      local _prev_rc=${_restart_counts["${name}_prev"]:-0}
+      if (( _docker_rc > _prev_rc )); then
+        _restart_counts["${name}_prev"]=$_docker_rc
+        _restart_counts["$name"]=$(( ${_restart_counts["$name"]:-0} + (_docker_rc - _prev_rc) ))
+        if (( ${_restart_counts["$name"]:-0} >= 3 )) && [[ ! " ${_crash_loop[*]:-} " == *" ${name} "* ]]; then
+          warn "${name} in crash loop (detected via RestartCount) — excluded from wait"
+          warn "  docker logs ${name}"
+          _crash_loop+=("$name")
         fi
       fi
 
@@ -3255,7 +3278,11 @@ configure_talk() {
   # Config::getSignalingSecret() to return null (TypeError on the admin page).
   # Talk 23 requires: {"servers":[{"server":"wss://...","verify":true,"secret":"..."}],"secret":"..."}
   local signaling_json
-  signaling_json='{"servers":[{"server":"wss://'"${TALK_DOMAIN}"'/","verify":true,"secret":"'"${talk_secret}"'"}],"secret":"'"${talk_secret}"'"}'
+  # Use jq to safely construct JSON — prevents injection if secret contains ", \, or newlines
+  signaling_json=$(jq -n \
+    --arg server "wss://${TALK_DOMAIN}/" \
+    --arg secret "$talk_secret" \
+    '{"servers":[{"server":$server,"verify":true,"secret":$secret}],"secret":$secret}')
   out=$("${occ[@]}" config:app:set spreed signaling_servers --value "$signaling_json" 2>&1)
   info "signaling_servers set: $out"
 
@@ -3402,8 +3429,9 @@ CREDS
   host_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
 
   local stats_line="HAProxy Stats  : disabled"
+  # Password omitted from terminal/log — stored in .credentials file only
   [[ "$HAPROXY_STATS" == "yes" ]] && \
-    stats_line="HAProxy Stats  : https://${NC_DOMAIN}/stats  (admin / ${GEN_HAPROXY_STATS_PASS})"
+    stats_line="HAProxy Stats  : https://${NC_DOMAIN}/stats  (see credentials file)"
 
   local console_line="RustFS Console  : disabled"
   [[ "$RUSTFS_CONSOLE" == "yes" ]] && \
@@ -3599,7 +3627,8 @@ _redis_scale_up() {
     done
 
     if [[ -z "$master_id" ]]; then
-      warn "Cannot get master_id for redis-node${mi} — replica redis-node${ri} skipped"
+      warn "Cannot get master_id for redis-node${mi} after ${wait_master}s — replica redis-node${ri} skipped"
+      warn "⚠ Redis cluster may be in partial state — run 'redis-cli cluster info' to verify"
       continue
     fi
 
@@ -3618,8 +3647,13 @@ _redis_scale_up() {
         | grep -q "^${replica_id}"; then
       warn "redis-node${ri} not integrated via add-node — attempting MEET+REPLICATE"
       local ri_ip
+      # Filter by next-net to avoid getting IP from a wrong network if multiple are attached
       ri_ip=$(docker inspect "redis-node${ri}" \
-        --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null | head -1)
+        --format '{{(index .NetworkSettings.Networks "next-net").IPAddress}}' 2>/dev/null)
+      # Fallback: iterate all networks and take the first non-empty IP
+      [[ -z "$ri_ip" ]] && ri_ip=$(docker inspect "redis-node${ri}" \
+        --format '{{range .NetworkSettings.Networks}}{{if .IPAddress}}{{.IPAddress}}{{end}}{{end}}' \
+        2>/dev/null | head -c 20 | tr -d '\n')
       docker exec redis-node1 redis-cli \
         -a "$redis_pass" --no-auth-warning cluster meet "$ri_ip" 6379 2>/dev/null || true
       sleep 3
