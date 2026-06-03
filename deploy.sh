@@ -2509,7 +2509,7 @@ block = (
   "  option httpchk\n"
   "  http-check send meth GET uri /api/v1/welcome ver HTTP/1.1 hdr Host ${TALK_DOMAIN}\n"
   "  http-check expect status 200\n"
-  "  default-server inter 10s fastinter 1s rise 2 fall 2 resolvers docker init-addr libc,none\n"
+  "  default-server inter 5s fastinter 1s downinter 2s rise 2 fall 2 resolvers docker init-addr libc,none on-marked-down shutdown-sessions\n"
   "  # BEGIN_SERVERS_SIGNALING\n"
   + servers + "\n"
   "  # END_SERVERS_SIGNALING\n"
