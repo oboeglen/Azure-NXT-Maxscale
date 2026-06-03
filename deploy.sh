@@ -144,10 +144,17 @@ check_requirements() {
     mount -t securityfs securityfs /sys/kernel/security 2>/dev/null || true
   fi
 
-  # Repair daemon.json before starting Docker — fix known bad keys from previous runs
+  # Remove invalid security keys from daemon.json left by previous buggy runs
+  # Neither 'default-security-opt' nor 'default-security-opts' are valid Docker keys
   local _daemon_json="/etc/docker/daemon.json"
-  if [[ -f "$_daemon_json" ]] && grep -q '"default-security-opt"' "$_daemon_json" 2>/dev/null; then
-    sed -i 's/"default-security-opt"/"default-security-opts"/g' "$_daemon_json"
+  if [[ -f "$_daemon_json" ]] && grep -qE '"default-security-opts?"' "$_daemon_json" 2>/dev/null; then
+    python3 -c "
+import json
+with open('$_daemon_json') as f: d = json.load(f)
+d.pop('default-security-opt', None)
+d.pop('default-security-opts', None)
+with open('$_daemon_json', 'w') as f: json.dump(d, f, indent=2)
+" 2>/dev/null && info "Removed invalid security-opt keys from daemon.json"
   fi
 
   # Ensure Docker daemon is running before version check
@@ -391,28 +398,10 @@ install_deps() {
   fi
 
   # Docker log rotation — 100 MB × 3 files per container (~300 MB max)
-  # Also disable AppArmor profile check for systems without AppArmor (e.g. OVH VPS)
   local daemon_json="/etc/docker/daemon.json"
-  local _needs_apparmor_fix=false
-  if ! test -f /sys/kernel/security/apparmor/profiles 2>/dev/null; then
-    _needs_apparmor_fix=true
-  fi
 
   if [[ ! -f "$daemon_json" ]] || ! grep -q "max-size" "$daemon_json" 2>/dev/null; then
-    if $_needs_apparmor_fix; then
-      cat > "$daemon_json" <<'DAEMON'
-{
-  "log-driver": "json-file",
-  "log-opts": {
-    "max-size": "100m",
-    "max-file": "3"
-  },
-  "default-security-opts": ["apparmor=unconfined"]
-}
-DAEMON
-      info "Docker log rotation configured + AppArmor disabled (not available on this system)"
-    else
-      cat > "$daemon_json" <<'DAEMON'
+    cat > "$daemon_json" <<'DAEMON'
 {
   "log-driver": "json-file",
   "log-opts": {
@@ -421,30 +410,21 @@ DAEMON
   }
 }
 DAEMON
-      info "Docker log rotation configured (100 MB × 3 files)"
-    fi
-    # security-opt changes require full restart (reload is not enough)
-    if $_needs_apparmor_fix; then
-      systemctl restart docker 2>/dev/null || systemctl reload docker 2>/dev/null || true
-      info "Docker daemon restarted (AppArmor disabled)"
-    else
-      systemctl reload docker 2>/dev/null || true
-    fi
-  elif $_needs_apparmor_fix && ! grep -q 'apparmor=unconfined' "$daemon_json" 2>/dev/null; then
-    # Already has log rotation but missing AppArmor fix — patch in place
-    python3 -c "
-import json, sys
-with open('$daemon_json') as f: d = json.load(f)
-d.setdefault('default-security-opts', [])
-if 'apparmor=unconfined' not in d['default-security-opts']:
-    d['default-security-opts'].append('apparmor=unconfined')
-with open('$daemon_json', 'w') as f: json.dump(d, f, indent=2)
-"
-    # security-opt requires full restart to take effect
-    systemctl restart docker 2>/dev/null || systemctl reload docker 2>/dev/null || true
-    info "AppArmor disabled in Docker daemon config (daemon restarted)"
+    systemctl reload docker 2>/dev/null || true
+    info "Docker log rotation configured (100 MB × 3 files)"
   else
-    info "Docker daemon already configured"
+    # Remove any invalid security keys left by previous buggy runs
+    python3 -c "
+import json
+with open('$daemon_json') as f: d = json.load(f)
+changed = bool(d.pop('default-security-opt', None) or d.pop('default-security-opts', None))
+if changed:
+    with open('$daemon_json', 'w') as f: json.dump(d, f, indent=2)
+    print('cleaned')
+" 2>/dev/null | grep -q cleaned && {
+      systemctl restart docker 2>/dev/null || true
+      info "Removed invalid keys from daemon.json and restarted Docker"
+    } || info "Docker daemon already configured"
   fi
 
   # Check docker access for non-root user
