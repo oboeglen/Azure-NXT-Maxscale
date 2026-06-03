@@ -2963,6 +2963,11 @@ fix_galera_bootstrap() {
 run_deploy() {
   cd "$INSTALL_DIR"
 
+  # Register a global tmpdir for any temp files used across this function.
+  # The trap fires on any exit path (die, error, completion) so no temp files leak.
+  local _run_tmpdir; _run_tmpdir=$(mktemp -d)
+  trap 'rm -rf "$_run_tmpdir"' EXIT
+
   # Explicit certificate check before any startup
   if [[ ! -s "./certs/stack.pem" ]]; then
     die "SSL certificate missing: $(pwd)/certs/stack.pem\nRe-run the script to regenerate the certificate."
@@ -2985,8 +2990,7 @@ run_deploy() {
     [[ "$COTURN_ENABLED" == "yes" ]] && images+=("${IMG_COTURN}")
   fi
   local total=${#images[@]}
-  local tmpdir; tmpdir=$(mktemp -d)
-  trap 'rm -rf "$tmpdir"' EXIT
+  local tmpdir; tmpdir=$(mktemp -d)   # pull status flags dir (cleaned by run_deploy EXIT trap)
 
   # Launch all pulls in parallel — keep PIDs for targeted wait
   # (wait without args would block on the tee process from setup_logging)
@@ -3798,7 +3802,9 @@ scale_nodes() {
     NC_DOMAIN=$(grep    -m1 '^NEXTCLOUD_DOMAIN='    "$INSTALL_DIR/.env" | cut -d= -f2)
     COLLAB_DOMAIN=$(grep -m1 '^COLLABORA_DOMAIN='   "$INSTALL_DIR/.env" | cut -d= -f2)
     WB_DOMAIN=$(grep    -m1 '^WHITEBOARD_DOMAIN='   "$INSTALL_DIR/.env" | cut -d= -f2)
-    TALK_DOMAIN=$(grep   -m1 '^TALK_DOMAIN='         "$INSTALL_DIR/.env" | cut -d= -f2 || echo "talk.${NC_DOMAIN#*.}")
+    TALK_DOMAIN=$(grep   -m1 '^TALK_DOMAIN='         "$INSTALL_DIR/.env" | cut -d= -f2 || true)
+    # Fallback if missing OR empty value in .env (e.g. TALK_DOMAIN=)
+    [[ -z "$TALK_DOMAIN" ]] && TALK_DOMAIN="talk.${NC_DOMAIN#*.}"
     CERTBOT_EMAIL=$(grep -m1 '^CERTBOT_EMAIL='       "$INSTALL_DIR/.env" | cut -d= -f2 || echo "")
     NC_NODES=$(_detect_node_count     "app-next-"       "^app-next-[0-9]")
     MARIADB_NODES=$(_detect_node_count "mariadb-node"   "^mariadb-node[0-9]")
@@ -4080,6 +4086,17 @@ scale_nodes() {
   fi
 
   # Step 3: Generate config files (without .env — passwords preserved)
+  # Verify actual running container counts match expected before caching — prevents
+  # stale counts if a scale operation failed partway (e.g. partial Redis scale-down).
+  local _actual_nc _actual_db _actual_redis
+  _actual_nc=$(_detect_node_count "app-next-" "^app-next-[0-9]")
+  _actual_db=$(_detect_node_count "mariadb-node" "^mariadb-node[0-9]")
+  _actual_redis=$(_detect_node_count "redis-node" "^redis-node[0-9]")
+  if (( _actual_nc != NC_NODES || _actual_db != MARIADB_NODES || _actual_redis != REDIS_NODES )); then
+    warn "Container counts differ from expected (NC: ${_actual_nc}/${NC_NODES} DB: ${_actual_db}/${MARIADB_NODES} Redis: ${_actual_redis}/${REDIS_NODES})"
+    warn "Saving actual counts to cache to prevent stale configuration on next run"
+    NC_NODES=$_actual_nc; MARIADB_NODES=$_actual_db; REDIS_NODES=$_actual_redis
+  fi
   save_answers
   gen_compose
   gen_galera_cnf
