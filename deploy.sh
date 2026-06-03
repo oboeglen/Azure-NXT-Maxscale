@@ -3065,7 +3065,7 @@ run_deploy() {
   # Register a global tmpdir for any temp files used across this function.
   # The trap fires on any exit path (die, error, completion) so no temp files leak.
   local _run_tmpdir; _run_tmpdir=$(mktemp -d)
-  trap 'rm -rf "$_run_tmpdir"' EXIT
+  trap 'rm -rf "${_run_tmpdir:-}"' EXIT
 
   # Explicit certificate check before any startup
   if [[ ! -s "./certs/stack.pem" ]]; then
