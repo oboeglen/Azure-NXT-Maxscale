@@ -320,13 +320,27 @@ install_deps() {
   fi
   stop_spinner "Essential packages installed"
 
-  # Ensure AppArmor is active so Docker can load its default security profile
-  if [[ "$PKG_MGR" == "apt" ]]; then
-    if systemctl enable apparmor 2>/dev/null && systemctl start apparmor 2>/dev/null; then
-      info "AppArmor enabled"
+  # Ensure securityfs is mounted so Docker can access AppArmor profiles.
+  # On some kernels (OVH VPS, bare-metal Debian), AppArmor is compiled in
+  # but securityfs is not mounted — Docker errors with "no such file or directory"
+  # when trying to check /sys/kernel/security/apparmor/profiles.
+  if [[ ! -d /sys/kernel/security/apparmor ]]; then
+    mount -t securityfs securityfs /sys/kernel/security 2>/dev/null || true
+    if [[ -d /sys/kernel/security/apparmor ]]; then
+      info "securityfs mounted — AppArmor now accessible to Docker"
+      # Persist the mount across reboots
+      if ! grep -q 'securityfs' /etc/fstab 2>/dev/null; then
+        echo 'securityfs /sys/kernel/security securityfs defaults 0 0' >> /etc/fstab
+      fi
     else
-      info "AppArmor not available on this kernel — using unconfined mode"
+      info "AppArmor not available on this kernel — Docker will use unconfined mode"
     fi
+  fi
+
+  # Start AppArmor service if available (loads profiles Docker needs)
+  if [[ "$PKG_MGR" == "apt" ]]; then
+    systemctl enable apparmor 2>/dev/null && systemctl start apparmor 2>/dev/null \
+      && info "AppArmor service started" || true
   fi
 
   # Docker Engine
