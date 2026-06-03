@@ -323,11 +323,11 @@ install_deps() {
   #            but not yet mounted — prevents "apparmor/profiles: no such file" errors
   local pkgs_apt=(
     git curl wget openssl python3 ca-certificates gnupg lsb-release
-    netcat-openbsd xfsprogs e2fsprogs util-linux dnsutils apparmor
+    netcat-openbsd xfsprogs e2fsprogs util-linux dnsutils apparmor jq
   )
   local pkgs_dnf=(
     git curl wget openssl python3 ca-certificates gnupg2
-    nmap-ncat xfsprogs e2fsprogs util-linux bind-utils
+    nmap-ncat xfsprogs e2fsprogs util-linux bind-utils jq
   )
 
   step "Updating sources and installing essential packages"
@@ -3381,11 +3381,21 @@ configure_talk() {
   # Config::getSignalingSecret() to return null (TypeError on the admin page).
   # Talk 23 requires: {"servers":[{"server":"wss://...","verify":true,"secret":"..."}],"secret":"..."}
   local signaling_json
-  # Use jq to safely construct JSON — prevents injection if secret contains ", \, or newlines
-  signaling_json=$(jq -n \
-    --arg server "wss://${TALK_DOMAIN}/" \
-    --arg secret "$talk_secret" \
-    '{"servers":[{"server":$server,"verify":true,"secret":$secret}],"secret":$secret}')
+  # Use jq if available, fallback to python3 — both safely construct JSON
+  # and prevent injection if secret/domain contain quotes, backslashes, or newlines
+  if command -v jq &>/dev/null; then
+    signaling_json=$(jq -n \
+      --arg server "wss://${TALK_DOMAIN}/" \
+      --arg secret "$talk_secret" \
+      '{"servers":[{"server":$server,"verify":true,"secret":$secret}],"secret":$secret}')
+  else
+    signaling_json=$(python3 -c "
+import json, sys
+server, secret = sys.argv[1], sys.argv[2]
+print(json.dumps({'servers':[{'server':server,'verify':True,'secret':secret}],'secret':secret}))
+" "wss://${TALK_DOMAIN}/" "$talk_secret")
+  fi
+  [[ -z "$signaling_json" ]] && die "Failed to build signaling JSON — jq and python3 both unavailable"
   out=$("${occ[@]}" config:app:set spreed signaling_servers --value "$signaling_json" 2>&1)
   info "signaling_servers set: $out"
 
