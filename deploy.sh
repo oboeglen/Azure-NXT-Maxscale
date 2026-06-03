@@ -138,10 +138,16 @@ check_requirements() {
     info "Disk: ${disk_gb} GB available ✓"
   fi
 
+  # Mount securityfs first — Docker needs /sys/kernel/security/apparmor to start
+  # (AppArmor in kernel but securityfs not mounted = Docker daemon fails to start)
+  if [[ ! -d /sys/kernel/security/apparmor ]]; then
+    mount -t securityfs securityfs /sys/kernel/security 2>/dev/null || true
+  fi
+
   # Ensure Docker daemon is running before version check
   if command -v docker &>/dev/null && ! docker info &>/dev/null 2>&1; then
     systemctl start docker 2>/dev/null || true
-    sleep 2
+    sleep 3
   fi
 
   # Docker version
