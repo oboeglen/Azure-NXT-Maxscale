@@ -382,10 +382,10 @@ clone_repo() {
     warn "Directory $INSTALL_DIR already exists"
     if prompt_yn "Update repository (git pull)?" "Y"; then
       start_spinner "Updating repository..."
-      GIT_TERMINAL_PROMPT=0 timeout 120 git -C "$INSTALL_DIR" fetch origin || {
+      if ! GIT_TERMINAL_PROMPT=0 timeout 120 git -C "$INSTALL_DIR" fetch origin; then
         stop_spinner
-        die "Cannot reach $REPO_URL — check network connectivity"
-      }
+        die "Cannot reach $REPO_URL — check network connectivity (fetch timed out or failed)"
+      fi
       git -C "$INSTALL_DIR" reset --hard origin/main
       stop_spinner "Repository updated"
     else
@@ -2461,6 +2461,9 @@ patch_haproxy() {
   local tmp tmp2
   tmp=$(mktemp)
   tmp2=$(mktemp)
+  # Ensure temp files are cleaned up even if the script exits unexpectedly
+  local _haproxy_cleanup() { rm -f "$tmp" "$tmp2"; }
+  trap '_haproxy_cleanup' EXIT
   cp "$file" "$tmp"
 
   _replace_servers "NEXTCLOUD"     "${nc_servers%$'\n'}"        "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
@@ -2794,6 +2797,12 @@ gen_certs() {
     info "Valid existing certificate found — generation skipped"
     return 0
   fi
+  # Backup existing cert before attempting renewal so we can restore on failure
+  local _cert_bak=""
+  if [[ -f "$INSTALL_DIR/certs/stack.pem" ]]; then
+    _cert_bak="$INSTALL_DIR/certs/stack.pem.bak.$(date +%s)"
+    cp "$INSTALL_DIR/certs/stack.pem" "$_cert_bak"
+  fi
   rm -f "$INSTALL_DIR/certs/stack.pem"
 
   # ── Reuse from Let's Encrypt volume if available ──────────────────────────
@@ -2885,6 +2894,11 @@ gen_certs() {
   if ! $cert_ok; then
     error "Certbot failed. Full output:"
     echo "$certbot_output" | tail -20 >&2
+    # Restore backup cert if available so next run can attempt renewal again
+    if [[ -n "$_cert_bak" && -f "$_cert_bak" ]]; then
+      cp "$_cert_bak" "$INSTALL_DIR/certs/stack.pem"
+      warn "Previous certificate restored from backup: $_cert_bak"
+    fi
     # Detect rate limit and show unlock time
     local retry_after=""
     retry_after=$(echo "$certbot_output" | grep -oE 'until [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]+Z' | head -1 | sed 's/until //')
@@ -3006,6 +3020,11 @@ run_deploy() {
   stop_spinner "MariaDB Galera image built"
 
   step "Starting infrastructure"
+
+  # Validate generated docker-compose.yml before starting anything
+  if ! docker compose config --quiet 2>/dev/null; then
+    die "docker-compose.yml validation failed — check generated config with: docker compose config"
+  fi
 
   # Start HAProxy first and wait for it to be healthy
   # before launching services that depend on it
@@ -3482,7 +3501,10 @@ _detect_node_count() {
   local n
   n=$(docker ps --filter "name=${filter}" --format "{{.Names}}" 2>/dev/null \
       | grep -E "${pattern}" | wc -l)
-  (( n < 1 )) && n=1
+  if (( n < 1 )); then
+    warn "No running containers matching '${filter}' — defaulting to 1 (check stack health)"
+    n=1
+  fi
   echo "$n"
 }
 

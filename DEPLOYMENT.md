@@ -323,12 +323,15 @@ sudo bash /tmp/deploy.sh   # select [3] Scale
 
 | Component | Scale up | Scale down |
 |-----------|----------|------------|
-| Nextcloud FPM | Add nodes, HAProxy updated | Remove nodes, HAProxy updated |
-| MariaDB Galera | Must remain **odd** | Must remain **odd** ≥ 3 |
-| Redis | Must remain **even** ≥ 6; slots rebalanced | Slots drained to remaining nodes |
-| RustFS | Add new pool — data distributed | ⚠️ Not supported (data loss risk) |
-| Collabora | Add/remove freely | Add/remove freely |
-| Signaling | Add/remove freely | Add/remove freely |
+| Nextcloud FPM | ✅ Supported — HAProxy updated automatically | ✅ Supported — HAProxy updated automatically |
+| MariaDB Galera | ✅ Must remain **odd** | ✅ Must remain **odd** ≥ 3 |
+| Redis | ✅ Must remain **even** ≥ 6; slots rebalanced automatically | ✅ Slots drained to remaining nodes |
+| RustFS | ⚠️ **Not supported via deploy.sh** — see note below | ❌ Not supported (data loss risk) |
+| Collabora | ✅ Add/remove freely | ✅ Add/remove freely |
+| Signaling | ✅ Add/remove freely | ✅ Add/remove freely |
+
+> [!WARNING]
+> **RustFS scaling is not handled by deploy.sh.** RustFS uses a distributed erasure coding pool — adding nodes mid-deployment requires manual intervention via the RustFS admin CLI (`mc admin`) and is not automated. Changing `RUSTFS_NODES` in `.env` will start new containers but the data distribution will **not** automatically rebalance. Scale RustFS only from the initial deployment.
 
 ### Redis scale-up process
 
@@ -337,12 +340,19 @@ sudo bash /tmp/deploy.sh   # select [3] Scale
 3. New replicas assigned automatically
 4. Health check waits for `cluster_state:ok`
 
-### RustFS scale-up process
+### RustFS — no automated scale-up
 
-1. New nodes start with empty disks
-2. A **new pool** is created in the existing cluster
-3. New objects are distributed across all pools
-4. Existing objects remain on original pools (no rebalance)
+RustFS supports pool expansion but requires manual steps outside deploy.sh:
+
+```bash
+# Manual RustFS pool expansion (not handled by deploy.sh)
+# 1. Add new nodes with empty disks
+# 2. Run via mc admin:
+mc admin config set local/ storage add /data  # add new pool
+mc admin rebalance start local/               # rebalance objects
+```
+
+> ⚠️ This is a future improvement. For now, plan your RustFS node count **before initial deployment**.
 
 ### HAProxy after scaling
 
