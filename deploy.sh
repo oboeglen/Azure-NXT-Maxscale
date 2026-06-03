@@ -138,6 +138,12 @@ check_requirements() {
     info "Disk: ${disk_gb} GB available ✓"
   fi
 
+  # Ensure Docker daemon is running before version check
+  if command -v docker &>/dev/null && ! docker info &>/dev/null 2>&1; then
+    systemctl start docker 2>/dev/null || true
+    sleep 2
+  fi
+
   # Docker version
   local docker_ver
   docker_ver=$(docker version --format '{{.Server.Version}}' 2>/dev/null | grep -oE '^[0-9]+' || echo "0")
