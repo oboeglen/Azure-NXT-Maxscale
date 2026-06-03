@@ -2294,6 +2294,39 @@ NETWORKS
     echo "1:${RUSTFS_NODES}" > "$_pools_file"
   fi
 
+  # If AppArmor is not available on this kernel, add security_opt to every service
+  # so Docker skips the AppArmor profile check that would otherwise fail with
+  # "open /sys/kernel/security/apparmor/profiles: no such file or directory"
+  if ! test -f /sys/kernel/security/apparmor/profiles 2>/dev/null; then
+    python3 - "$dest" << 'APPARMOR_FIX'
+import sys, re
+
+with open(sys.argv[1]) as f:
+    content = f.read()
+
+# Insert security_opt after every "restart: always" or "restart: unless-stopped" line
+# that doesn't already have security_opt nearby
+lines = content.split('\n')
+result = []
+i = 0
+while i < len(lines):
+    result.append(lines[i])
+    stripped = lines[i].strip()
+    if stripped in ('restart: always', 'restart: unless-stopped', 'restart: "always"'):
+        # Check if security_opt already exists in the next 5 lines
+        next_chunk = '\n'.join(lines[i+1:i+6])
+        if 'security_opt' not in next_chunk:
+            indent = len(lines[i]) - len(lines[i].lstrip())
+            result.append(' ' * indent + 'security_opt:')
+            result.append(' ' * indent + '  - apparmor:unconfined')
+    i += 1
+
+with open(sys.argv[1], 'w') as f:
+    f.write('\n'.join(result))
+APPARMOR_FIX
+    info "AppArmor not available — security_opt:apparmor=unconfined added to all services"
+  fi
+
   info "docker-compose.yml generated ($dest)"
 }
 
