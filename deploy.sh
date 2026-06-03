@@ -3220,11 +3220,16 @@ configure_notify_push() {
     info "$out"
   fi
 
-  # Block until notify-push binary responds on port 7867
+  # Block until notify-push binary responds on port 7867 (max 300s safety cap)
   # Check via app-next-01 (same Docker network, guaranteed to have curl)
   info "Waiting for notify-push binary to be ready..."
+  local _np_wait=0
   until docker exec app-next-01 curl -sf http://notify-push:7867/test/cookie 2>/dev/null | grep -q 'false'; do
-    sleep 3
+    sleep 3; _np_wait=$(( _np_wait + 3 ))
+    if [[ $_np_wait -ge 300 ]]; then
+      warn "notify_push: binary did not respond after 300s — setup will likely fail"
+      break
+    fi
   done
 
   # Retry setup up to 6 times — "can't load mount info" is transient on first boot
