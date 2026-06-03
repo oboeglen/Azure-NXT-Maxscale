@@ -380,7 +380,13 @@ DAEMON
 DAEMON
       info "Docker log rotation configured (100 MB × 3 files)"
     fi
-    systemctl reload docker 2>/dev/null || true
+    # security-opt changes require full restart (reload is not enough)
+    if $_needs_apparmor_fix; then
+      systemctl restart docker 2>/dev/null || systemctl reload docker 2>/dev/null || true
+      info "Docker daemon restarted (AppArmor disabled)"
+    else
+      systemctl reload docker 2>/dev/null || true
+    fi
   elif $_needs_apparmor_fix && ! grep -q 'apparmor=unconfined' "$daemon_json" 2>/dev/null; then
     # Already has log rotation but missing AppArmor fix — patch in place
     python3 -c "
@@ -390,8 +396,10 @@ d.setdefault('default-security-opt', [])
 if 'apparmor=unconfined' not in d['default-security-opt']:
     d['default-security-opt'].append('apparmor=unconfined')
 with open('$daemon_json', 'w') as f: json.dump(d, f, indent=2)
-" && systemctl reload docker 2>/dev/null || true
-    info "AppArmor disabled in Docker daemon config"
+"
+    # security-opt requires full restart to take effect
+    systemctl restart docker 2>/dev/null || systemctl reload docker 2>/dev/null || true
+    info "AppArmor disabled in Docker daemon config (daemon restarted)"
   else
     info "Docker daemon already configured"
   fi
