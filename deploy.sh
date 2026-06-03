@@ -401,7 +401,7 @@ install_deps() {
     "max-size": "100m",
     "max-file": "3"
   },
-  "default-security-opt": ["apparmor=unconfined"]
+  "default-security-opts": ["apparmor=unconfined"]
 }
 DAEMON
       info "Docker log rotation configured + AppArmor disabled (not available on this system)"
@@ -429,9 +429,9 @@ DAEMON
     python3 -c "
 import json, sys
 with open('$daemon_json') as f: d = json.load(f)
-d.setdefault('default-security-opt', [])
-if 'apparmor=unconfined' not in d['default-security-opt']:
-    d['default-security-opt'].append('apparmor=unconfined')
+d.setdefault('default-security-opts', [])
+if 'apparmor=unconfined' not in d['default-security-opts']:
+    d['default-security-opts'].append('apparmor=unconfined')
 with open('$daemon_json', 'w') as f: json.dump(d, f, indent=2)
 "
     # security-opt requires full restart to take effect
