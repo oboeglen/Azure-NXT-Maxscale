@@ -144,6 +144,12 @@ check_requirements() {
     mount -t securityfs securityfs /sys/kernel/security 2>/dev/null || true
   fi
 
+  # Repair daemon.json before starting Docker — fix known bad keys from previous runs
+  local _daemon_json="/etc/docker/daemon.json"
+  if [[ -f "$_daemon_json" ]] && grep -q '"default-security-opt"' "$_daemon_json" 2>/dev/null; then
+    sed -i 's/"default-security-opt"/"default-security-opts"/g' "$_daemon_json"
+  fi
+
   # Ensure Docker daemon is running before version check
   if command -v docker &>/dev/null && ! docker info &>/dev/null 2>&1; then
     systemctl start docker 2>/dev/null || true
