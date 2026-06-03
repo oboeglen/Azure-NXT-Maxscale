@@ -277,6 +277,7 @@ Everything is applied automatically by `nextcloud-setup` on first startup.
 | 🎙️ Talk HA | ✅ Automatic | HAProxy removes the failing node — active calls may reconnect once |
 | 📬 Notify Push | ✅ Automatic | Container restarts automatically; clients reconnect the WebSocket |
 | 🔄 coturn | ⚠️ Single node | Falls back to STUN-only — peer-to-peer if NAT allows, otherwise media blocked |
+| 📨 NATS | ⚠️ Single node | All cross-node WebRTC message relay stops |
 
 ### Full Galera cluster restart
 
