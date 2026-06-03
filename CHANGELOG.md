@@ -6,6 +6,22 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.5.4] — 2026-06-03
+
+### Fixed
+- **deploy.sh — mktemp files leaked on unexpected exit** — `patch_haproxy()` created temp files without a trap; added `trap EXIT` to ensure cleanup on any exit path
+- **deploy.sh — docker-compose.yml not validated before deployment** — added `docker compose config --quiet` check before `docker compose up -d` to catch generation errors early
+- **deploy.sh — certbot failure left empty cert slot** — added backup of existing `stack.pem` before renewal; restored automatically if certbot fails so the next run can retry
+- **deploy.sh — `_detect_node_count` silently defaulted to 1** — now emits a warning when no containers match the filter, making the fallback visible in logs
+- **deploy.sh — git fetch result not properly gated** — used `if/!` pattern to ensure `git reset --hard` never runs after a failed fetch
+- **deploy.sh — HSTS not disabled in staging mode** — `Strict-Transport-Security: max-age=0` is now set when `CERTBOT_STAGING=yes` to prevent permanent browser lockout after a staging cert warning bypass
+- **DEPLOYMENT.md — RustFS scale-up incorrectly described as supported** — clarified that `deploy.sh` does not handle RustFS scaling; added manual steps via `mc admin`
+
+### Added
+- **DEPLOYMENT.md** — comprehensive deployment guide covering all phases, scaling rules, environment variable reference, and post-deployment operations
+
+---
+
 ## [2.5.3] — 2026-06-03
 
 ### Fixed
