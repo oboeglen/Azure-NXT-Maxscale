@@ -1,0 +1,41 @@
+# Patched nextcloud-spreed-signaling build
+# Fixes: LookupSessionId race condition (issue #1261)
+# https://github.com/strukturag/nextcloud-spreed-signaling/issues/1261
+
+FROM --platform=${BUILDPLATFORM} golang:1.26-alpine AS builder
+ARG TARGETARCH
+ARG TARGETOS
+WORKDIR /workdir
+
+RUN apk add --no-cache bash git make
+
+# Clone upstream source
+RUN git clone --depth=1 https://github.com/strukturag/nextcloud-spreed-signaling.git .
+
+# Apply patch: add retry loop to LookupSessionId to fix race condition
+# where a session being registered concurrently returns "unknown room session id"
+COPY patch_signaling.py /tmp/
+RUN python3 /tmp/patch_signaling.py grpc/server.go
+
+RUN touch /.dockerenv && \
+    GOOS=${TARGETOS} GOARCH=${TARGETARCH} make server
+
+FROM alpine:3
+LABEL org.opencontainers.image.title="nextcloud-spreed-signaling (patched)"
+LABEL org.opencontainers.image.description="Patched build fixing cross-node gRPC LookupSessionId race condition (issue strukturag/nextcloud-spreed-signaling#1261). Adds retry loop so session lookups succeed when a session is concurrently being registered on the target node."
+LABEL org.opencontainers.image.source="https://github.com/oboeglen/Azure-NXT-Maxscale"
+
+ENV CONFIG=/config/server.conf
+RUN addgroup -g 850 spreedbackend && \
+    adduser -D --uid 850 -S -H -G spreedbackend spreedbackend && \
+    apk add --no-cache bash tzdata ca-certificates su-exec
+
+COPY --from=builder /workdir/bin/signaling /usr/bin/nextcloud-spreed-signaling
+COPY --from=builder /workdir/server.conf.in /config/server.conf.in
+COPY --from=builder /workdir/docker/server/entrypoint.sh /
+COPY --from=builder /workdir/docker/server/stop.sh /
+COPY --from=builder /workdir/docker/server/wait.sh /
+RUN /usr/bin/nextcloud-spreed-signaling -version
+
+STOPSIGNAL SIGUSR1
+ENTRYPOINT [ "/entrypoint.sh" ]
