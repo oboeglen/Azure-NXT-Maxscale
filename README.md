@@ -521,8 +521,12 @@ Two distinct mechanisms work together for multi-node Talk HA:
 
 | Component | Tolerance | Behavior during failure |
 |-----------|:---------:|------------------------|
-| 🎙️ Talk HA | ✅ Automatic | HAProxy removes the failing node — active calls may drop once then reconnect |
+| 🎙️ spreed-signaling | ✅ Automatic | HAProxy (`leastconn` + `on-marked-down shutdown-sessions`) detects the failure in ~10 s and closes existing connections — clients reconnect to a healthy node within seconds; active calls are briefly interrupted then resume |
+| 📨 NATS | ⚠️ Single node | All cross-node WebRTC message relay stops — active cross-node calls drop; same-node participants are unaffected. Scale NATS with a cluster for full HA |
 | 🔄 coturn | ⚠️ Single node | Falls back to STUN-only — peer-to-peer if NAT allows, otherwise media blocked |
+
+> [!NOTE]
+> When a signaling node fails, participants whose sessions were on that node must rejoin the call. Sessions on surviving nodes are unaffected. The `on-marked-down shutdown-sessions` HAProxy directive forces immediate reconnection (~10 s) instead of waiting for the 3600 s tunnel timeout.
 
 ### STUN / TURN
 
