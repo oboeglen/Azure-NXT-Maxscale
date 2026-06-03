@@ -3224,7 +3224,7 @@ configure_notify_push() {
   # Check via app-next-01 (same Docker network, guaranteed to have curl)
   info "Waiting for notify-push binary to be ready..."
   local _np_wait=0
-  until docker exec app-next-01 curl -sf http://notify-push:7867/test/cookie 2>/dev/null | grep -q 'false'; do
+  until docker exec app-next-01 curl -s --max-time 3 -o /dev/null http://notify-push:7867/test/cookie 2>/dev/null; do
     sleep 3; _np_wait=$(( _np_wait + 3 ))
     if [[ $_np_wait -ge 300 ]]; then
       warn "notify_push: binary did not respond after 300s — setup will likely fail"
