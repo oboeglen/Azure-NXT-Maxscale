@@ -1226,12 +1226,13 @@ load_answers() {
 # gen_pass <length> <"hex"|"base64"> → stdout, guaranteed no # char
 gen_pass() {
   local len="$1" mode="$2"
-  local pass
-  while true; do
+  local pass attempt=0 max_attempts=20
+  while (( attempt < max_attempts )); do
+    (( attempt++ ))
     if [[ "$mode" == "hex" ]]; then
-      pass=$(openssl rand -hex "$len")
+      pass=$(openssl rand -hex "$len" 2>/dev/null) || continue
     else
-      pass=$(openssl rand -base64 "$len")
+      pass=$(openssl rand -base64 "$len" 2>/dev/null) || continue
     fi
     # Remove # (breaks Redis/Node.js URL parsing) and line breaks
     pass="${pass//#/}"
@@ -1239,6 +1240,7 @@ gen_pass() {
     pass="${pass//$'\r'/}"
     [[ ${#pass} -ge 16 ]] && echo "$pass" && return
   done
+  die "Failed to generate a secure password after ${max_attempts} attempts — check that openssl is installed and /dev/urandom is accessible"
 }
 
 gen_passwords() {
