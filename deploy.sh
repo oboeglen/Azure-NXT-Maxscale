@@ -2469,8 +2469,9 @@ patch_haproxy() {
   local tmp tmp2
   tmp=$(mktemp)
   tmp2=$(mktemp)
-  # Ensure temp files are cleaned up even if the script exits unexpectedly
-  trap 'rm -f "$tmp" "$tmp2"' EXIT
+  # Ensure temp files are cleaned up on unexpected exit — use :- to avoid
+  # unbound variable errors if trap fires after local vars go out of scope
+  trap 'rm -f "${tmp:-}" "${tmp2:-}"' EXIT
   cp "$file" "$tmp"
 
   _replace_servers "NEXTCLOUD"     "${nc_servers%$'\n'}"        "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
@@ -2573,6 +2574,7 @@ PYEOF
   fi
 
   mv "$tmp" "$file"
+  trap - EXIT   # Clear the temp-file trap — files consumed, no cleanup needed
   local _talk_status="${TALK_ENABLED:-no}"; [[ "$_talk_status" == "yes" ]] && _talk_status="yes (${SIGNALING_NODES:-2} nodes)"
   info "haproxy.cfg patched (NC:${NC_NODES} Collab:${COLLAB_NODES} WB:${WB_NODES} DB:${MARIADB_NODES} RustFS:${RUSTFS_NODES} Talk:${_talk_status})"
 }
@@ -2894,6 +2896,7 @@ gen_certs() {
 
   info "Attempting HTTP-01 (port 80)..."
   certbot_output=$(docker run --rm -p "80:80" \
+    --security-opt apparmor=unconfined \
     -v "${le_vol}:/etc/letsencrypt" \
     certbot/certbot "${certbot_args[@]}" \
     --preferred-challenges http-01 2>&1) && cert_ok=true
