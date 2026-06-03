@@ -150,7 +150,7 @@ flowchart TD
     HAProxy -->|collabora-net| collab["📝 collabora-node1..N\nCollabora CODE · WOPI"]
     HAProxy -->|whiteboard-net| wb["🎨 whiteboard-node1..N\nWhiteboard · WebSocket"]
     HAProxy -->|"talk-net · wss://"| sig["🎙️ Talk HA\nspreed-signaling-01..N\nWebSocket · gRPC :9090 cross-node"]
-    sig <--> nats["📨 NATS\nmessage relay"]
+    sig <--> nats["📨 NATS cluster\nnats-01/02/03\nmessage relay · HA"]
 
     nginx --> fpm["⚙️ app-next-01..N\nNextcloud PHP-FPM 8.4"]
 
@@ -217,7 +217,7 @@ Client → HAProxy (SSL/TLS) → nginx-next-0X → app-next-0X (PHP-FPM :9000)
 | RustFS console *(optional, built-in)* | Built into `rustfs/rustfs` on port 9001 — no extra container — accessible via `https://domain/s3-console` |
 | `notify-push` | Notify Push — real-time sync notifications over WebSocket (`/push`) |
 | `spreed-signaling-01..N` *(Talk only)* | WebSocket signaling — HAProxy `leastconn` distributes connections; gRPC handles session lookup; NATS relays WebRTC messages cross-node |
-| `nats` *(Talk only)* | NATS message bus — required for cross-node WebRTC offer/answer/ICE relay between signaling nodes |
+| `nats-01..03` *(Talk only)* | NATS cluster (3 nodes) — HA message bus for cross-node WebRTC offer/answer/ICE relay; automatic failover if one node goes down |
 | `coturn` *(Talk, optional)* | TURN/STUN relay — media relay for clients behind NAT or strict firewalls |
 
 > RustFS bucket versioning is enabled by default on the `nextcloud` bucket. It can be managed from the web console (`/s3-console`) under bucket settings → **Contrôle de version**.
@@ -505,17 +505,17 @@ Talk HA (`spreed-signaling`) is required so that Talk calls work correctly when 
 Two distinct mechanisms work together for multi-node Talk HA:
 
 - **gRPC `:9090`** — session lookup: finds which node holds a given participant's session (patched to handle the registration race condition — see [issue #1261](https://github.com/strukturag/nextcloud-spreed-signaling/issues/1261))
-- **NATS** — message relay: delivers WebRTC offer/answer/ICE candidate messages between nodes. `nats://loopback` is in-memory per-node and **cannot** relay cross-node; an external NATS server is mandatory
+- **NATS cluster** (`nats-01..03`) — message relay: delivers WebRTC offer/answer/ICE candidate messages between nodes. `nats://loopback` is in-memory per-node and **cannot** relay cross-node. A 3-node NATS cluster provides HA: if one node fails, signaling nodes reconnect automatically to the surviving nodes within seconds.
 
 > [!IMPORTANT]
-> `nats://loopback` silently drops all cross-node WebRTC messages. Always use an external NATS container.
+> `nats://loopback` silently drops all cross-node WebRTC messages. Always use the external NATS cluster.
 
 ### Components
 
 | Container | Role |
 |-----------|------|
-| `spreed-signaling-01..N` | WebSocket signaling — HAProxy `leastconn` distributes connections; gRPC `:9090` handles cross-node session lookup; NATS relays WebRTC messages |
-| `nats` | NATS message bus — mandatory for cross-node WebRTC offer/answer/ICE relay |
+| `spreed-signaling-01..N` | WebSocket signaling — HAProxy `leastconn` distributes connections; gRPC `:9090` handles cross-node session lookup; NATS cluster relays WebRTC messages |
+| `nats-01..03` | NATS cluster (3 nodes) — mandatory for cross-node WebRTC offer/answer/ICE relay; HA with automatic failover |
 | `coturn` *(optional)* | TURN/STUN relay — required when clients are behind symmetric NAT or strict corporate firewalls |
 
 ### High availability
@@ -523,7 +523,7 @@ Two distinct mechanisms work together for multi-node Talk HA:
 | Component | Tolerance | Behavior during failure |
 |-----------|:---------:|------------------------|
 | 🎙️ spreed-signaling | ✅ Automatic | HAProxy (`leastconn` + `on-marked-down shutdown-sessions`) detects the failure in ~10 s and closes existing connections — clients reconnect to a healthy node within seconds; active calls are briefly interrupted then resume |
-| 📨 NATS | ⚠️ Single node | All cross-node WebRTC message relay stops — active cross-node calls drop; same-node participants are unaffected. Scale NATS with a cluster for full HA |
+| 📨 NATS cluster | ✅ Automatic | If one of the 3 NATS nodes fails, signaling nodes reconnect to the surviving 2 within seconds — no call interruption |
 | 🔄 coturn | ⚠️ Single node | Falls back to STUN-only — peer-to-peer if NAT allows, otherwise media blocked |
 
 > [!NOTE]
@@ -1194,7 +1194,7 @@ All Docker images are pinned to precise versions rather than floating tags (`:la
 | `IMG_AUTOHEAL` | `willfarrell/autoheal` | `latest` |
 | `IMG_WHITEBOARD` | `ghcr.io/nextcloud-releases/whiteboard` | `v1.5.8` |
 | `IMG_SPREED_SIGNALING` | `ghcr.io/oboeglen/azure-nxt-maxscale/nextcloud-spreed-signaling` | `latest` |
-| `IMG_NATS` | `nats` | `2.10-alpine` |
+| `IMG_NATS` | `nats` | `2.10-alpine` *(× 3 nodes — cluster)* |
 | `IMG_COTURN` | `coturn/coturn` | `4.6` |
 
 > `autoheal` does not publish recent versioned tags on Docker Hub (`1.2.0` dates from 2021) — kept on `latest`.

@@ -2049,14 +2049,43 @@ WBREDIS
       start_period: 60s
 NOTIFYPUSH
 
-  # ── Talk: NATS (required for cross-node WebRTC message relay) ────────────
+  # ── Talk: NATS cluster (3 nodes — HA message relay for cross-node WebRTC) ──
   if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
     cat >> "$dest" <<NATSBLOCK
 
-  nats:
+  nats-01:
     image: ${IMG_NATS}
-    container_name: nats
+    container_name: nats-01
     restart: always
+    command: >
+      -p 4222
+      -cluster nats://0.0.0.0:6222
+      -routes nats://nats-02:6222,nats://nats-03:6222
+      --server_name nats-01
+    networks:
+      - talk-net
+
+  nats-02:
+    image: ${IMG_NATS}
+    container_name: nats-02
+    restart: always
+    command: >
+      -p 4222
+      -cluster nats://0.0.0.0:6222
+      -routes nats://nats-01:6222,nats://nats-03:6222
+      --server_name nats-02
+    networks:
+      - talk-net
+
+  nats-03:
+    image: ${IMG_NATS}
+    container_name: nats-03
+    restart: always
+    command: >
+      -p 4222
+      -cluster nats://0.0.0.0:6222
+      -routes nats://nats-01:6222,nats://nats-02:6222
+      --server_name nats-03
     networks:
       - talk-net
 NATSBLOCK
@@ -2082,7 +2111,9 @@ NATSBLOCK
       - talk-net
       - next-net
     depends_on:
-      - nats
+      - nats-01
+      - nats-02
+      - nats-03
     healthcheck:
       test: ["CMD-SHELL", "echo '' | nc -w1 127.0.0.1 8080 > /dev/null 2>&1 || exit 1"]
       interval: 15s
@@ -2266,8 +2297,9 @@ urls = https://${NC_DOMAIN}
 secret = ${GEN_TALK_SECRET}
 ${turn_section}
 [nats]
-# External NATS server — required for cross-node WebRTC message relay (offer/answer/ICE)
-url = nats://nats:4222
+# NATS cluster — required for cross-node WebRTC message relay (offer/answer/ICE)
+# All 3 nodes listed for automatic failover if one node goes down
+url = nats://nats-01:4222,nats://nats-02:4222,nats://nats-03:4222
 
 [grpc]
 # Listen for cross-node gRPC connections (required for multi-node session relay)
