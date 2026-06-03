@@ -2820,11 +2820,11 @@ gen_certs() {
   docker volume create "${le_vol}" &>/dev/null || true               # same in prod; creates _staging in staging mode
   docker volume create "${prefix}_certbot_webroot" &>/dev/null || true
 
-  if docker run --rm -v "${le_vol}:/etc/letsencrypt" alpine \
+  if docker run --rm --security-opt apparmor=unconfined -v "${le_vol}:/etc/letsencrypt" alpine \
       test -f /etc/letsencrypt/live/stack/fullchain.pem 2>/dev/null; then
     info "Certificate found in volume — recombining without calling Let's Encrypt"
     mkdir -p "$INSTALL_DIR/certs"
-    docker run --rm \
+    docker run --rm --security-opt apparmor=unconfined \
       -v "${le_vol}:/etc/letsencrypt:ro" \
       -v "$INSTALL_DIR/certs:/certs" \
       alpine sh -c "cat /etc/letsencrypt/live/stack/fullchain.pem \
@@ -2918,7 +2918,7 @@ gen_certs() {
 
   step "Combining fullchain + privkey for HAProxy"
   mkdir -p "$INSTALL_DIR/certs"
-  docker run --rm \
+  docker run --rm --security-opt apparmor=unconfined \
     -v "${le_vol}:/etc/letsencrypt:ro" \
     -v "$INSTALL_DIR/certs:/certs" \
     alpine sh -c "cat /etc/letsencrypt/live/stack/fullchain.pem \
@@ -2942,7 +2942,7 @@ fix_galera_bootstrap() {
   docker volume inspect "$vol1" &>/dev/null || return 0
 
   # No grastate.dat → MariaDB has never run, nothing to do
-  docker run --rm -v "${vol1}:/data" alpine test -f /data/grastate.dat 2>/dev/null || return 0
+  docker run --rm --security-opt apparmor=unconfined -v "${vol1}:/data" alpine test -f /data/grastate.dat 2>/dev/null || return 0
 
   info "Existing MariaDB volumes detected — fixing Galera bootstrap..."
 
@@ -2951,14 +2951,14 @@ fix_galera_bootstrap() {
   for n in $(seq 1 "$MARIADB_NODES"); do
     local vol="${project_name}_mariadb_n${n}_data"
     docker volume inspect "$vol" &>/dev/null || continue
-    docker run --rm -v "${vol}:/data" alpine \
+    docker run --rm --security-opt apparmor=unconfined -v "${vol}:/data" alpine \
       sh -c "test -f /data/grastate.dat && \
         sed -i 's/safe_to_bootstrap: 1/safe_to_bootstrap: 0/' /data/grastate.dat" \
       2>/dev/null || true
   done
 
   # Force node1 as bootstrap node (matches --wsrep-new-cluster in compose)
-  docker run --rm -v "${vol1}:/data" alpine \
+  docker run --rm --security-opt apparmor=unconfined -v "${vol1}:/data" alpine \
     sed -i 's/safe_to_bootstrap: 0/safe_to_bootstrap: 1/' /data/grastate.dat \
     2>/dev/null
   info "Galera: mariadb-node1 set as bootstrap node"
