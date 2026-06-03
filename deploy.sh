@@ -294,9 +294,11 @@ install_deps() {
   # e2fsprogs       : mkfs.ext4, e2fsck   (disk wizard — EXT4 format)
   # util-linux      : lsblk, blkid, findmnt (disk detection)
   # dnsutils/bind-utils : dig (DNS verification in gen_certs)
+  # apparmor : required by Docker on systems where AppArmor kernel module is present
+  #            but not yet mounted — prevents "apparmor/profiles: no such file" errors
   local pkgs_apt=(
     git curl wget openssl python3 ca-certificates gnupg lsb-release
-    netcat-openbsd xfsprogs e2fsprogs util-linux dnsutils
+    netcat-openbsd xfsprogs e2fsprogs util-linux dnsutils apparmor
   )
   local pkgs_dnf=(
     git curl wget openssl python3 ca-certificates gnupg2
@@ -317,6 +319,15 @@ install_deps() {
     dnf install -y -q "${pkgs_dnf[@]}"
   fi
   stop_spinner "Essential packages installed"
+
+  # Ensure AppArmor is active so Docker can load its default security profile
+  if [[ "$PKG_MGR" == "apt" ]]; then
+    if systemctl enable apparmor 2>/dev/null && systemctl start apparmor 2>/dev/null; then
+      info "AppArmor enabled"
+    else
+      info "AppArmor not available on this kernel — using unconfined mode"
+    fi
+  fi
 
   # Docker Engine
   if ! command -v docker &>/dev/null; then
