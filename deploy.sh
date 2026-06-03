@@ -3220,19 +3220,25 @@ configure_notify_push() {
     info "$out"
   fi
 
-  # Wait for notify-push container to be ready (up to 120s — depends on app-next-01 healthcheck)
-  local i
-  for i in $(seq 1 24); do
-    if docker exec notify-push curl -sf http://localhost:7867/test/cookie 2>/dev/null | grep -q 'false'; then
-      break
-    fi
-    info "Waiting for notify-push to start ($((i*5))s)..."
-    sleep 5
+  # Block until notify-push binary responds on port 7867
+  # Check via app-next-01 (same Docker network, guaranteed to have curl)
+  info "Waiting for notify-push binary to be ready..."
+  until docker exec app-next-01 curl -sf http://notify-push:7867/test/cookie 2>/dev/null | grep -q 'false'; do
+    sleep 3
   done
 
-  local out
-  out=$("${occ[@]}" notify_push:setup "https://${NC_DOMAIN}/push" 2>&1)
-  info "notify_push:setup: $out"
+  # Retry setup up to 6 times — "can't load mount info" is transient on first boot
+  local _push_ok=0 _attempt
+  for _attempt in $(seq 1 6); do
+    local out
+    out=$("${occ[@]}" notify_push:setup "https://${NC_DOMAIN}/push" 2>&1)
+    info "notify_push:setup: $out"
+    if echo "$out" | grep -q 'configuration saved'; then
+      _push_ok=1; break
+    fi
+    [[ $_attempt -lt 6 ]] && { warn "notify_push: setup attempt ${_attempt}/6 failed, retrying in 10s..."; sleep 10; }
+  done
+  [[ $_push_ok -eq 0 ]] && warn "notify_push: setup failed after retries — run manually: occ notify_push:setup https://${NC_DOMAIN}/push"
 }
 
 check_services() {
