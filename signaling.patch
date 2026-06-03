@@ -1,0 +1,50 @@
+diff --git a/grpc/server.go b/grpc/server.go
+index 1a99f8c..2b2d953 100644
+--- a/grpc/server.go
++++ b/grpc/server.go
+@@ -24,10 +24,10 @@ package grpc
+ import (
+ 	"context"
+ 	"encoding/json"
+-	"errors"
+ 	"fmt"
+ 	"net"
+ 	"net/url"
++	"time"
+ 
+ 	"github.com/dlintw/goconf"
+ 	"google.golang.org/grpc"
+@@ -156,15 +156,27 @@ func (s *Server) LookupResumeId(ctx context.Context, request *LookupResumeIdRequ
+ 
+ func (s *Server) LookupSessionId(ctx context.Context, request *LookupSessionIdRequest) (*LookupSessionIdReply, error) {
+ 	statsGrpcServerCalls.WithLabelValues("LookupSessionId").Inc()
+-	// TODO: Remove debug logging
+ 	s.logger.Printf("Lookup session id for room session id %s", request.RoomSessionId)
+-	sid, err := s.hub.GetSessionIdByRoomSessionId(api.RoomSessionId(request.RoomSessionId))
+-	if errors.Is(err, ErrNoSuchRoomSession) {
++	const maxRetries = 10
++	const retryInterval = 50 * time.Millisecond
++	var sid api.PublicSessionId
++	var err error
++	for i := 0; i < maxRetries; i++ {
++		sid, err = s.hub.GetSessionIdByRoomSessionId(api.RoomSessionId(request.RoomSessionId))
++		if err == nil {
++			break
++		}
++		if i < maxRetries-1 {
++			select {
++			case <-ctx.Done():
++				return nil, status.Error(codes.Canceled, "context canceled")
++			case <-time.After(retryInterval):
++			}
++		}
++	}
++	if err != nil {
+ 		return nil, status.Error(codes.NotFound, "no such room session id")
+-	} else if err != nil {
+-		return nil, err
+ 	}
+-
+ 	if sid != "" && request.DisconnectReason != "" {
+ 		s.hub.DisconnectSessionByRoomSessionId(sid, api.RoomSessionId(request.RoomSessionId), request.DisconnectReason)
+ 	}

@@ -7,15 +7,14 @@ ARG TARGETARCH
 ARG TARGETOS
 WORKDIR /workdir
 
-RUN apk add --no-cache bash git make
+RUN apk add --no-cache bash git make patch
 
 # Clone upstream source
 RUN git clone --depth=1 https://github.com/strukturag/nextcloud-spreed-signaling.git .
 
-# Apply patch: add retry loop to LookupSessionId to fix race condition
-# where a session being registered concurrently returns "unknown room session id"
-COPY patch_signaling.py /tmp/
-RUN python3 /tmp/patch_signaling.py grpc/server.go
+# Copy and apply patch
+COPY signaling.patch /tmp/signaling.patch
+RUN patch -p1 < /tmp/signaling.patch
 
 RUN touch /.dockerenv && \
     GOOS=${TARGETOS} GOARCH=${TARGETARCH} make server
