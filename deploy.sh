@@ -348,9 +348,28 @@ install_deps() {
   fi
 
   # Docker log rotation — 100 MB × 3 files per container (~300 MB max)
+  # Also disable AppArmor profile check for systems without AppArmor (e.g. OVH VPS)
   local daemon_json="/etc/docker/daemon.json"
+  local _needs_apparmor_fix=false
+  if ! test -f /sys/kernel/security/apparmor/profiles 2>/dev/null; then
+    _needs_apparmor_fix=true
+  fi
+
   if [[ ! -f "$daemon_json" ]] || ! grep -q "max-size" "$daemon_json" 2>/dev/null; then
-    cat > "$daemon_json" <<'DAEMON'
+    if $_needs_apparmor_fix; then
+      cat > "$daemon_json" <<'DAEMON'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m",
+    "max-file": "3"
+  },
+  "default-security-opt": ["apparmor=unconfined"]
+}
+DAEMON
+      info "Docker log rotation configured + AppArmor disabled (not available on this system)"
+    else
+      cat > "$daemon_json" <<'DAEMON'
 {
   "log-driver": "json-file",
   "log-opts": {
@@ -359,10 +378,22 @@ install_deps() {
   }
 }
 DAEMON
+      info "Docker log rotation configured (100 MB × 3 files)"
+    fi
     systemctl reload docker 2>/dev/null || true
-    info "Docker log rotation configured (100 MB × 3 files)"
+  elif $_needs_apparmor_fix && ! grep -q 'apparmor=unconfined' "$daemon_json" 2>/dev/null; then
+    # Already has log rotation but missing AppArmor fix — patch in place
+    python3 -c "
+import json, sys
+with open('$daemon_json') as f: d = json.load(f)
+d.setdefault('default-security-opt', [])
+if 'apparmor=unconfined' not in d['default-security-opt']:
+    d['default-security-opt'].append('apparmor=unconfined')
+with open('$daemon_json', 'w') as f: json.dump(d, f, indent=2)
+" && systemctl reload docker 2>/dev/null || true
+    info "AppArmor disabled in Docker daemon config"
   else
-    info "Docker log rotation already configured"
+    info "Docker daemon already configured"
   fi
 
   # Check docker access for non-root user
