@@ -218,7 +218,8 @@ start_spinner() {
     while true; do
       local elapsed=$(( SECONDS - _start ))
       local ts=""
-      (( elapsed > 0 )) && ts="  ${C_GRAY}${elapsed}s${C_RESET}"
+      # printf pre-renders ANSI codes correctly (avoid passing \033 as %s data)
+      (( elapsed > 0 )) && ts=$(printf "  \033[0;37m%ds\033[0m" "$elapsed")
       printf "\r ${C_CYAN}${frames[$i]}${C_RESET}  %s%s" "$msg" "$ts"
       i=$(( (i+1) % 10 ))
       sleep 0.1
@@ -3424,7 +3425,7 @@ wait_healthy() {
     for (( _bi=0; _bi<_bar_filled; _bi++ )); do _bar+="█"; done
     for (( _bi=_bar_filled; _bi<20; _bi++ )); do _bar+="░"; done
     local _detail=""
-    [[ -n "$_waiting_on" ]] && _detail="  ${C_GRAY}← ${_waiting_on}${C_RESET}"
+    [[ -n "$_waiting_on" ]] && _detail=$(printf "  \033[0;37m← %s\033[0m" "$_waiting_on")
     printf "\r\033[K  ${C_CYAN}[%s]${C_RESET} ${C_BGREEN}%d${C_RESET}/${_total}  ${C_GRAY}%ds${C_RESET}%s" \
       "$_bar" "$_n_healthy" "$elapsed" "$_detail"
 
