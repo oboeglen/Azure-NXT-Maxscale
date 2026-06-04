@@ -3854,13 +3854,23 @@ update_images() {
   docker compose pull -q 2>/dev/null || true
   stop_spinner "Images downloaded"
 
+  # Capture Collabora image digest before recreate — used to skip patch if unchanged
+  local collab_digest_before
+  collab_digest_before=$(docker inspect --format='{{.Image}}' "collabora-node1" 2>/dev/null || echo "")
+
   step "Recreating containers with updated images"
   start_spinner "Applying updates..."
   log_run docker compose up -d
   stop_spinner "Containers updated"
 
-  # Re-apply patch if Collabora image changed (recreate = original binary restored)
-  patch_collabora_binary
+  # Re-apply patch only if the Collabora image actually changed (new digest = original binary)
+  local collab_digest_after
+  collab_digest_after=$(docker inspect --format='{{.Image}}' "collabora-node1" 2>/dev/null || echo "")
+  if [[ -z "$collab_digest_before" || "$collab_digest_before" != "$collab_digest_after" ]]; then
+    patch_collabora_binary
+  else
+    info "Collabora image unchanged — patch already applied, skipping"
+  fi
 
   wait_healthy
 
