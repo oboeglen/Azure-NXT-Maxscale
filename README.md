@@ -504,7 +504,7 @@ Talk HA (`spreed-signaling`) is required so that Talk calls work correctly when 
 
 Two distinct mechanisms work together for multi-node Talk HA:
 
-- **gRPC `:9090`** — session lookup: finds which node holds a given participant's session. A race condition exists in upstream ([issue #1261](https://github.com/strukturag/nextcloud-spreed-signaling/issues/1261)) — will be fixed once the upstream patch is merged
+- **gRPC `:9090`** — session lookup: finds which node holds a given participant's session. A known race condition exists upstream ([issue #1261](https://github.com/strukturag/nextcloud-spreed-signaling/issues/1261)) but does **not** prevent Talk from working — NATS handles the actual WebRTC message relay
 - **NATS cluster** (`nats-01..03`) — message relay: delivers WebRTC offer/answer/ICE candidate messages between nodes. `nats://loopback` is in-memory per-node and **cannot** relay cross-node. A 3-node NATS cluster provides HA: if one node fails, signaling nodes reconnect automatically to the surviving nodes within seconds.
 
 > [!IMPORTANT]
@@ -1129,7 +1129,7 @@ sudo fail2ban-client status sshd
 ## 🔐 Security audit
 
 > Scope: **external attack surface only** — deployed services and production URLs. Server-level hardening (SSH, fail2ban, Docker socket) is excluded from this score.
-> Last audit: **June 2026** — v2.5.1 (infrastructure unchanged since; Talk/signaling fixes in v2.5.2–v2.5.3 do not affect the external attack surface)
+> Last audit: **June 2026** — v2.5.1 (infrastructure unchanged since; fixes in v2.5.2–v2.5.5 are internal — signaling, notify_push, deploy reliability — and do not affect the external attack surface)
 
 ### Score: 91 / 100 — Very good
 
