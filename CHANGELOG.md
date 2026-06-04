@@ -6,6 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.6.1] — 2026-06-04
+
+### Added
+- **deploy.sh — Quick Update syncs `IMG_*` tags** — Quick Update now reads `IMG_*` variables from `deploy.sh` and patches `docker-compose.yml` image tags before pulling. Updating an image no longer requires a full redeploy — edit the variable, run Quick Update
+
+### Fixed
+- **deploy.sh — Collabora patch skipped when image unchanged** — Quick Update was re-running the binary patch on every execution, failing with "pattern not found" warnings when the patch was already applied. The patch is now skipped unless the container's image digest has changed
+
+---
+
 ## [2.6.0] — 2026-06-04
 
 ### Added
