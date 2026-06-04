@@ -1,0 +1,39 @@
+name: ShellCheck
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - deploy.sh
+      - nextcloud-init.sh
+      - galera-bootstrap.sh
+      - haproxy-entrypoint.sh
+  pull_request:
+    branches: [main]
+    paths:
+      - deploy.sh
+      - nextcloud-init.sh
+      - galera-bootstrap.sh
+      - haproxy-entrypoint.sh
+
+jobs:
+  shellcheck:
+    name: ShellCheck analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          additional_files: 'deploy.sh nextcloud-init.sh galera-bootstrap.sh haproxy-entrypoint.sh'
+          severity: error
+          check_together: true
+        env:
+          SHELLCHECK_OPTS: >-
+            --shell=bash
+            --external-sources
+            --exclude=SC2034,SC2155,SC1091
