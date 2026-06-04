@@ -4285,6 +4285,7 @@ scale_nodes() {
     NC_NODES=$_actual_nc; MARIADB_NODES=$_actual_db; REDIS_NODES=$_actual_redis
   fi
   save_answers
+  gen_fpm_conf
   gen_compose
   gen_galera_cnf
   patch_haproxy
