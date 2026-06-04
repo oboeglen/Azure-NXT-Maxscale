@@ -1694,6 +1694,7 @@ ${entrypoint_override}
     volumes:
       - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
       - ./opcache-preload.php:/opcache-preload.php:ro
+      - ./custom-fpm.conf:/usr/local/etc/php-fpm.d/zz-custom.conf:ro
       - nextcloud_html:/var/www/html
       - nextcloud_apps:/var/www/html/custom_apps
       - nextcloud_config:/var/www/html/config
