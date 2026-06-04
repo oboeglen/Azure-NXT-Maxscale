@@ -1,6 +1,11 @@
-MIT License
+MIT License — Extended
 
 Copyright (c) 2026 Olivier Boeglen
+All rights reserved.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GRANT OF COPYRIGHT LICENSE
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -12,10 +17,113 @@ furnished to do so, subject to the following conditions:
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GRANT OF PATENT LICENSE
+
+Subject to the terms of this License, the copyright holder hereby grants to
+you a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+patent license to make, have made, use, offer to sell, sell, import, and
+otherwise transfer the Software. This license applies only to those patent
+claims licensable by the copyright holder that are necessarily infringed by the
+Software as provided. If you institute patent litigation against any entity
+alleging that the Software constitutes direct or contributory patent
+infringement, any patent license granted to you under this License terminates
+as of the date such litigation is filed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TRADEMARK DISCLAIMER
+
+This License does not grant permission to use the trade names, trademarks,
+service marks, or product names of the copyright holder, except as required
+for reasonable and customary use in describing the origin of the Software and
+reproducing the content of the copyright notice. The name "Azure NXT Maxscale"
+and associated logos may not be used to endorse or promote products derived
+from this Software without prior written permission from the copyright holder.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+THIRD-PARTY COMPONENTS
+
+The Software automates the deployment of third-party open-source components,
+including but not limited to Nextcloud, MariaDB/Galera, Redis, Collabora CODE,
+RustFS, HAProxy, Docker, and others. Each such component is governed
+exclusively by its own license and is the intellectual property of its
+respective authors and owners. This License does not supersede, modify, extend,
+or otherwise affect the terms of any third-party license. Users are responsible
+for ensuring compliance with all applicable third-party licenses.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CONTRIBUTIONS
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the Software by you (including pull requests, patches, and
+documentation) shall be licensed under the terms and conditions of this License,
+without any additional terms or conditions. You represent that you have the
+legal right to grant the above license for your contribution.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DISCLAIMER OF WARRANTIES
+
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, ACCURACY, COMPLETENESS,
+RELIABILITY, OR SUITABILITY FOR DEPLOYMENT IN PRODUCTION ENVIRONMENTS.
+
+THE SOFTWARE IS AN INFRASTRUCTURE AUTOMATION TOOL THAT INSTALLS AND CONFIGURES
+THIRD-PARTY SYSTEMS. THE COPYRIGHT HOLDER MAKES NO WARRANTY THAT THE SOFTWARE
+WILL MEET YOUR REQUIREMENTS, OPERATE WITHOUT INTERRUPTION, OR BE ERROR-FREE.
+USE IN PRODUCTION ENVIRONMENTS IS ENTIRELY AT THE USER'S OWN RISK. THE USER
+IS SOLELY RESPONSIBLE FOR EVALUATING THE SUITABILITY OF THE SOFTWARE FOR THEIR
+PARTICULAR USE CASE, INCLUDING DATA SECURITY, REGULATORY COMPLIANCE, AND
+SYSTEM INTEGRITY.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY
+CLAIM, DAMAGES, OR OTHER LIABILITY OF ANY NATURE WHATSOEVER, WHETHER IN AN
+ACTION OF CONTRACT, TORT, NEGLIGENCE, STRICT LIABILITY, OR OTHERWISE, ARISING
+FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+IN THE SOFTWARE, INCLUDING BUT NOT LIMITED TO:
+
+  - DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES;
+  - LOSS OF DATA, LOSS OF PROFITS, LOSS OF BUSINESS, OR BUSINESS INTERRUPTION;
+  - COSTS OF PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+  - UNAUTHORIZED ACCESS TO OR ALTERATION OF DATA OR SYSTEMS;
+  - DAMAGE TO INFRASTRUCTURE, HARDWARE, OR THIRD-PARTY SERVICES;
+
+EVEN IF THE COPYRIGHT HOLDER HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGES. SOME JURISDICTIONS DO NOT ALLOW THE EXCLUSION OR LIMITATION OF
+LIABILITY FOR CERTAIN TYPES OF DAMAGES; IN SUCH CASES, LIABILITY IS LIMITED
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SEVERABILITY
+
+If any provision of this License is held to be invalid, illegal, or
+unenforceable under applicable law, such provision shall be modified to the
+minimum extent necessary to make it enforceable. If such modification is not
+possible, the provision shall be severed from this License. The invalidity or
+unenforceability of any provision shall not affect the validity and
+enforceability of the remaining provisions, which shall continue in full force
+and effect.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+GOVERNING LAW AND JURISDICTION
+
+This License shall be governed by and construed in accordance with the laws of
+France, without regard to its conflict of law provisions. Any dispute arising
+out of or in connection with this License shall be subject to the exclusive
+jurisdiction of the competent courts of France, unless otherwise required by
+applicable mandatory law.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+END OF LICENSE
