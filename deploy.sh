@@ -3296,8 +3296,8 @@ run_deploy() {
       if [[ "$exit_code" == "0" ]]; then
         info "nextcloud-setup completed successfully ✓"
       else
-        warn "nextcloud-setup completed with error (code $exit_code)"
-        docker logs nextcloud-setup --tail 20
+        warn "nextcloud-setup completed with error (code $exit_code) — last logs:"
+        docker logs nextcloud-setup --tail 20 2>&1 | sed 's/^/  /' >&2
       fi
       break
     fi
@@ -3492,10 +3492,11 @@ configure_talk() {
   else
     info "Installing Talk (spreed) app..."
     install_out=$("${occ[@]}" app:install spreed 2>&1) \
-      && info "spreed installed: ${install_out}" \
-      || warn "app:install spreed: ${install_out}"
+      && info "Talk (spreed) app installed" \
+      || warn "Talk app install returned non-zero — check: docker logs nextcloud-setup"
   fi
-  "${occ[@]}" app:enable spreed 2>&1 | grep -v '^$' | while read -r l; do info "$l"; done || true
+  "${occ[@]}" app:enable spreed &>/dev/null || true
+  info "Talk (spreed) app enabled"
 
   local out
 
@@ -3519,16 +3520,12 @@ print(json.dumps({'servers':[{'server':server,'verify':True,'secret':secret}],'s
 " "wss://${TALK_DOMAIN}/" "$talk_secret")
   fi
   [[ -z "$signaling_json" ]] && die "Failed to build signaling JSON — jq and python3 both unavailable"
-  out=$("${occ[@]}" config:app:set spreed signaling_servers --value "$signaling_json" 2>&1)
-  info "signaling_servers set: $out"
+  "${occ[@]}" config:app:set spreed signaling_servers --value "$signaling_json" &>/dev/null \
+    && info "Signaling server registered — wss://${TALK_DOMAIN}/" \
+    || warn "config:app:set signaling_servers failed — check occ config manually"
 
   # Remove legacy standalone key left by older Talk versions
   "${occ[@]}" config:app:delete spreed signaling_secret 2>/dev/null || true
-
-  # Verify
-  local stored
-  stored=$("${occ[@]}" talk:signaling:list 2>/dev/null)
-  info "Signaling servers: $stored"
 
   # Configure STUN/TURN if coturn is deployed
   if [[ "$COTURN_ENABLED" == "yes" ]]; then
@@ -3539,16 +3536,18 @@ print(json.dumps({'servers':[{'server':server,'verify':True,'secret':secret}],'s
     "${occ[@]}" talk:stun:list 2>/dev/null | grep -q "${TALK_DOMAIN}" \
       && info "STUN server already registered — skipping add" \
       || {
-        out=$("${occ[@]}" talk:stun:add "${TALK_DOMAIN}:3478" 2>&1)
-        info "talk:stun:add: $out"
+        "${occ[@]}" talk:stun:add "${TALK_DOMAIN}:3478" &>/dev/null \
+          && info "STUN server added: ${TALK_DOMAIN}:3478" \
+          || warn "talk:stun:add failed — check occ talk:stun:list"
       }
 
     # TURN
     "${occ[@]}" talk:turn:list 2>/dev/null | grep -q "${TALK_DOMAIN}" \
       && info "TURN server already registered — skipping add" \
       || {
-        out=$("${occ[@]}" talk:turn:add --secret="$coturn_secret" "turn" "${TALK_DOMAIN}:3478" "udp,tcp" 2>&1)
-        info "talk:turn:add: $out"
+        "${occ[@]}" talk:turn:add --secret="$coturn_secret" "turn" "${TALK_DOMAIN}:3478" "udp,tcp" &>/dev/null \
+          && info "TURN server added: ${TALK_DOMAIN}:3478 (udp+tcp)" \
+          || warn "talk:turn:add failed — check occ talk:turn:list"
       }
   fi
 }
@@ -3563,8 +3562,9 @@ configure_notify_push() {
   else
     info "Installing notify_push app..."
     local out
-    out=$("${occ[@]}" app:install notify_push 2>&1)
-    info "$out"
+    out=$("${occ[@]}" app:install notify_push 2>&1) \
+      && info "notify_push app installed" \
+      || warn "notify_push install returned non-zero — continuing"
   fi
 
   # Block until notify-push binary responds on port 7867 (max 300s safety cap)
@@ -3589,13 +3589,16 @@ configure_notify_push() {
   for _attempt in $(seq 1 6); do
     local out
     out=$("${occ[@]}" notify_push:setup "https://${NC_DOMAIN}/push" 2>&1)
-    info "notify_push:setup: $out"
     if echo "$out" | grep -q 'configuration saved'; then
-      _push_ok=1; break
+      _push_ok=1
+      info "notify_push configured ✓"
+      break
     fi
-    [[ $_attempt -lt 6 ]] && { warn "notify_push: setup attempt ${_attempt}/6 failed, retrying in 10s..."; sleep 10; }
+    # Show which check failed (last failed line)
+    local _fail; _fail=$(echo "$out" | grep '🗴\|✗\|failed\|error' | tail -1 | sed 's/^[[:space:]]*//')
+    [[ $_attempt -lt 6 ]] && { warn "notify_push: attempt ${_attempt}/6 — ${_fail:-setup failed} — retrying in 10s..."; sleep 10; }
   done
-  [[ $_push_ok -eq 0 ]] && warn "notify_push: setup failed after retries — run manually: occ notify_push:setup https://${NC_DOMAIN}/push"
+  [[ $_push_ok -eq 0 ]] && warn "notify_push: setup failed after 6 attempts — run: occ notify_push:setup https://${NC_DOMAIN}/push"
 }
 
 check_services() {
