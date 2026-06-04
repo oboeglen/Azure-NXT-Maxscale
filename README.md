@@ -1213,13 +1213,17 @@ All Docker images are pinned to precise versions rather than floating tags (`:la
 ### Update an image to a new version
 
 ```bash
-# 1. Edit the corresponding IMG_* variable in deploy.sh
-IMG_COLLABORA="collabora/code:25.04.9.5"   # → new version
+# 1. Edit the IMG_* variable directly on the server (lines ~21-32 of deploy.sh)
+nano /opt/nxt-maxscale/deploy.sh
+# IMG_COLLABORA="collabora/code:25.04.9.5"   # → new version
 
-# 2. Run a Quick Update — deploy.sh syncs the new tag into docker-compose.yml,
-#    pulls the new image, and recreates the affected containers
-sudo bash deploy.sh   # → choose [1] Quick update
+# 2. Run deploy.sh from its installed location — Quick Update syncs the new tag
+#    into docker-compose.yml, pulls the image, and recreates affected containers
+sudo bash /opt/nxt-maxscale/deploy.sh   # → choose [1] Quick update
 ```
+
+> [!WARNING]
+> **Never re-run the `curl` install command to apply an update.** It downloads the original file from GitHub and overwrites your modifications. The `curl` one-liner is for first installation only. For all subsequent runs, use `sudo bash /opt/nxt-maxscale/deploy.sh` directly.
 
 > **Quick Update automatically syncs `IMG_*` tags** from `deploy.sh` into `docker-compose.yml` before pulling. Only containers whose image digest changes are recreated — configuration, volumes and secrets are preserved.
 
