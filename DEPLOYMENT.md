@@ -1,6 +1,6 @@
 # Azure NXT Maxscale — Deployment Guide
 
-> **Version:** 2.5.4 · **Script:** `deploy.sh` · **Supported OS:** Debian 11/12 · Ubuntu 22.04/24.04 · RHEL/Rocky/AlmaLinux 8/9
+> **Version:** 2.5.6 · **Script:** `deploy.sh` · **Supported OS:** Debian 11/12 · Ubuntu 22.04/24.04 · RHEL/Rocky/AlmaLinux 8/9
 
 ---
 
@@ -67,14 +67,19 @@ Configuration is saved to `/tmp/.nxt-maxscale-config.env` and reused on subseque
 1. Detects the OS (`/etc/os-release`) and validates it is supported
 2. Verifies root privileges
 3. Checks RAM (≥ 16 GB), disk space (≥ 50 GB), architecture (x86_64)
-4. Installs system packages: `git`, `curl`, `openssl`, `xfsprogs`, `e2fsprogs`, `jq`, `python3`, `dnsutils`
-5. Installs **Docker Engine** and **Docker Compose plugin** if not present (via `get.docker.com`)
-6. Configures Docker log rotation (`/etc/docker/daemon.json`)
-7. Sets kernel parameters for Redis: `vm.overcommit_memory=1`, `net.core.somaxconn=511`
+4. Installs system packages: `git`, `curl`, `openssl`, `xfsprogs`, `e2fsprogs`, `jq`, `python3`, `dnsutils`, `apparmor`
+5. Mounts `securityfs` at `/sys/kernel/security` if not already mounted (required for Docker on kernels where AppArmor is compiled in but not active); persists in `/etc/fstab`
+6. Starts the AppArmor service if available
+7. Installs **Docker Engine** and **Docker Compose plugin** if not present (via `get.docker.com`)
+8. Configures Docker log rotation (`/etc/docker/daemon.json`)
+9. Sets kernel parameters for Redis: `vm.overcommit_memory=1`, `net.core.somaxconn=511`
 
 **Key checks:**
 - Docker version ≥ 20 (enforced)
 - `docker compose` plugin availability (v2 API required)
+
+> [!NOTE]
+> All package installation output is suppressed from the terminal and redirected to the log file (`/var/log/nxt-maxscale-deploy.log`). The spinner shows elapsed time and package count.
 
 ---
 
@@ -180,6 +185,15 @@ targets = spreed-signaling-01:9090,...,spreed-signaling-N:9090
 ### `haproxy.cfg` *(patched)*
 `patch_haproxy()` replaces all `BEGIN_SERVERS_X / END_SERVERS_X` blocks with the correct number of servers based on node counts. In staging mode, HSTS is set to `max-age=0`.
 
+### `custom-fpm.conf`
+PHP-FPM pool configuration auto-calculated from available RAM and node count. Mounted into every `app-next` container as `/usr/local/etc/php-fpm.d/zz-custom.conf`, overriding the default `pm.max_children=5`.
+
+```
+max_children = (total_RAM × 60% ÷ NC_NODES) ÷ PSS_per_worker
+```
+
+PSS is measured from running PHP-FPM processes via `/proc/$pid/smaps` (ps_mem approach). Falls back to 80 MB/worker on first deployment. Regenerated on every deploy and scale operation.
+
 ### `mariadb/*.cnf`
 Per-node Galera configuration with `wsrep_cluster_address` listing all nodes.
 
@@ -268,9 +282,9 @@ sudo bash /tmp/deploy.sh
 ```
 
 The script detects an existing deployment and offers:
-- **[1] Continue / health check** — verify all services are healthy
-- **[2] Update** — pull new images, recreate containers
-- **[3] Scale** — change node counts
+- **[1] Quick update** — pull new images, recreate containers (configuration preserved)
+- **[2] Scale nodes** — increase/decrease nodes without reinitialization
+- **[3] Full deployment** — regenerates all files (⚠ starts from scratch)
 
 ### Manual operations
 
@@ -344,6 +358,10 @@ sudo bash /tmp/deploy.sh   # select [3] Scale
 
 > ⚠️ Plan your `RUSTFS_NODES` count at initial deployment time. Changing it later requires a full cluster redeploy.
 
+### PHP-FPM pool auto-sizing on scale
+
+Every scale operation automatically recalculates `custom-fpm.conf` based on the new `NC_NODES` count and current PSS measurements. The new pool settings take effect immediately when containers restart.
+
 ### HAProxy after scaling
 
 `patch_haproxy()` is called automatically — it regenerates all `BEGIN_SERVERS_*/END_SERVERS_*` blocks and restarts HAProxy. No manual config edit required.
@@ -381,4 +399,4 @@ Key variables stored in `/opt/nxt-maxscale/.env`:
 
 ---
 
-*Generated for Azure NXT Maxscale v2.5.4 — [GitHub](https://github.com/oboeglen/Azure-NXT-Maxscale)*
+*Generated for Azure NXT Maxscale v2.5.6 — [GitHub](https://github.com/oboeglen/Azure-NXT-Maxscale)*
