@@ -3814,7 +3814,7 @@ _sync_image_tags() {
   done < <(grep -E '^IMG_[A-Z_]+=' "$script_file")
 
   if (( updated > 0 )); then
-    ok "${updated} image tag(s) updated in docker-compose.yml"
+    info "${updated} image tag(s) updated in docker-compose.yml"
   else
     info "All image tags already up to date"
   fi
