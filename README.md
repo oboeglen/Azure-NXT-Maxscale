@@ -1291,4 +1291,8 @@ docker run --rm -v nextcloud-config:/data -v /backup:/backup alpine \
 >
 > *Names and trademarks remain the property of their respective owners.*
 
+### 🤖 AI usage
+
+> Claude (Anthropic) was used in this project **strictly as a code review and commit assistant** — verifying logic, auditing scripts for bugs, and generating commit messages. All architecture decisions, feature design, and infrastructure choices were made by the project author. No AI-generated code was introduced without human review and validation.
+
 </div>
