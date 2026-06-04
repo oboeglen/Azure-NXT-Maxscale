@@ -1218,7 +1218,7 @@ nano /opt/nxt-maxscale/deploy.sh
 # IMG_COLLABORA="collabora/code:25.04.9.5"   # → new version
 
 # 2. Run deploy.sh from its installed location — Quick Update syncs the new tag
-#        into docker-compose.yml, pulls the image, and recreates affected containers
+# into docker-compose.yml, pulls the image, and recreates affected containers
 sudo bash /opt/nxt-maxscale/deploy.sh   # → choose [1] Quick update
 ```
 
