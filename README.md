@@ -35,7 +35,7 @@
 ---
 
 <details>
-<summary><strong>Screenshots</strong> — Login · Dashboard · Files · Collabora · Talk · Whiteboard · RustFS · HAProxy</summary>
+<summary>📸 <strong>Screenshots</strong> — Login · Dashboard · Files · Collabora · Talk · Whiteboard · RustFS · HAProxy</summary>
 
 <div align="center">
 <table>
@@ -349,7 +349,7 @@ The wizard then uses the confirmed mount paths as RustFS `DATA{N}` paths in `doc
 > The wizard only proposes disks that are not already mounted to critical paths (e.g., `/`, `/boot`). It displays the disk model and current filesystem so you can identify the right devices before formatting.
 
 <details>
-<summary>Cluster inspection, repair commands, and web console</summary>
+<summary>🔧 Cluster inspection, repair commands, and web console</summary>
 
 ### Cluster inspection
 
@@ -398,7 +398,7 @@ Enabled during deployment by `deploy.sh` (same principle as HAProxy stats on `/s
 ## 🔒 HAProxy security
 
 <details>
-<summary>TLS configuration, HTTP headers, request filtering, /stats monitoring</summary>
+<summary>🔒 TLS configuration, HTTP headers, request filtering, /stats monitoring</summary>
 
 ### HAProxy stats (optional)
 
@@ -616,7 +616,7 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 | **RustFS** | ⚠️ | ❌ | Scale-up not supported in beta — see note below; scale-down not supported |
 
 <details>
-<summary>Internal mechanics — how each service scales step by step</summary>
+<summary>⚙️ Internal mechanics — how each service scales step by step</summary>
 
 ### Internal mechanics
 
@@ -673,7 +673,7 @@ If the `/tmp/` cache is absent, `deploy.sh` automatically rebuilds the configura
 ## 🛠️ Common operations
 
 <details>
-<summary>Galera status, SSL renewal, Nextcloud setup, log commands</summary>
+<summary>🛠️ Galera status, SSL renewal, Nextcloud setup, log commands</summary>
 
 ### Check Galera cluster status
 
@@ -724,7 +724,7 @@ docker exec -u www-data app-next-01 php /var/www/html/occ log:tail --lines=50
 ## 🚢 Manual deployment
 
 <details>
-<summary>Show detailed steps</summary>
+<summary>🚢 Show detailed steps</summary>
 
 ### 1. Clone the repository
 
@@ -786,7 +786,7 @@ docker compose logs -f nextcloud-setup
 ## 📊 Performance & sizing
 
 <details>
-<summary>Raw microbenchmarks, k6 load tests (A/B/C), Talk HA WS benchmark, FPM sizing model, resource consumption</summary>
+<summary>📊 Raw microbenchmarks, k6 load tests (A/B/C), Talk HA WS benchmark, FPM sizing model, resource consumption</summary>
 
 Three test series cover the platform: **raw HTTP microbenchmarks** (pure throughput), **k6 realistic load tests** (users on a VPS), and a **full-stack test** (all services including Talk HA + Notify Push on a dedicated server).
 
@@ -1060,7 +1060,7 @@ sysctl --system
 ## 🛡️ Network security recommendations
 
 <details>
-<summary>UFW firewall setup and fail2ban SSH brute-force protection</summary>
+<summary>🛡️ UFW firewall setup and fail2ban SSH brute-force protection</summary>
 
 Once the infrastructure is deployed, **restricting exposed ports** is the first measure to apply. By default, all interfaces are open — only three ports are needed for end users.
 
@@ -1178,7 +1178,7 @@ sudo fail2ban-client status sshd
 ## 🐳 Docker images — pinned versions
 
 <details>
-<summary>Current pinned versions and image update procedure</summary>
+<summary>🐳 Current pinned versions and image update procedure</summary>
 
 All Docker images are pinned to precise versions rather than floating tags (`:latest`, `:stable`). Versions are centralized in `IMG_*` variables at the top of `deploy.sh`, allowing an image update by changing a single line.
 
@@ -1239,7 +1239,7 @@ sudo bash /opt/nxt-maxscale/deploy.sh   # → choose [1] Quick update
 > **This project does not provide a backup solution.** It is your responsibility to set up an appropriate strategy before going to production.
 
 <details>
-<summary>Critical data, recommended strategies, and key backup principles</summary>
+<summary>🗄️ Critical data, recommended strategies, and key backup principles</summary>
 
 ### Critical data to back up
 
