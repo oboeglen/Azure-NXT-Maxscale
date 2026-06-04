@@ -4273,17 +4273,27 @@ scale_nodes() {
   fi
 
   # Step 3: Generate config files (without .env — passwords preserved)
-  # Verify actual running container counts match expected before caching — prevents
-  # stale counts if a scale operation failed partway (e.g. partial Redis scale-down).
+  # Only validate containers that are NOT being intentionally scaled.
+  # Running counts are checked against the ORIGINAL values (before user input)
+  # to detect unexpected drift — never override a value the user just changed.
   local _actual_nc _actual_db _actual_redis
   _actual_nc=$(_detect_node_count "app-next-" "^app-next-[0-9]")
   _actual_db=$(_detect_node_count "mariadb-node" "^mariadb-node[0-9]")
   _actual_redis=$(_detect_node_count "redis-node" "^redis-node[0-9]")
-  if (( _actual_nc != NC_NODES || _actual_db != MARIADB_NODES || _actual_redis != REDIS_NODES )); then
-    warn "Container counts differ from expected (NC: ${_actual_nc}/${NC_NODES} DB: ${_actual_db}/${MARIADB_NODES} Redis: ${_actual_redis}/${REDIS_NODES})"
-    warn "Saving actual counts to cache to prevent stale configuration on next run"
-    NC_NODES=$_actual_nc; MARIADB_NODES=$_actual_db; REDIS_NODES=$_actual_redis
+  local _drift=false
+  if (( _actual_nc != ORIG_NC_NODES )); then
+    warn "NC drift: expected ${ORIG_NC_NODES} running but found ${_actual_nc} — using actual"
+    [[ "$NC_NODES" == "$ORIG_NC_NODES" ]] && NC_NODES=$_actual_nc && _drift=true
   fi
+  if (( _actual_db != ORIG_MARIADB_NODES )); then
+    warn "DB drift: expected ${ORIG_MARIADB_NODES} running but found ${_actual_db} — using actual"
+    [[ "$MARIADB_NODES" == "$ORIG_MARIADB_NODES" ]] && MARIADB_NODES=$_actual_db && _drift=true
+  fi
+  if (( _actual_redis != ORIG_REDIS_NODES )); then
+    warn "Redis drift: expected ${ORIG_REDIS_NODES} running but found ${_actual_redis} — using actual"
+    [[ "$REDIS_NODES" == "$ORIG_REDIS_NODES" ]] && REDIS_NODES=$_actual_redis && _drift=true
+  fi
+  $_drift && warn "Cache updated with actual running counts"
   save_answers
   gen_fpm_conf
   gen_compose
