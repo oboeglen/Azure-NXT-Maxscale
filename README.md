@@ -591,8 +591,8 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 [3] Full deployment — regenerates all files (⚠  starts from scratch)
 ```
 
-> [!IMPORTANT]
-> **Quick update does NOT change image versions.** Option [1] runs `docker compose pull` on the **existing** `docker-compose.yml` — it pulls the same tags already pinned in the file. To upgrade to a newer image version, first edit the corresponding `IMG_*` variable at the top of `deploy.sh` (e.g. `IMG_COLLABORA="collabora/code:25.04.9.5"`), then run option [3] Full deployment to regenerate the compose file and pull the new image.
+> [!TIP]
+> **To upgrade an image version with Quick Update:** edit the corresponding `IMG_*` variable at the top of `deploy.sh` (e.g. `IMG_COLLABORA="collabora/code:25.04.9.5"`), then run option [1]. Quick Update automatically syncs the new tag into `docker-compose.yml` before pulling — no full redeploy needed.
 
 **Scaling** mode modifies the number of nodes per service **without data loss** — Docker volumes are never deleted, `.env` is not regenerated.
 
@@ -1216,12 +1216,12 @@ All Docker images are pinned to precise versions rather than floating tags (`:la
 # 1. Edit the corresponding IMG_* variable in deploy.sh
 IMG_COLLABORA="collabora/code:25.04.9.5"   # → new version
 
-# 2. Run a full deploy — this regenerates docker-compose.yml with the new tag,
-#    pulls the new image, and recreates containers
-sudo bash deploy.sh   # → choose [3] Full deployment
+# 2. Run a Quick Update — deploy.sh syncs the new tag into docker-compose.yml,
+#    pulls the new image, and recreates the affected containers
+sudo bash deploy.sh   # → choose [1] Quick update
 ```
 
-> **Quick update does NOT change versions.** `update_images()` (option [1]) runs `docker compose pull` + `docker compose up -d` on the **existing** `docker-compose.yml` — it does not call `gen_compose()`. Modifying an `IMG_*` variable has no effect until a full deploy regenerates the compose file.
+> **Quick Update automatically syncs `IMG_*` tags** from `deploy.sh` into `docker-compose.yml` before pulling. Only containers whose image digest changes are recreated — configuration, volumes and secrets are preserved.
 
 > **Collabora**: always test the `home_mode` binary patch after a version upgrade — the pattern may change if the `coolwsd` binary is restructured.
 

@@ -3785,6 +3785,41 @@ _detect_node_count() {
   echo "$n"
 }
 
+# Sync IMG_* tags from deploy.sh into the existing docker-compose.yml so that
+# Quick Update picks up version bumps without requiring a full redeploy.
+_sync_image_tags() {
+  local compose_file="$INSTALL_DIR/docker-compose.yml"
+  local script_file
+  script_file="$(readlink -f "$0")"
+  local updated=0
+
+  [[ -f "$compose_file" ]] || { warn "docker-compose.yml not found — skipping tag sync"; return 0; }
+
+  while IFS='=' read -r varname imgval; do
+    imgval="${imgval//\"/}"
+    local base="${imgval%%:*}"
+    local newtag="${imgval##*:}"
+    [[ "$base" == "$newtag" || -z "$base" || -z "$newtag" ]] && continue
+
+    if grep -qF "image: ${base}:" "$compose_file"; then
+      local current_tag
+      current_tag=$(grep -m1 "image: ${base}:" "$compose_file" \
+        | sed 's/.*image: [^:]*://' | tr -d ' \n')
+      if [[ -n "$current_tag" && "$current_tag" != "$newtag" ]]; then
+        info "  ${varname}: ${base}:${C_YELLOW}${current_tag}${C_RESET} → ${C_GREEN}${newtag}${C_RESET}"
+        sed -i "s|image: ${base}:[^ ]*|image: ${base}:${newtag}|g" "$compose_file"
+        (( updated++ )) || true
+      fi
+    fi
+  done < <(grep -E '^IMG_[A-Z_]+=' "$script_file")
+
+  if (( updated > 0 )); then
+    ok "${updated} image tag(s) updated in docker-compose.yml"
+  else
+    info "All image tags already up to date"
+  fi
+}
+
 update_images() {
   step "Updating NXT Maxscale stack"
   cd "$INSTALL_DIR"
@@ -3810,6 +3845,9 @@ update_images() {
     (( SIGNALING_NODES > 0 )) && TALK_ENABLED="yes"
     info "Detected nodes: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · RustFS=${RUSTFS_NODES} · Talk:${TALK_ENABLED}"
   fi
+
+  step "Syncing image tags from deploy.sh"
+  _sync_image_tags
 
   step "Pulling new Docker images"
   start_spinner "Downloading images..."
@@ -4406,11 +4444,11 @@ main() {
     box "Existing stack detected" \
       "An NXT Maxscale stack is running in ${INSTALL_DIR}." \
       "" \
-      "→ [1] Quick update    : pull images + Collabora patch (configuration preserved)" \
+      "→ [1] Quick update    : sync IMG_* tags + pull images + Collabora patch (configuration preserved)" \
       "→ [2] Scale nodes     : increase/decrease nodes without reinitialization" \
       "→ [3] Full deployment : regenerates all files (⚠  starts from scratch)"
     echo ""
-    echo -e "  ${C_WHITE}[1]${C_RESET} Quick update ${C_GRAY}(recommended)${C_RESET}"
+    echo -e "  ${C_WHITE}[1]${C_RESET} Quick update — sync image tags + pull + Collabora patch ${C_GRAY}(recommended)${C_RESET}"
     echo -e "  ${C_WHITE}[2]${C_RESET} Scale up / down nodes"
     echo -e "  ${C_WHITE}[3]${C_RESET} Full deployment ${C_GRAY}(starts from scratch)${C_RESET}"
     echo ""
