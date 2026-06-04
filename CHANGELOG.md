@@ -6,6 +6,23 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.5.6] — 2026-06-04
+
+### Added
+- **PHP-FPM pool auto-sizing** — `gen_fpm_conf()` measures actual PSS of running PHP-FPM processes via `/proc/$pid/smaps` (ps_mem.py approach) and calculates optimal `pm.max_children` per node: `(RAM × 60% ÷ NC_NODES) ÷ PSS/worker`. Falls back to 80 MB/worker on fresh deploys. Regenerated on every deploy and scale operation
+- **`custom-fpm.conf`** — mounted into all `app-next` containers, overrides the default `pm.max_children=5` that causes 6–10s whiteboard save delays under concurrent saves
+- **GitHub Actions CI** for patched signaling image (`Dockerfile.signaling` + `signaling.patch`)
+
+### Fixed
+- **scale_nodes — NC_NODES overwritten by running count** — pre-scale validation was comparing the new desired value against currently-running containers (which hadn't scaled yet), resetting NC_NODES=10 back to 8 before `docker compose up` could create the new containers. Fixed to only correct drift on services the user did NOT intentionally change
+- **gen_fpm_conf missing from scale_nodes() flow** — was only called in `deploy()`, not in `scale_nodes()`, so FPM pool settings were never recalculated on scale
+
+### Changed
+- Signaling image switched to `strukturag/nextcloud-spreed-signaling:master` (official upstream)
+- HAProxy signaling backend remains `balance leastconn`
+
+---
+
 ## [2.5.5] — 2026-06-03
 
 ### Fixed
