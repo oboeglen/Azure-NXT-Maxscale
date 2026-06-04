@@ -231,7 +231,7 @@ start_spinner() {
 
 stop_spinner() {
   local msg="${1:-}"
-  local elapsed=$(( SECONDS - _SPINNER_START ))
+  local elapsed=$(( SECONDS - ${_SPINNER_START:-$SECONDS} ))
   if [[ -n "$SPINNER_PID" ]]; then
     kill "$SPINNER_PID" 2>/dev/null || true
     wait "$SPINNER_PID" 2>/dev/null || true
@@ -3342,6 +3342,7 @@ wait_healthy() {
   local _crash_loop=()
 
   local _total=${#containers[@]} _last_waiting=""
+  (( _total == 0 )) && { info "No containers to monitor"; return 0; }
   while (( elapsed < timeout )); do
     local all_healthy=true _n_healthy=0 _n_starting=0 _waiting_on=""
 
@@ -3595,7 +3596,7 @@ configure_notify_push() {
       break
     fi
     # Show which check failed (last failed line)
-    local _fail; _fail=$(echo "$out" | grep '🗴\|✗\|failed\|error' | tail -1 | sed 's/^[[:space:]]*//')
+    local _fail; _fail=$(echo "$out" | grep -v '^[[:space:]]*$\|configuration saved\|✓' | tail -1 | sed 's/^[[:space:]]*//')
     [[ $_attempt -lt 6 ]] && { warn "notify_push: attempt ${_attempt}/6 — ${_fail:-setup failed} — retrying in 10s..."; sleep 10; }
   done
   [[ $_push_ok -eq 0 ]] && warn "notify_push: setup failed after 6 attempts — run: occ notify_push:setup https://${NC_DOMAIN}/push"
