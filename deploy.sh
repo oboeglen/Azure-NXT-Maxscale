@@ -44,7 +44,13 @@ info()    { echo -e " ${C_BGREEN}✓${C_RESET}  $*"; }
 warn()    { echo -e " ${C_YELLOW}!${C_RESET}  $*"; }
 error()   { echo -e " ${C_BRED}✗${C_RESET}  $*" >&2; }
 die()     { error "$*"; exit 1; }
-step()    { echo -e "\n ${C_BCYAN}▸${C_RESET}  ${C_WHITE}$*${C_RESET}"; }
+step() {
+  local _tw; _tw=$(( $(tput cols 2>/dev/null || echo 80) - 4 ))
+  printf "\n ${C_GRAY}"
+  printf '─%.0s' $(seq 1 "$_tw")
+  printf "${C_RESET}\n"
+  echo -e " ${C_BCYAN}▸${C_RESET}  ${C_WHITE}$*${C_RESET}"
+}
 
 # log_run CMD [ARGS...] — run a command silently on the terminal (output → log only).
 # The spinner stays visible; verbose apt/docker/make noise is never shown.
@@ -83,7 +89,8 @@ _rpad() {
 
 phase() {
   local n="$1" total="$2" name="$3"
-  local INNER=56
+  local tw; tw=$(( $(tput cols 2>/dev/null || echo 80) - 2 ))
+  local INNER=$(( tw < 58 ? 56 : (tw > 90 ? 88 : tw - 2) ))
   echo ""
   printf "${C_BCYAN}╔"; printf '═%.0s' $(seq 1 $INNER); printf "╗${C_RESET}\n"
   local prefix="  PHASE ${n}/${total} — "
@@ -200,30 +207,44 @@ with open('$_daemon_json', 'w') as f: json.dump(d, f, indent=2)
 }
 
 SPINNER_PID=""
+_SPINNER_START=0
+
 start_spinner() {
   local msg="$1"
   local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+  local _start=$SECONDS
   (
     local i=0
     while true; do
-      printf "\r ${C_CYAN}${frames[$i]}${C_RESET}  %s" "$msg"
+      local elapsed=$(( SECONDS - _start ))
+      local ts=""
+      (( elapsed > 0 )) && ts="  ${C_GRAY}${elapsed}s${C_RESET}"
+      printf "\r ${C_CYAN}${frames[$i]}${C_RESET}  %s%s" "$msg" "$ts"
       i=$(( (i+1) % 10 ))
       sleep 0.1
     done
   ) &
   SPINNER_PID=$!
+  _SPINNER_START=$SECONDS
   disown "$SPINNER_PID" 2>/dev/null || true
 }
 
 stop_spinner() {
   local msg="${1:-}"
+  local elapsed=$(( SECONDS - _SPINNER_START ))
   if [[ -n "$SPINNER_PID" ]]; then
     kill "$SPINNER_PID" 2>/dev/null || true
     wait "$SPINNER_PID" 2>/dev/null || true
     SPINNER_PID=""
   fi
   printf "\r\033[K"
-  [[ -n "$msg" ]] && info "$msg"
+  if [[ -n "$msg" ]]; then
+    if (( elapsed >= 2 )); then
+      info "${msg}  ${C_GRAY}(${elapsed}s)${C_RESET}"
+    else
+      info "$msg"
+    fi
+  fi
 }
 
 progress_bar() {
@@ -383,20 +404,18 @@ install_deps() {
 
   # Start AppArmor service if available (loads profiles Docker needs)
   if [[ "$PKG_MGR" == "apt" ]]; then
-    systemctl enable apparmor 2>/dev/null && systemctl start apparmor 2>/dev/null \
+    { systemctl enable apparmor && systemctl start apparmor; } >> "$LOG_FILE" 2>&1 \
       && info "AppArmor service started" || true
   fi
 
   # Docker Engine
   if ! command -v docker &>/dev/null; then
     step "Installing Docker Engine"
-    start_spinner "Downloading Docker installation script..."
-    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-    stop_spinner "Docker script downloaded"
-    start_spinner "Installing Docker (this may take a few minutes)..."
-    bash /tmp/get-docker.sh -q
-    stop_spinner "Docker installed"
-    systemctl enable --now docker
+    start_spinner "Downloading & installing Docker Engine..."
+    log_run curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+    log_run bash /tmp/get-docker.sh -q
+    log_run systemctl enable --now docker
+    stop_spinner "Docker Engine installed"
   else
     info "Docker $(docker --version | cut -d' ' -f3 | tr -d ',') already installed"
   fi
@@ -490,7 +509,7 @@ clone_repo() {
       stop_spinner "Files copied to $INSTALL_DIR"
     else
       start_spinner "Cloning from $REPO_URL..."
-      if ! GIT_TERMINAL_PROMPT=0 timeout 120 git clone --depth=1 "$REPO_URL" "$INSTALL_DIR"; then
+      if ! log_run env GIT_TERMINAL_PROMPT=0 git clone --depth=1 --quiet "$REPO_URL" "$INSTALL_DIR"; then
         stop_spinner
         die "Clone failed — check:\n  • Connectivity: curl -sf https://github.com\n  • Public repo: $REPO_URL\n  • Alternative: copy files to $INSTALL_DIR and retry"
       fi
@@ -3230,7 +3249,7 @@ run_deploy() {
 
   # Start HAProxy first and wait for it to be healthy
   # before launching services that depend on it
-  docker compose up -d haproxy nginx-acme certbot
+  log_run docker compose up -d haproxy nginx-acme certbot
   info "Waiting for HAProxy to respond on port 80..."
   local elapsed=0 max_wait=60
   while (( elapsed < max_wait )); do
@@ -3264,7 +3283,7 @@ run_deploy() {
 
   # Launch all other services in the background
   start_spinner "Starting all services..."
-  docker compose up -d 2>&1 | grep -E '^\s*(✔|✘|Error)' || true
+  log_run docker compose up -d
   stop_spinner "Services started"
   info "Services started — waiting for Nextcloud installation (max 15 min)..."
   local deadline=$(( $(date +%s) + 900 )) elapsed_setup=0
@@ -3322,17 +3341,14 @@ wait_healthy() {
   declare -A _restart_counts=()
   local _crash_loop=()
 
+  local _total=${#containers[@]} _last_waiting=""
   while (( elapsed < timeout )); do
-    local remaining=$(( timeout - elapsed ))
-    local eta_min=$(( remaining / 60 )) eta_sec=$(( remaining % 60 ))
-    printf "\n  ${C_GRAY}[ $(date '+%H:%M:%S') — %ds elapsed — ETA %dm%02ds ]${C_RESET}\n" \
-      "$elapsed" "$eta_min" "$eta_sec"
-    local all_healthy=true
+    local all_healthy=true _n_healthy=0 _n_starting=0 _waiting_on=""
 
     for name in "${containers[@]}"; do
-      # Containers confirmed in crash loop: display and ignore (no longer block the wait)
+      # Containers confirmed in crash loop: ignore from count (warn already printed)
       if [[ " ${_crash_loop[*]:-} " == *" ${name} "* ]]; then
-        printf "  ${C_BRED}✗${C_RESET}  %s  ${C_RED}(crash loop — excluded)${C_RESET}\n" "$name"
+        (( _n_healthy++ ))   # treat as non-blocking
         continue
       fi
 
@@ -3359,6 +3375,7 @@ wait_healthy() {
         _restart_counts["${name}_prev"]=$_docker_rc
         _restart_counts["$name"]=$(( ${_restart_counts["$name"]:-0} + (_docker_rc - _prev_rc) ))
         if (( ${_restart_counts["$name"]:-0} >= 3 )) && [[ ! " ${_crash_loop[*]:-} " == *" ${name} "* ]]; then
+          printf "\r\033[K"
           warn "${name} in crash loop (detected via RestartCount) — excluded from wait"
           warn "  docker logs ${name}"
           _crash_loop+=("$name")
@@ -3367,37 +3384,51 @@ wait_healthy() {
 
       case "$status" in
         healthy)
-          printf "  ${C_BGREEN}✓${C_RESET}  %s\n" "$name"
+          (( _n_healthy++ ))
           _restart_counts["$name"]=0
           ;;
         starting)
-          printf "  ${C_YELLOW}⟳${C_RESET}  %s  ${C_GRAY}(starting...)${C_RESET}\n" "$name"
+          (( _n_starting++ ))
           all_healthy=false
+          [[ -z "$_waiting_on" ]] && _waiting_on="$name"
           ;;
         unhealthy)
-          printf "  ${C_BRED}✗${C_RESET}  %s  ${C_RED}(unhealthy — docker logs %s)${C_RESET}\n" "$name" "$name"
           all_healthy=false
+          [[ -z "$_waiting_on" ]] && _waiting_on="${name}(unhealthy)"
           ;;
         restarting)
           _restart_counts["$name"]=$(( ${_restart_counts["$name"]:-0} + 1 ))
           local rc=${_restart_counts["$name"]}
           if (( rc >= 3 )); then
+            printf "\r\033[K"
             warn "${name} in crash loop (${rc} restarts) — excluded from wait"
             warn "  docker logs ${name}"
             _crash_loop+=("$name")
           else
-            printf "  ${C_YELLOW}⟳${C_RESET}  %s  ${C_GRAY}(restarting… %d/3)${C_RESET}\n" "$name" "$rc"
             all_healthy=false
+            [[ -z "$_waiting_on" ]] && _waiting_on="${name}(restarting ${rc}/3)"
           fi
           ;;
         *)
-          printf "  ${C_GRAY}·${C_RESET}  %s  ${C_GRAY}(%s)${C_RESET}\n" "$name" "$status"
           all_healthy=false
+          [[ -z "$_waiting_on" ]] && _waiting_on="${name}(${status})"
           ;;
       esac
     done
 
+    # Compact single-line progress — updates in place, no scrolling
+    local _pct=$(( _n_healthy * 100 / _total ))
+    local _bar_filled=$(( _n_healthy * 20 / _total ))
+    local _bar="" _bi
+    for (( _bi=0; _bi<_bar_filled; _bi++ )); do _bar+="█"; done
+    for (( _bi=_bar_filled; _bi<20; _bi++ )); do _bar+="░"; done
+    local _detail=""
+    [[ -n "$_waiting_on" ]] && _detail="  ${C_GRAY}← ${_waiting_on}${C_RESET}"
+    printf "\r\033[K  ${C_CYAN}[%s]${C_RESET} ${C_BGREEN}%d${C_RESET}/${_total}  ${C_GRAY}%ds${C_RESET}%s" \
+      "$_bar" "$_n_healthy" "$elapsed" "$_detail"
+
     if $all_healthy; then
+      printf "\r\033[K"
       if (( ${#_crash_loop[@]} > 0 )); then
         warn "Services in crash loop (non-blocking): ${_crash_loop[*]}"
       fi
@@ -3779,7 +3810,7 @@ update_images() {
 
   step "Recreating containers with updated images"
   start_spinner "Applying updates..."
-  docker compose up -d 2>&1 | grep -E '^\s*(✔|✘|Recreated|Started|Error)' || true
+  log_run docker compose up -d
   stop_spinner "Containers updated"
 
   # Re-apply patch if Collabora image changed (recreate = original binary restored)
@@ -4322,9 +4353,8 @@ scale_nodes() {
 
   # Step 4: Start / stop containers
   step "Applying scaling (new containers started, orphans removed)"
-  start_spinner "docker compose up -d --remove-orphans..."
-  docker compose up -d --remove-orphans 2>&1 \
-    | grep -E '^\s*(✔|✘|Created|Started|Removed|Error)' || true
+  start_spinner "Applying new container configuration..."
+  log_run docker compose up -d --remove-orphans
   stop_spinner "Containers updated"
 
   # Step 5: Restart HAProxy to apply new backends
