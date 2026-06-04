@@ -1,6 +1,6 @@
 # Azure NXT Maxscale — Deployment Guide
 
-> **Version:** 2.6.0 · **Script:** `deploy.sh` · **Supported OS:** Debian 11/12 · Ubuntu 22.04/24.04 · RHEL/Rocky/AlmaLinux 8/9
+> **Version:** 2.6.1 · **Script:** `deploy.sh` · **Supported OS:** Debian 11/12 · Ubuntu 22.04/24.04 · RHEL/Rocky/AlmaLinux 8/9
 
 ---
 
@@ -56,7 +56,13 @@ curl -fsSL https://raw.githubusercontent.com/oboeglen/Azure-NXT-Maxscale/main/de
   -o /tmp/deploy.sh && sudo bash /tmp/deploy.sh
 ```
 
-Configuration is saved to `/tmp/.nxt-maxscale-config.env` and reused on subsequent runs. Re-running the script on an existing deployment performs a **health check + optional update** without data loss.
+Configuration is saved to `/tmp/.nxt-maxscale-config.env` and reused on subsequent runs. This cache is **lost on reboot** — the script automatically rebuilds it from `/opt/nxt-maxscale/.env` and running containers if absent. Re-running the script on an existing deployment offers update, scaling, or full redeployment options.
+
+> [!WARNING]
+> The `curl` one-liner above is for **first installation only**. For all subsequent runs, use:
+> ```bash
+> sudo bash /opt/nxt-maxscale/deploy.sh
+> ```
 
 ---
 
@@ -149,7 +155,7 @@ Each disk is formatted XFS, labelled, mounted, and added to `/etc/fstab`.
 | Talk (spreed-signaling) | `TALK_ENABLED` | Deploys NATS cluster + 4 signaling nodes + coturn |
 | coturn | `COTURN_ENABLED` | TURN/STUN relay for NAT traversal |
 | HAProxy stats | `HAPROXY_STATS` | Enables `/stats` page (requires password) |
-| RustFS console | `RUSTFS_CONSOLE_ENABLED` | Enables `/s3-console` |
+| RustFS console | `RUSTFS_CONSOLE` | Enables `/s3-console` |
 | SSL mode | `CERTBOT_STAGING` | `yes` = staging certs (no rate limit, untrusted) |
 
 ---
@@ -278,11 +284,11 @@ The script runs a series of end-to-end checks:
 ### Re-run the deployer
 
 ```bash
-sudo bash /tmp/deploy.sh
+sudo bash /opt/nxt-maxscale/deploy.sh
 ```
 
 The script detects an existing deployment and offers:
-- **[1] Quick update** — pull new images, recreate containers (configuration preserved)
+- **[1] Quick update** — syncs `IMG_*` tags from `deploy.sh`, pulls new images, recreates containers (configuration preserved)
 - **[2] Scale nodes** — increase/decrease nodes without reinitialization
 - **[3] Full deployment** — regenerates all files (⚠ starts from scratch)
 
@@ -311,16 +317,18 @@ docker exec haproxy sh -c 'echo "show info" | socat stdio /var/run/haproxy.sock'
 ## Update — pull new images
 
 ```bash
-sudo bash /tmp/deploy.sh   # select [2] Update
+# Optional: edit an IMG_* variable first (lines ~21-32 of deploy.sh) to change a version
+nano /opt/nxt-maxscale/deploy.sh
+
+sudo bash /opt/nxt-maxscale/deploy.sh   # select [1] Quick update
 ```
 
 **Steps:**
-1. Pull all updated images in parallel
-2. `docker compose up -d --remove-orphans` — recreate containers with new images
-3. `docker compose restart haproxy` — reload backends
-4. Re-apply Collabora patch on all nodes
+1. Read `IMG_*` variables from `deploy.sh` and update matching `image:` tags in `docker-compose.yml`
+2. Pull updated images in parallel
+3. `docker compose up -d` — recreate only containers whose image digest changed
+4. Re-apply Collabora `home_mode` patch if and only if the Collabora image was updated
 5. Wait for all services to become healthy
-6. Functional tests
 
 > [!NOTE]
 > Node data (MariaDB volumes, Nextcloud data, Redis data) is preserved. Only container images are updated.
@@ -330,7 +338,7 @@ sudo bash /tmp/deploy.sh   # select [2] Update
 ## Scale — add or remove nodes
 
 ```bash
-sudo bash /tmp/deploy.sh   # select [3] Scale
+sudo bash /opt/nxt-maxscale/deploy.sh   # select [2] Scale nodes
 ```
 
 ### Scaling rules
@@ -399,4 +407,4 @@ Key variables stored in `/opt/nxt-maxscale/.env`:
 
 ---
 
-*Generated for Azure NXT Maxscale v2.6.0 — [GitHub](https://github.com/oboeglen/Azure-NXT-Maxscale)*
+*Generated for Azure NXT Maxscale v2.6.1 — [GitHub](https://github.com/oboeglen/Azure-NXT-Maxscale)*

@@ -374,7 +374,7 @@ docker ps --filter "name=rustfs-node" --format "table {{.Names}}\t{{.Status}}\t{
 
 > ℹ️ **Note:** **Beta limitation** — Admin features visible in the console menu (pool rebalancing, decommission) are not yet implemented in RustFS v1.0.0-beta.6. Core operations (bucket browsing, object management, access keys, users) work correctly.
 
-Enabled during deployment by `deploy.sh` (same principle as HAProxy stats on `/stats`). The console is built into RustFS — no separate container is needed. Once enabled (`RUSTFS_CONSOLE_ENABLE=true`), port 9001 is active on all RustFS nodes.
+Enabled during deployment by `deploy.sh` (same principle as HAProxy stats on `/stats`). The console is built into RustFS — no separate container is needed. Once enabled (`RUSTFS_CONSOLE=yes` in `deploy.sh`), port 9001 is active on all RustFS nodes.
 
 | | |
 |---|---|
