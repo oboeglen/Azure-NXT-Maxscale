@@ -591,6 +591,9 @@ When a stack is already deployed, re-running `deploy.sh` presents a three-option
 [3] Full deployment — regenerates all files (⚠  starts from scratch)
 ```
 
+> [!IMPORTANT]
+> **Quick update does NOT change image versions.** Option [1] runs `docker compose pull` on the **existing** `docker-compose.yml` — it pulls the same tags already pinned in the file. To upgrade to a newer image version, first edit the corresponding `IMG_*` variable at the top of `deploy.sh` (e.g. `IMG_COLLABORA="collabora/code:25.04.9.5"`), then run option [3] Full deployment to regenerate the compose file and pull the new image.
+
 **Scaling** mode modifies the number of nodes per service **without data loss** — Docker volumes are never deleted, `.env` is not regenerated.
 
 > [!NOTE]
