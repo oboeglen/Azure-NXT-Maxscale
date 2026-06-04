@@ -3567,6 +3567,8 @@ configure_notify_push() {
     out=$("${occ[@]}" app:install notify_push 2>&1) \
       && info "notify_push app installed" \
       || warn "notify_push install returned non-zero — continuing"
+    # Always try to enable regardless of install exit code (partial installs, warnings)
+    "${occ[@]}" app:enable notify_push &>/dev/null || true
   fi
 
   # Block until notify-push binary responds on port 7867 (max 300s safety cap)
@@ -3586,9 +3588,10 @@ configure_notify_push() {
   # fails on fresh installs where the mounts table is empty.
   "${occ[@]}" maintenance:repair --quiet 2>/dev/null || true
 
-  # Retry setup up to 6 times — "can't load mount info" is transient on first boot
+  # Retry setup up to 12 times — "can't load mount info" is transient on first boot
+  # maintenance:repair may need several seconds to propagate DB structure changes
   local _push_ok=0 _attempt
-  for _attempt in $(seq 1 6); do
+  for _attempt in $(seq 1 12); do
     local out
     out=$("${occ[@]}" notify_push:setup "https://${NC_DOMAIN}/push" 2>&1)
     if echo "$out" | grep -q 'configuration saved'; then
@@ -3598,9 +3601,9 @@ configure_notify_push() {
     fi
     # Show which check failed (last failed line)
     local _fail; _fail=$(echo "$out" | grep -v '^[[:space:]]*$\|configuration saved\|✓' | tail -1 | sed 's/^[[:space:]]*//')
-    [[ $_attempt -lt 6 ]] && { warn "notify_push: attempt ${_attempt}/6 — ${_fail:-setup failed} — retrying in 10s..."; sleep 10; }
+    [[ $_attempt -lt 12 ]] && { warn "notify_push: attempt ${_attempt}/12 — ${_fail:-setup failed} — retrying in 10s..."; sleep 10; }
   done
-  [[ $_push_ok -eq 0 ]] && warn "notify_push: setup failed after 6 attempts — run: occ notify_push:setup https://${NC_DOMAIN}/push"
+  [[ $_push_ok -eq 0 ]] && warn "notify_push: setup failed after 12 attempts — run: occ notify_push:setup https://${NC_DOMAIN}/push"
 }
 
 check_services() {
