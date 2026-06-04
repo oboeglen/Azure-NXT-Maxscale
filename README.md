@@ -9,7 +9,7 @@
 
 **High-availability Nextcloud infrastructure — deployable with a single command**
 
-[![Version](https://img.shields.io/badge/version-2.5.6-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
+[![Version](https://img.shields.io/badge/version-2.6.0-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9?logo=nextcloud&logoColor=white)](https://nextcloud.com)
 [![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?logo=php&logoColor=white)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -1136,7 +1136,7 @@ sudo fail2ban-client status sshd
 ## 🔐 Security audit
 
 > Scope: **external attack surface only** — deployed services and production URLs. Server-level hardening (SSH, fail2ban, Docker socket) is excluded from this score.
-> Last audit: **June 2026** — v2.5.1 (infrastructure unchanged since; fixes in v2.5.2–v2.5.6 are internal — signaling, notify_push, deploy reliability — and do not affect the external attack surface)
+> Last audit: **June 2026** — v2.5.1 (infrastructure unchanged since; fixes in v2.5.2–v2.6.0 are internal — signaling, notify_push, deploy reliability — and do not affect the external attack surface)
 
 ### Score: 91 / 100 — Very good
 

@@ -6,6 +6,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.6.0] — 2026-06-04
+
+### Added
+- **deploy.sh — visual overhaul** — `log_run()` wrapper suppresses verbose terminal output (apt-get, docker build, git clone, docker compose up) while keeping everything in the log file. Spinner now shows elapsed time. `step()` prints a full-width separator. `phase()` adapts to terminal width
+- **deploy.sh — compact wait_healthy** — replaced the per-container status table (printed every 10s, causing scroll) with a single updating progress bar `[████░░░░] 34/47  40s  ← pending-container`
+- **deploy.sh — `log_run()`** — all verbose commands silently log to `/var/log/nxt-maxscale-deploy.log`; on failure, shows last 20 lines
+
+### Fixed
+- **deploy.sh — notify_push always calls `app:enable`** — when `app:install` returned non-zero (partial install, Nextcloud quirk), `app:enable` was never called leaving the app inactive. Now called unconditionally after install
+- **deploy.sh — notify_push retries 6 → 12** — `maintenance:repair` may take time to propagate DB structures on first boot; 120s total gives more margin
+- **deploy.sh — ANSI escape codes showing as `\033[0;37m`** — `printf %s` does not interpret `\033` in data args; pre-render colored strings using `printf` octal escapes
+- **deploy.sh — division by zero in `wait_healthy`** — guard added if `containers=()` is empty
+- **deploy.sh — `_SPINNER_START` used before `start_spinner`** — `stop_spinner` now uses `${_SPINNER_START:-$SECONDS}` to avoid wildly incorrect elapsed time
+- **deploy.sh — occ raw output in terminal** — `configure_talk` and `configure_notify_push` no longer dump raw occ command output to the terminal; clean status messages only
+- **haproxy — RustFS console Basic auth stripping** — browser-cached Nextcloud WebDAV credentials forwarded to RustFS console caused `InvalidRequest: invalid header: authorization`; stripped on GET requests only (POST/Bearer preserved)
+
+---
+
 ## [2.5.6] — 2026-06-04
 
 ### Added
