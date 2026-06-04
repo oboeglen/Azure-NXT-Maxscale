@@ -44,7 +44,26 @@ info()    { echo -e " ${C_BGREEN}✓${C_RESET}  $*"; }
 warn()    { echo -e " ${C_YELLOW}!${C_RESET}  $*"; }
 error()   { echo -e " ${C_BRED}✗${C_RESET}  $*" >&2; }
 die()     { error "$*"; exit 1; }
-step()    { echo -e "\n${C_BCYAN}  ▸ $*${C_RESET}"; }
+step()    { echo -e "\n ${C_BCYAN}▸${C_RESET}  ${C_WHITE}$*${C_RESET}"; }
+
+# log_run CMD [ARGS...] — run a command silently on the terminal (output → log only).
+# The spinner stays visible; verbose apt/docker/make noise is never shown.
+# On failure, the last 20 lines of output are printed to stderr for debugging.
+log_run() {
+  local _tmp; _tmp=$(mktemp)
+  if "$@" >> "$_tmp" 2>&1; then
+    cat "$_tmp" >> "$LOG_FILE"
+    rm -f "$_tmp"
+    return 0
+  else
+    local _rc=$?
+    cat "$_tmp" >> "$LOG_FILE"
+    echo -e "\n${C_YELLOW}  Last output:${C_RESET}" >&2
+    tail -20 "$_tmp" >&2
+    rm -f "$_tmp"
+    return $_rc
+  fi
+}
 
 # Visual width of a string: strips ANSI codes, counts characters (not bytes)
 _vlen() {
@@ -331,19 +350,19 @@ install_deps() {
   )
 
   step "Updating sources and installing essential packages"
-  start_spinner "Updating packages..."
+  start_spinner "Updating package sources..."
   if [[ "$PKG_MGR" == "apt" ]]; then
-    DEBIAN_FRONTEND=noninteractive apt-get update -qq
+    log_run apt-get update -qq
     stop_spinner "Package sources updated"
-    start_spinner "Installing essential packages..."
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${pkgs_apt[@]}"
+    start_spinner "Installing essential packages  (${#pkgs_apt[@]} packages)..."
+    log_run env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${pkgs_apt[@]}"
   else
-    dnf makecache -q
+    log_run dnf makecache -q
     stop_spinner "Package sources updated"
-    start_spinner "Installing essential packages..."
-    dnf install -y -q "${pkgs_dnf[@]}"
+    start_spinner "Installing essential packages  (${#pkgs_dnf[@]} packages)..."
+    log_run dnf install -y -q "${pkgs_dnf[@]}"
   fi
-  stop_spinner "Essential packages installed"
+  stop_spinner "Essential packages installed  (details in $LOG_FILE)"
 
   # Ensure securityfs is mounted so Docker can access AppArmor profiles.
   # On some kernels (OVH VPS, bare-metal Debian), AppArmor is compiled in
@@ -3198,8 +3217,8 @@ run_deploy() {
   info "All images downloaded"
 
   step "Building MariaDB Galera image"
-  start_spinner "docker compose build..."
-  docker compose build --quiet
+  start_spinner "Building MariaDB Galera image..."
+  log_run docker compose build --quiet
   stop_spinner "MariaDB Galera image built"
 
   step "Starting infrastructure"
