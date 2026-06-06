@@ -4030,11 +4030,13 @@ update_images() {
     else
       RUSTFS_NODES=0
     fi
-    SIGNALING_NODES=$(_detect_node_count "spreed-signaling-" "^spreed-signaling-[0-9]")
-    SIGNALING_NODES="${SIGNALING_NODES:-0}"
     TALK_ENABLED=$(grep -m1 '^TALK_ENABLED=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
     TALK_ENABLED="${TALK_ENABLED:-no}"
-    (( SIGNALING_NODES > 0 )) && TALK_ENABLED="yes"
+    if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
+      SIGNALING_NODES=$(_detect_node_count "spreed-signaling-" "^spreed-signaling-[0-9]")
+    else
+      SIGNALING_NODES=0
+    fi
     info "Detected nodes: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · Storage=${STORAGE_TYPE} · RustFS=${RUSTFS_NODES} · Talk:${TALK_ENABLED}"
   fi
 
