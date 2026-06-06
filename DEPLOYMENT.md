@@ -114,6 +114,18 @@ Configuration is saved to `/tmp/.nxt-maxscale-config.env` and reused on subseque
 
 The script prompts for all deployment parameters. Answers are cached in `/tmp/.nxt-maxscale-config.env` and reused on re-runs (with option to modify).
 
+### Configuration order
+
+The script asks questions in this order:
+
+1. **Domains** — Nextcloud, Collabora, Whiteboard, Talk
+2. **Nextcloud version**
+3. **Storage backend** — S3 or Classic (see below)
+4. **RustFS node and disk counts** *(S3 mode only)*
+5. **RustFS disk configuration wizard** *(S3 mode only)*
+6. **Node counts** — Nextcloud FPM, Galera, Redis, Collabora, Whiteboard
+7. **HAProxy stats** · **RustFS console** *(S3 mode only)* · **Talk** · **SSL mode**
+
 ### Storage backend
 
 | Choice | Mode | Description |
@@ -121,7 +133,9 @@ The script prompts for all deployment parameters. Answers are cached in `/tmp/.n
 | `[1]` S3 — RustFS | `STORAGE_TYPE=s3` | Distributed object storage — recommended for HA |
 | `[2]` Classic — local disk | `STORAGE_TYPE=local` | Single disk at `/data` — no RustFS containers, simpler setup |
 
-If Classic is selected, the disk wizard prompts for a block device to format (XFS) and mount persistently at `/data` with a fstab entry. RustFS nodes, `RUSTFS_NODES`, and `RUSTFS_DISKS` are not asked.
+If **Classic** is selected, the disk wizard prompts for a block device to format (XFS) and mount persistently at `/data` with an fstab entry. All RustFS-related questions are skipped.
+
+If **S3** is selected, RustFS node/disk counts and the disk configuration wizard appear immediately after the storage choice, before general node counts.
 
 ### Domain configuration
 
@@ -132,21 +146,16 @@ If Classic is selected, the disk wizard prompts for a block device to format (XF
 | Whiteboard domain | `WHITEBOARD_DOMAIN` | `whiteboard.example.com` |
 | Admin email (SSL) | `CERTBOT_EMAIL` | `admin@example.com` |
 
-### Node counts
+### RustFS configuration *(S3 mode only)*
 
-| Component | Variable | Constraint | Default |
-|-----------|----------|------------|---------|
-| Nextcloud FPM | `NC_NODES` | ≥ 1 | 6 |
-| MariaDB Galera | `MARIADB_NODES` | **Odd** ≥ 3 | 5 |
-| Redis | `REDIS_NODES` | **Even** ≥ 6 | 6 |
-| Collabora | `COLLAB_NODES` | ≥ 1 | 3 |
-| Whiteboard | `WB_NODES` | ≥ 1 | 3 |
-| RustFS | `RUSTFS_NODES` | ≥ 4 (EC:N/2) | 4 |
-| Signaling | `SIGNALING_NODES` | ≥ 1 | 4 |
+Asked immediately after the storage backend choice:
 
-### RustFS disk configuration
+| Variable | Constraint | Default |
+|----------|------------|---------|
+| `RUSTFS_NODES` | ≥ 4 (EC:N/2) | 4 |
+| `RUSTFS_DISKS` | ≥ 1 disk/node | 4 |
 
-The wizard profiles each disk and suggests the optimal XFS mount options:
+The disk wizard then profiles each disk and suggests optimal XFS mount options:
 
 ```
 sda  5.5T  → detected: HDD/NVMe/SSD
@@ -156,6 +165,17 @@ sdb  5.5T  → XFS: noatime,nodiratime,allocsize=64m,logbsize=256k,largeio
 Each disk is formatted XFS, labelled, mounted, and added to `/etc/fstab`.
 
 > Erasure coding tolerance: with N nodes, the cluster survives `N/2` simultaneous disk failures.
+
+### Node counts
+
+| Component | Variable | Constraint | Default |
+|-----------|----------|------------|---------|
+| Nextcloud FPM | `NC_NODES` | ≥ 1 | 6 |
+| MariaDB Galera | `MARIADB_NODES` | **Odd** ≥ 3 | 5 |
+| Redis | `REDIS_NODES` | **Even** ≥ 6 | 6 |
+| Collabora | `COLLAB_NODES` | ≥ 1 | 3 |
+| Whiteboard | `WB_NODES` | ≥ 1 | 3 |
+| Signaling *(Talk only)* | `SIGNALING_NODES` | ≥ 1 | 4 |
 
 ### Optional components
 
