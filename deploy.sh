@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.5
+# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.6
 # Usage: sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -273,7 +273,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Automatic Deployer v2.7.5"; do
+    "        NXT Maxscale — Automatic Deployer v2.7.6"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -1333,9 +1333,11 @@ show_recap() {
     "SSL Email      : $CERTBOT_EMAIL" \
     "MariaDB Galera : ${MARIADB_NODES} nodes" \
     "Redis Cluster  : ${REDIS_NODES} nodes" \
-    "RustFS          : ${RUSTFS_NODES} nodes × ${RUSTFS_DISKS} disks (mode: ${RUSTFS_MODE})" \
+    "$( [[ "${STORAGE_TYPE:-s3}" == "s3" ]] \
+        && echo "RustFS         : ${RUSTFS_NODES} nodes × ${RUSTFS_DISKS} disks (mode: ${RUSTFS_MODE})" \
+        || echo "Storage        : Classic local disk (${LOCAL_DATA_PATH:-/data})" )" \
     "HAProxy Stats  : ${HAPROXY_STATS}" \
-    "RustFS Console  : ${RUSTFS_CONSOLE}"
+    "$( [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && echo "RustFS Console : ${RUSTFS_CONSOLE}" )"
 
   show_load_estimate
 
@@ -1519,10 +1521,12 @@ MARIADB_DATABASE=nextcloud
 REDIS_PASSWORD=${GEN_REDIS_PASS}
 REDIS_WHITEBOARD_PASSWORD=${GEN_REDIS_WB_PASS}
 
+$(  [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && cat <<S3CREDS
 RUSTFS_ACCESS_KEY=${GEN_RUSTFS_KEY}
 RUSTFS_SECRET_KEY=${GEN_RUSTFS_SECRET}
 NEXTCLOUD_S3_BUCKET=nextcloud
-
+S3CREDS
+)
 ${rustfs_lines}
 RUSTFS_MODE=${RUSTFS_MODE}
 RUSTFS_BYPASS=${RUSTFS_BYPASS}
@@ -3743,10 +3747,13 @@ configure_notify_push() {
     fi
   done
 
-  # Run maintenance:repair first — populates DB structures that notify_push needs
-  # to read filesystem mounts. Without this, "can't load mount info from database"
-  # fails on fresh installs where the mounts table is empty.
+  # Populate oc_mounts for the admin user — notify_push:setup's internal self-test
+  # queries this table to verify it can load mount info. On a fresh install the table
+  # is empty, causing "can't load mount info from database" on every attempt.
+  # maintenance:repair re-creates DB structures; files:scan initialises the user home
+  # storage entry in oc_mounts without scanning actual files (fast even with S3).
   "${occ[@]}" maintenance:repair --quiet 2>/dev/null || true
+  "${occ[@]}" files:scan admin --quiet 2>/dev/null || true
 
   # Retry setup up to 12 times — "can't load mount info" is transient on first boot
   # maintenance:repair may need several seconds to propagate DB structure changes
