@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.7.1] — 2026-06-06
+
+### Fixed
+- **deploy.sh — Classic storage disk wizard** — `_scan_block_devices` and `_print_disk_table` did not exist; corrected to `_scan_available_disks` and `_show_disk_table`. Wrong variable names `DISK_FS`/`DISK_MOUNT` replaced by `DISK_FSTYPES`/`DISK_MOUNTS`. Disk index was 0-based in prompt but the table displays 1-based — input now converted correctly
+
+---
+
 ## [2.7.0] — 2026-06-06
 
 ### Added
