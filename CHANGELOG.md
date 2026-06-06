@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.7.2] — 2026-06-06
+
+### Fixed
+- **deploy.sh — Classic storage YAML generation** — the HAProxy service block used a single-quoted heredoc (`<<'HAPROXY'`) which prevented bash from evaluating `$(...)` command substitutions; the conditional `storage-net` line was output literally as `$(...)` text, causing `docker compose config` validation to fail with a YAML mapping error. Fixed by splitting the heredoc into two single-quoted parts with the conditional between them
+
+---
+
 ## [2.7.1] — 2026-06-06
 
 ### Fixed

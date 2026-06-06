@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.1
+# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.2
 # Usage: sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -273,7 +273,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Automatic Deployer v2.7.1"; do
+    "        NXT Maxscale — Automatic Deployer v2.7.2"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -1615,7 +1615,7 @@ services:
 HEADER
 
   # ── HAProxy (fixed) ─────────────────────────────────────────────────────
-  cat >> "$dest" <<'HAPROXY'
+  cat >> "$dest" <<'HAPROXY_TOP'
 
   haproxy:
     image: haproxy:2.8-alpine
@@ -1642,7 +1642,9 @@ HEADER
           - "${COLLABORA_DOMAIN}"
           - "${WHITEBOARD_DOMAIN}"
       galera-net: {}
-$(  [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && echo "      storage-net: {}" )
+HAPROXY_TOP
+  [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && printf '      storage-net: {}\n' >> "$dest"
+  cat >> "$dest" <<'HAPROXY_BOT'
       collabora-net:
         ipv4_address: 172.40.0.10
         aliases:
@@ -1658,7 +1660,7 @@ $(  [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && echo "      storage-net: {}" )
       timeout: 3s
       retries: 6
       start_period: 10s
-HAPROXY
+HAPROXY_BOT
 
   # ── nextcloud-setup (fixed, uses NC_VERSION bash var) ───────────────────
   cat >> "$dest" <<NCSETUP
