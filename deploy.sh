@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.6
+# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.7
 # Usage: sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -273,7 +273,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Automatic Deployer v2.7.6"; do
+    "        NXT Maxscale — Automatic Deployer v2.7.7"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -1286,21 +1286,6 @@ show_load_estimate() {
 
   local redis_masters=$(( REDIS_NODES / 2 ))
 
-  local rustfs_total=$(( RUSTFS_NODES * RUSTFS_DISKS ))
-  # Write tolerance (quorum N/2+1 drives) = rustfs_total/2 - 1
-  # Ex. 4 nodes × 2 drives = 8 → write tolerates 3 lost drives (README: "Loss of 3 drives")
-  local rustfs_tol_drives=$(( rustfs_total / 2 - 1 ))
-  local rustfs_tol_nodes=$(( RUSTFS_NODES / 2 ))
-
-  local rustfs_storage_line=""
-  if (( ${RUSTFS_DISK_SIZE_GB:-0} > 0 )); then
-    local _raw_gb=$(( RUSTFS_NODES * RUSTFS_DISKS * RUSTFS_DISK_SIZE_GB ))
-    local _usable_tb _raw_tb
-    _raw_tb=$(awk    -v r="$_raw_gb"              'BEGIN{printf "%.1f", r/1000}')
-    _usable_tb=$(awk -v u="$(( _raw_gb / 2 ))"   'BEGIN{printf "%.1f", u/1000}')
-    rustfs_storage_line="RustFS storage            : ${_usable_tb} TB usable  (${_raw_tb} TB raw · EC:N/2)"
-  fi
-
   local _estimate_args=(
     "Concurrent sessions      : ~${concurrent} VUs  (ref: 34 VUs measured at 6 nodes)"
     "Daily active users       : ~${total} DAU  (ratio 1 VU : 15 DAU measured)"
@@ -1310,9 +1295,23 @@ show_load_estimate() {
     "Recommended RAM          : ~${ram_total} GB"
     "MariaDB writes           : ~${write_tps} TPS  (Galera ${MARIADB_NODES} nodes)"
     "Redis cache              : ${redis_masters} masters  > 500,000 ops/s"
-    "RustFS tolerance          : ${rustfs_tol_nodes} node(s) or ${rustfs_tol_drives} drives losable (writes)"
   )
-  [[ -n "$rustfs_storage_line" ]] && _estimate_args+=("$rustfs_storage_line")
+
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+    local rustfs_total=$(( RUSTFS_NODES * RUSTFS_DISKS ))
+    local rustfs_tol_drives=$(( rustfs_total / 2 - 1 ))
+    local rustfs_tol_nodes=$(( RUSTFS_NODES / 2 ))
+    _estimate_args+=("RustFS tolerance          : ${rustfs_tol_nodes} node(s) or ${rustfs_tol_drives} drives losable (writes)")
+    if (( ${RUSTFS_DISK_SIZE_GB:-0} > 0 )); then
+      local _raw_gb=$(( RUSTFS_NODES * RUSTFS_DISKS * RUSTFS_DISK_SIZE_GB ))
+      local _usable_tb _raw_tb
+      _raw_tb=$(awk    -v r="$_raw_gb"            'BEGIN{printf "%.1f", r/1000}')
+      _usable_tb=$(awk -v u="$(( _raw_gb / 2 ))" 'BEGIN{printf "%.1f", u/1000}')
+      _estimate_args+=("RustFS storage            : ${_usable_tb} TB usable  (${_raw_tb} TB raw · EC:N/2)")
+    fi
+  else
+    _estimate_args+=("Storage                  : Classic local disk — ${LOCAL_DATA_PATH:-/data}")
+  fi
   _estimate_args+=(
     "Collabora                : ${COLLAB_NODES} node(s) — unlimited connections/documents (home_mode binary patch)"
     ""
