@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.7
+# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.8
 # Usage: sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -273,7 +273,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Automatic Deployer v2.7.7"; do
+    "        NXT Maxscale — Automatic Deployer v2.7.8"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -689,7 +689,8 @@ ask_storage_type() {
           "${DISK_NAMES[$ci]}" \
           "$target_mount" \
           "${DISK_FSTYPES[$ci]:-}" \
-          "xfs"
+          "xfs" \
+          "local"
 
         LOCAL_DATA_PATH="$target_mount"
         info "Local storage ready: ${LOCAL_DATA_PATH}  (${DISK_NAMES[$ci]})"
@@ -879,9 +880,9 @@ _show_disk_table() {
 }
 
 # Checks / formats / mounts a disk and adds it to fstab if needed.
-# Args: dev mount_path current_fs preferred_fs
+# Args: dev mount_path current_fs preferred_fs [label_prefix]
 _prepare_rustfs_disk() {
-  local dev="$1" mount_path="$2" current_fs="$3" preferred_fs="$4"
+  local dev="$1" mount_path="$2" current_fs="$3" preferred_fs="$4" label_prefix="${5:-rustfs}"
 
   # Already mounted at target — nothing to do
   if mountpoint -q "$mount_path" 2>/dev/null; then
@@ -915,7 +916,7 @@ _prepare_rustfs_disk() {
     warn "⚠  This will PERMANENTLY erase all data on ${dev}."
     prompt_yn "Format ${dev} as ${chosen_fs^^}?" "N" || die "Format cancelled — aborting"
 
-    local label; label="rustfs-$(basename "$dev")"
+    local label; label="${label_prefix}-$(basename "$dev")"
 
     if [[ "$chosen_fs" == "xfs" ]]; then
       # shellcheck disable=SC2086
@@ -1322,21 +1323,23 @@ show_load_estimate() {
 
 show_recap() {
   echo ""
-  box "Configuration Summary" \
-    "Nextcloud      : $NC_DOMAIN  (${NC_NODES} FPM nodes + ${NC_NODES} nginx, v${NC_VERSION})" \
-    "Collabora      : $COLLAB_DOMAIN  (${COLLAB_NODES} nodes)" \
-    "Whiteboard     : $WB_DOMAIN  (${WB_NODES} nodes)" \
+  local _recap_lines=(
+    "Nextcloud      : $NC_DOMAIN  (${NC_NODES} FPM nodes + ${NC_NODES} nginx, v${NC_VERSION})"
+    "Collabora      : $COLLAB_DOMAIN  (${COLLAB_NODES} nodes)"
+    "Whiteboard     : $WB_DOMAIN  (${WB_NODES} nodes)"
     "$( [[ "${TALK_ENABLED:-no}" == "yes" ]] \
         && echo "Talk signaling : $TALK_DOMAIN  (${SIGNALING_NODES:-2} nodes + NATS)  coturn: ${COTURN_ENABLED}" \
-        || echo "Talk signaling : disabled (built-in signaling only)" )" \
-    "SSL Email      : $CERTBOT_EMAIL" \
-    "MariaDB Galera : ${MARIADB_NODES} nodes" \
-    "Redis Cluster  : ${REDIS_NODES} nodes" \
+        || echo "Talk signaling : disabled (built-in signaling only)" )"
+    "SSL Email      : $CERTBOT_EMAIL"
+    "MariaDB Galera : ${MARIADB_NODES} nodes"
+    "Redis Cluster  : ${REDIS_NODES} nodes"
     "$( [[ "${STORAGE_TYPE:-s3}" == "s3" ]] \
         && echo "RustFS         : ${RUSTFS_NODES} nodes × ${RUSTFS_DISKS} disks (mode: ${RUSTFS_MODE})" \
-        || echo "Storage        : Classic local disk (${LOCAL_DATA_PATH:-/data})" )" \
-    "HAProxy Stats  : ${HAPROXY_STATS}" \
-    "$( [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && echo "RustFS Console : ${RUSTFS_CONSOLE}" )"
+        || echo "Storage        : Classic local disk (${LOCAL_DATA_PATH:-/data})" )"
+    "HAProxy Stats  : ${HAPROXY_STATS}"
+  )
+  [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && _recap_lines+=("RustFS Console : ${RUSTFS_CONSOLE}")
+  box "Configuration Summary" "${_recap_lines[@]}"
 
   show_load_estimate
 
@@ -4015,18 +4018,24 @@ update_images() {
     info "Configuration reloaded (${NC_NODES} NC · ${MARIADB_NODES} DB · ${REDIS_NODES} Redis · ${COLLAB_NODES} Collab · ${RUSTFS_NODES} RustFS)"
   else
     warn "Cache missing — auto-detecting from running containers"
+    STORAGE_TYPE=$(grep -m1 '^STORAGE_TYPE=' "$INSTALL_DIR/.env" 2>/dev/null | cut -d= -f2 || echo "s3")
+    STORAGE_TYPE="${STORAGE_TYPE:-s3}"
     NC_NODES=$(_detect_node_count     "app-next-"       "^app-next-[0-9]")
     MARIADB_NODES=$(_detect_node_count "mariadb-node"   "^mariadb-node[0-9]")
     REDIS_NODES=$(_detect_node_count   "redis-node"     "^redis-node[0-9]")
     COLLAB_NODES=$(_detect_node_count  "collabora-node" "^collabora-node[0-9]")
     WB_NODES=$(_detect_node_count      "whiteboard-node" "^whiteboard-node[0-9]")
-    RUSTFS_NODES=$(_detect_node_count   "rustfs-node"     "^rustfs-node[0-9]")
+    if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+      RUSTFS_NODES=$(_detect_node_count "rustfs-node" "^rustfs-node[0-9]")
+    else
+      RUSTFS_NODES=0
+    fi
     SIGNALING_NODES=$(_detect_node_count "spreed-signaling-" "^spreed-signaling-[0-9]")
     SIGNALING_NODES="${SIGNALING_NODES:-0}"
     TALK_ENABLED=$(grep -m1 '^TALK_ENABLED=' "$INSTALL_DIR/.env" | cut -d= -f2 || echo "no")
     TALK_ENABLED="${TALK_ENABLED:-no}"
     (( SIGNALING_NODES > 0 )) && TALK_ENABLED="yes"
-    info "Detected nodes: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · RustFS=${RUSTFS_NODES} · Talk:${TALK_ENABLED}"
+    info "Detected nodes: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · Storage=${STORAGE_TYPE} · RustFS=${RUSTFS_NODES} · Talk:${TALK_ENABLED}"
   fi
 
   step "Syncing image tags from deploy.sh"
@@ -4267,11 +4276,14 @@ scale_nodes() {
     info "Configuration reloaded from cache"
     # Safety check: verify RUSTFS_NODES from cache matches actual containers
     # (prevents stale ORIG_RUSTFS_NODES → double call to _rustfs_register_pool)
-    local _actual_rustfs
-    _actual_rustfs=$(_detect_node_count "rustfs-node" "^rustfs-node[0-9]")
-    if (( _actual_rustfs > RUSTFS_NODES )); then
-      warn "RUSTFS_NODES cache (${RUSTFS_NODES}) < actual containers (${_actual_rustfs}) — correcting"
-      RUSTFS_NODES="$_actual_rustfs"
+    # Only applies to S3 mode — local mode has no rustfs containers (RUSTFS_NODES=0 is correct)
+    if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+      local _actual_rustfs
+      _actual_rustfs=$(_detect_node_count "rustfs-node" "^rustfs-node[0-9]")
+      if (( _actual_rustfs > RUSTFS_NODES )); then
+        warn "RUSTFS_NODES cache (${RUSTFS_NODES}) < actual containers (${_actual_rustfs}) — correcting"
+        RUSTFS_NODES="$_actual_rustfs"
+      fi
     fi
   elif [[ -f "$INSTALL_DIR/.env" ]]; then
     warn "Cache missing — rebuilding from .env and running containers"
@@ -4282,12 +4294,20 @@ scale_nodes() {
     # Fallback if missing OR empty value in .env (e.g. TALK_DOMAIN=)
     [[ -z "$TALK_DOMAIN" ]] && TALK_DOMAIN="talk.${NC_DOMAIN#*.}"
     CERTBOT_EMAIL=$(grep -m1 '^CERTBOT_EMAIL='       "$INSTALL_DIR/.env" | cut -d= -f2 || echo "")
+    STORAGE_TYPE=$(grep  -m1 '^STORAGE_TYPE='        "$INSTALL_DIR/.env" | cut -d= -f2 || echo "s3")
+    STORAGE_TYPE="${STORAGE_TYPE:-s3}"
+    LOCAL_DATA_PATH=$(grep -m1 '^LOCAL_DATA_PATH='   "$INSTALL_DIR/.env" | cut -d= -f2 || echo "/data")
+    LOCAL_DATA_PATH="${LOCAL_DATA_PATH:-/data}"
     NC_NODES=$(_detect_node_count     "app-next-"       "^app-next-[0-9]")
     MARIADB_NODES=$(_detect_node_count "mariadb-node"   "^mariadb-node[0-9]")
     REDIS_NODES=$(_detect_node_count   "redis-node"     "^redis-node[0-9]")
     COLLAB_NODES=$(_detect_node_count  "collabora-node" "^collabora-node[0-9]")
     WB_NODES=$(_detect_node_count      "whiteboard-node" "^whiteboard-node[0-9]")
-    RUSTFS_NODES=$(_detect_node_count   "rustfs-node"     "^rustfs-node[0-9]")
+    if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+      RUSTFS_NODES=$(_detect_node_count "rustfs-node" "^rustfs-node[0-9]")
+    else
+      RUSTFS_NODES=0
+    fi
     NC_VERSION=$(docker inspect --format='{{index .Config.Image}}' app-next-01 2>/dev/null \
                  | cut -d: -f2 || echo "latest-fpm")
     RUSTFS_DISKS="${RUSTFS_DISKS:-4}"
@@ -4317,7 +4337,7 @@ scale_nodes() {
                                     | cut -d= -f2 || echo "/data/rustfs/node${n}/data${d}")
       done
     done
-    info "Configuration rebuilt: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · RustFS=${RUSTFS_NODES} · Signaling=${SIGNALING_NODES}"
+    info "Configuration rebuilt: NC=${NC_NODES} · DB=${MARIADB_NODES} · Redis=${REDIS_NODES} · Collab=${COLLAB_NODES} · WB=${WB_NODES} · Storage=${STORAGE_TYPE} · RustFS=${RUSTFS_NODES} · Signaling=${SIGNALING_NODES}"
   else
     die "Neither config cache nor .env file found in $INSTALL_DIR — cannot scale"
   fi
@@ -4505,7 +4525,9 @@ scale_nodes() {
     "$( [[ "${TALK_ENABLED:-no}" == "yes" ]] \
         && echo "Signaling  : ${ORIG_SIGNALING_NODES} → ${SIGNALING_NODES} nodes" \
         || echo "Signaling  : disabled" )" \
-    "RustFS      : ${ORIG_RUSTFS_NODES} → ${RUSTFS_NODES} nodes"
+    "$( [[ "${STORAGE_TYPE:-s3}" == "s3" ]] \
+        && echo "RustFS      : ${ORIG_RUSTFS_NODES} → ${RUSTFS_NODES} nodes" \
+        || echo "Storage     : Classic local disk (not scalable)" )"
 
   if (( MARIADB_NODES > ORIG_MARIADB_NODES )); then
     info "Galera: new nodes will join the cluster via SST (automatic)."
@@ -4627,7 +4649,9 @@ scale_nodes() {
     "Collabora  : ${COLLAB_NODES} nodes" \
     "Whiteboard : ${WB_NODES} nodes" \
     "$( [[ "${TALK_ENABLED:-no}" == "yes" ]] && echo "Signaling  : ${SIGNALING_NODES} nodes" || echo "Signaling  : disabled" )" \
-    "RustFS      : ${RUSTFS_NODES} nodes × ${RUSTFS_DISKS} disks"
+    "$( [[ "${STORAGE_TYPE:-s3}" == "s3" ]] \
+        && echo "RustFS      : ${RUSTFS_NODES} nodes × ${RUSTFS_DISKS} disks" \
+        || echo "Storage     : Classic local disk — ${LOCAL_DATA_PATH:-/data}" )"
 }
 
 # ─── [MAIN] Entry point ──────────────────────────────────────────────────────
