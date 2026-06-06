@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.7.3] — 2026-06-06
+
+### Fixed
+- **haproxy.cfg — classic storage mode: HAProxy crash on startup** — `patch_haproxy()` removed the `acl is_s3_api` definition but left the `!is_s3_api` condition in the `http-request deny` rule, causing HAProxy to reject its own config with "no such ACL: is_s3_api". Added `sed` pass to strip all `!is_s3_api` references from the deny rule
+
+---
+
 ## [2.7.2] — 2026-06-06
 
 ### Fixed

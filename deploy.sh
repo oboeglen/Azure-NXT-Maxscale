@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.2
+# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.3
 # Usage: sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -273,7 +273,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Automatic Deployer v2.7.2"; do
+    "        NXT Maxscale — Automatic Deployer v2.7.3"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -2900,8 +2900,9 @@ PYEOF
     # Strip S3_CONSOLE frontend block (ACL + redirects + use_backend)
     awk '/# BEGIN_S3_CONSOLE/{skip=1} /# END_S3_CONSOLE/{skip=0; next} !skip{print}' \
       "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
-    # Strip is_s3_api ACL and routing line
+    # Strip is_s3_api ACL, its routing line, and its reference in http-request deny
     awk '!/acl is_s3_api/ && !/use_backend rustfs-s3api/' "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+    sed -i 's/ !is_s3_api//' "$tmp"
     # Strip /s3-console and /rustfs from is_api_path ACL
     sed -i 's| /s3-console /rustfs||g; s|/s3-console /rustfs ||g' "$tmp"
     # Strip RustFS console backend block
