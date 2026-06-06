@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.3
+# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.4
 # Usage: sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -273,7 +273,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Automatic Deployer v2.7.3"; do
+    "        NXT Maxscale — Automatic Deployer v2.7.4"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -723,10 +723,6 @@ ask_nodes() {
   ask_int "Redis Cluster — nodes"      "6" is_even_min6    "Even number ≥ 6 required (masters + replicas)"              REDIS_NODES
   ask_int "Collabora — nodes"          "3" is_positive_int "Integer ≥ 1 required"                                       COLLAB_NODES
   ask_int "Whiteboard — nodes"         "2" is_positive_int "Integer ≥ 1 required"                                       WB_NODES
-  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
-    ask_int "RustFS — nodes"           "4" is_positive_int "Integer ≥ 1 required"                                       RUSTFS_NODES
-    ask_int "RustFS — disks per node"  "4" is_positive_int "Integer ≥ 1 required"                                       RUSTFS_DISKS
-  fi
 }
 
 # ─── [RUSTFS] Disk wizard helpers ─────────────────────────────────────────────
@@ -1020,6 +1016,10 @@ rustfs_fault_tolerance() {
 }
 
 ask_rustfs() {
+  step "RustFS — node and disk counts"
+  ask_int "RustFS — nodes"          "4" is_positive_int "Integer ≥ 1 required" RUSTFS_NODES
+  ask_int "RustFS — disks per node" "4" is_positive_int "Integer ≥ 1 required" RUSTFS_DISKS
+
   step "RustFS disk configuration (${RUSTFS_NODES} nodes × ${RUSTFS_DISKS} disks)"
   declare -gA RUSTFS_PATHS
 
@@ -4325,7 +4325,9 @@ scale_nodes() {
     "$( [[ "${TALK_ENABLED:-no}" == "yes" ]] \
         && echo "Talk signaling      : ${SIGNALING_NODES:-2} nodes  (stateless — scale up or down freely)" \
         || echo "Talk signaling      : disabled" )" \
-    "RustFS               : ${RUSTFS_NODES} nodes × ${RUSTFS_DISKS} disks  (scale-up by pool)"
+    "$( [[ "${STORAGE_TYPE:-s3}" == "s3" ]] \
+        && echo "RustFS               : ${RUSTFS_NODES} nodes × ${RUSTFS_DISKS} disks  (scale-up by pool)" \
+        || echo "Storage              : Classic local disk — ${LOCAL_DATA_PATH:-/data} (not scalable)" )"
   echo ""
 
   # ── Enter new values ─────────────────────────────────────────────────────────
@@ -4348,14 +4350,17 @@ scale_nodes() {
     ask_int "Talk signaling — nodes (↑↓ free)"   "$SIGNALING_NODES" is_positive_int "Integer ≥ 1 required"        SIGNALING_NODES
   fi
 
-  # RustFS: scale-up only (pool expansion) — scale-down via manual decommission
-  echo ""
-  ask_int "RustFS — total nodes (≥ ${ORIG_RUSTFS_NODES}, ↑ only)" \
-    "$RUSTFS_NODES" is_positive_int "Integer ≥ 1 required" RUSTFS_NODES
-  if (( RUSTFS_NODES < ORIG_RUSTFS_NODES )); then
-    warn "RustFS scale-down not supported — value reset to ${ORIG_RUSTFS_NODES}"
-    warn "To reduce RustFS: decommission via RustFS admin tools (manual procedure)"
-    RUSTFS_NODES="$ORIG_RUSTFS_NODES"
+  # RustFS: scale-up only (pool expansion) — not available in local storage mode
+  local rustfs_scaled_up=false
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+    echo ""
+    ask_int "RustFS — total nodes (≥ ${ORIG_RUSTFS_NODES}, ↑ only)" \
+      "$RUSTFS_NODES" is_positive_int "Integer ≥ 1 required" RUSTFS_NODES
+    if (( RUSTFS_NODES < ORIG_RUSTFS_NODES )); then
+      warn "RustFS scale-down not supported — value reset to ${ORIG_RUSTFS_NODES}"
+      warn "To reduce RustFS: decommission via RustFS admin tools (manual procedure)"
+      RUSTFS_NODES="$ORIG_RUSTFS_NODES"
+    fi
   fi
 
   # Validate that the Redis delta is even (master+replica per pair)
@@ -4366,9 +4371,8 @@ scale_nodes() {
     redis_delta=0
   fi
 
-  # If RustFS scale-up: collect paths for new nodes NOW
-  local rustfs_scaled_up=false
-  if (( RUSTFS_NODES > ORIG_RUSTFS_NODES )); then
+  # If RustFS scale-up: collect paths for new nodes NOW (S3 mode only)
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && (( RUSTFS_NODES > ORIG_RUSTFS_NODES )); then
     rustfs_scaled_up=true
     local new_pool_start=$(( ORIG_RUSTFS_NODES + 1 ))
     step "New RustFS pool — nodes ${new_pool_start}–${RUSTFS_NODES}  (${RUSTFS_DISKS} disk(s) each)"
@@ -4674,10 +4678,14 @@ main() {
     ask_domains
     ask_versions
     ask_storage_type
+    if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+      ask_rustfs
+    fi
     ask_nodes
-    [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && ask_rustfs
     ask_haproxy
-    [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && ask_rustfs_console
+    if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+      ask_rustfs_console
+    fi
     ask_talk
     ask_cert_mode
   fi

@@ -6,6 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.7.4] — 2026-06-06
+
+### Fixed
+- **deploy.sh — RustFS configuration step appeared after node counts** — `ask_rustfs` was called after `ask_nodes`, so choosing S3 storage showed Phase 4/7 (node counts) before the RustFS disk wizard. Moved `ask_rustfs` (including node/disk count questions) to immediately after `ask_storage_type`, before `ask_nodes`
+- **deploy.sh — scale_nodes: RustFS scale shown in classic local storage mode** — The scale menu proposed RustFS node count changes even when `STORAGE_TYPE=local`. RustFS scale questions and pool expansion are now fully skipped in local storage mode
+
+---
+
 ## [2.7.3] — 2026-06-06
 
 ### Fixed
