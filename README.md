@@ -1267,20 +1267,28 @@ sudo bash /opt/nxt-maxscale/deploy.sh   # → choose [1] Quick update
 
 ### Critical data to back up
 
-| Data | Location | Content |
-|------|----------|---------|
-| **User files** | RustFS data paths on the host (default: `/data/rustfs/nodeN/dataN`) | Photos, documents, files — stored in S3 via the `objectstore` driver |
-| Database | Docker volume `mariadb-data-node*` | Accounts, shares, metadata |
-| Nextcloud config | Docker volume `nextcloud-config` | `config.php`, installed apps |
-| Deployment files | `$INSTALL_DIR` (e.g. `/opt/nxt-maxscale`) | `.env`, `haproxy.cfg`, SSL certificates |
+| Data | S3 mode (RustFS) | Classic mode (local disk) | Content |
+|------|-------------------|---------------------------|---------|
+| **User files** | RustFS host paths (default: `/data/rustfs/nodeN/dataN`) | Bind-mount at `LOCAL_DATA_PATH` (default: `/data`) | Photos, documents, files |
+| Database | Docker volume `mariadb-data-node*` | Docker volume `mariadb-data-node*` | Accounts, shares, metadata |
+| Nextcloud config | Docker volume `nextcloud-config` | Docker volume `nextcloud-config` | `config.php`, installed apps |
+| Deployment files | `$INSTALL_DIR` (e.g. `/opt/nxt-maxscale`) | `$INSTALL_DIR` (e.g. `/opt/nxt-maxscale`) | `.env`, `haproxy.cfg`, SSL certificates |
 
-> **Note:** user files are **not** in a Docker volume `nextcloud-data` — they are stored directly in RustFS via the S3 driver (`objectstore`). RustFS backup is therefore the primary backup of user data.
+> **S3 mode:** user files are **not** in a Docker volume — they are stored directly in RustFS via the S3 `objectstore` driver. RustFS backup is therefore the primary backup of user data.
+>
+> **Classic mode:** user files are stored on the local disk at `LOCAL_DATA_PATH` (bind-mounted into containers as `/var/www/html/data`). No RustFS is involved — back up the directory directly.
 
 ### Recommended strategies
 
 **VM snapshots (Azure / cloud)** — the simplest solution: snapshot of the OS disk + data at regular intervals from the Azure portal or via `az snapshot create`. Full restoration in minutes.
 
-**RustFS sync to external storage** *(top priority)* — use an S3-compatible CLI (`aws s3 sync`, `rclone`, etc.) to mirror the `nextcloud` bucket to a remote S3-compatible storage or Azure Blob Storage.
+**RustFS sync to external storage** *(S3 mode — top priority)* — use an S3-compatible CLI (`aws s3 sync`, `rclone`, etc.) to mirror the `nextcloud` bucket to a remote S3-compatible storage or Azure Blob Storage.
+
+**Local disk backup** *(Classic mode — top priority)* — use `rsync` or an archiver to copy the data directory to an external destination:
+```bash
+rsync -aAX --delete /data/ /backup/nextcloud-data/
+# or with Restic / Borgbackup for incremental encrypted archives
+```
 
 **MariaDB dump (Galera)** — consistent logical export from any node:
 ```bash
