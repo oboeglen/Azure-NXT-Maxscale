@@ -664,23 +664,21 @@ ask_storage_type() {
     done
 
     if [[ "$disk_choice" == "1" ]]; then
-      # Reuse the block-device scanner from the RustFS wizard
-      local -a DISK_NAMES DISK_SIZES DISK_MODELS DISK_FS DISK_MOUNT
-      _scan_block_devices
-      if (( ${#DISK_NAMES[@]} == 0 )); then
+      # Reuse the global block-device scanner from the RustFS wizard
+      _scan_available_disks
+      if (( DISK_COUNT == 0 )); then
         warn "No available disks detected — falling back to manual path"
         disk_choice="2"
       else
-        _print_disk_table
-        echo ""
-        local max_idx=$(( ${#DISK_NAMES[@]} - 1 ))
-        local ci
+        _show_disk_table
+        local ci_input ci
         while true; do
-          prompt_input "Select disk index [0-${max_idx}]" "0"
-          ci="$REPLY"
-          [[ "$ci" =~ ^[0-9]+$ ]] && (( ci <= max_idx )) && break
-          error "Enter a number between 0 and ${max_idx}"
+          prompt_input "Select disk [1-${DISK_COUNT}]" "1"
+          ci_input="$REPLY"
+          [[ "$ci_input" =~ ^[0-9]+$ ]] && (( ci_input >= 1 && ci_input <= DISK_COUNT )) && break
+          error "Enter a number between 1 and ${DISK_COUNT}"
         done
+        ci=$(( ci_input - 1 ))  # convert to 0-based index
 
         local target_mount="/data"
         prompt_input "Mount point" "$target_mount"
@@ -691,7 +689,7 @@ ask_storage_type() {
           "${DISK_NAMES[$ci]}" \
           "$target_mount" \
           "local-data" \
-          "${DISK_FS[$ci]:-}"
+          "${DISK_FSTYPES[$ci]:-}"
 
         LOCAL_DATA_PATH="$target_mount"
         info "Local storage ready: ${LOCAL_DATA_PATH}  (${DISK_NAMES[$ci]})"
