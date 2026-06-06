@@ -688,8 +688,8 @@ ask_storage_type() {
         _prepare_rustfs_disk \
           "${DISK_NAMES[$ci]}" \
           "$target_mount" \
-          "local-data" \
-          "${DISK_FSTYPES[$ci]:-}"
+          "${DISK_FSTYPES[$ci]:-}" \
+          "xfs"
 
         LOCAL_DATA_PATH="$target_mount"
         info "Local storage ready: ${LOCAL_DATA_PATH}  (${DISK_NAMES[$ci]})"
