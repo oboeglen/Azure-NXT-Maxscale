@@ -241,22 +241,25 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7. Stockage objet S3 — RustFS via HAProxy (port 9000 interne)
-# IMPORTANT : à configurer avant la création de données utilisateur
+# 7. Storage — S3 (RustFS) or classic local filesystem
 # ---------------------------------------------------------------------------
-step "Configuration stockage objet S3 (RustFS)"
-
-occ config:system:set objectstore class                  --value '\OC\Files\ObjectStore\S3'
-occ config:system:set objectstore arguments bucket       --value "${NEXTCLOUD_S3_BUCKET:-nextcloud}"
-occ config:system:set objectstore arguments autocreate   --type boolean --value true
-occ config:system:set objectstore arguments hostname     --value 'haproxy'
-occ config:system:set objectstore arguments key          --value "${RUSTFS_ACCESS_KEY}"
-occ config:system:set objectstore arguments secret       --value "${RUSTFS_SECRET_KEY}"
-occ config:system:set objectstore arguments port         --type integer --value 9000
-occ config:system:set objectstore arguments use_path_style --type boolean --value true
-occ config:system:set objectstore arguments use_ssl      --type boolean --value false
-
-info "Stockage S3 configuré → haproxy:9000 / bucket: ${NEXTCLOUD_S3_BUCKET:-nextcloud}"
+if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+  step "S3 object storage configuration (RustFS)"
+  occ config:system:set objectstore class                  --value '\OC\Files\ObjectStore\S3'
+  occ config:system:set objectstore arguments bucket       --value "${NEXTCLOUD_S3_BUCKET:-nextcloud}"
+  occ config:system:set objectstore arguments autocreate   --type boolean --value true
+  occ config:system:set objectstore arguments hostname     --value 'haproxy'
+  occ config:system:set objectstore arguments key          --value "${RUSTFS_ACCESS_KEY}"
+  occ config:system:set objectstore arguments secret       --value "${RUSTFS_SECRET_KEY}"
+  occ config:system:set objectstore arguments port         --type integer --value 9000
+  occ config:system:set objectstore arguments use_path_style --type boolean --value true
+  occ config:system:set objectstore arguments use_ssl      --type boolean --value false
+  info "S3 storage configured → haproxy:9000 / bucket: ${NEXTCLOUD_S3_BUCKET:-nextcloud}"
+else
+  step "Classic local storage — using /var/www/html/data"
+  occ config:system:set datadirectory --value '/var/www/html/data'
+  info "Local storage configured → /var/www/html/data (bind-mounted from host)"
+fi
 
 # ---------------------------------------------------------------------------
 # 8. Paramètres système complémentaires

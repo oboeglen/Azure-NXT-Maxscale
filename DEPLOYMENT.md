@@ -1,6 +1,6 @@
 # Azure NXT Maxscale — Deployment Guide
 
-> **Version:** 2.6.1 · **Script:** `deploy.sh` · **Supported OS:** Debian 11/12 · Ubuntu 22.04/24.04 · RHEL/Rocky/AlmaLinux 8/9
+> **Version:** 2.7.0 · **Script:** `deploy.sh` · **Supported OS:** Debian 11/12 · Ubuntu 22.04/24.04 · RHEL/Rocky/AlmaLinux 8/9
 
 ---
 
@@ -113,6 +113,15 @@ Configuration is saved to `/tmp/.nxt-maxscale-config.env` and reused on subseque
 ## Phase 3 — Interactive configuration
 
 The script prompts for all deployment parameters. Answers are cached in `/tmp/.nxt-maxscale-config.env` and reused on re-runs (with option to modify).
+
+### Storage backend
+
+| Choice | Mode | Description |
+|--------|------|-------------|
+| `[1]` S3 — RustFS | `STORAGE_TYPE=s3` | Distributed object storage — recommended for HA |
+| `[2]` Classic — local disk | `STORAGE_TYPE=local` | Single disk at `/data` — no RustFS containers, simpler setup |
+
+If Classic is selected, the disk wizard prompts for a block device to format (XFS) and mount persistently at `/data` with a fstab entry. RustFS nodes, `RUSTFS_NODES`, and `RUSTFS_DISKS` are not asked.
 
 ### Domain configuration
 
@@ -407,4 +416,4 @@ Key variables stored in `/opt/nxt-maxscale/.env`:
 
 ---
 
-*Generated for Azure NXT Maxscale v2.6.1 — [GitHub](https://github.com/oboeglen/Azure-NXT-Maxscale)*
+*Generated for Azure NXT Maxscale v2.7.0 — [GitHub](https://github.com/oboeglen/Azure-NXT-Maxscale)*
