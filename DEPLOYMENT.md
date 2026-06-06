@@ -1,6 +1,6 @@
 # Azure NXT Maxscale — Deployment Guide
 
-> **Version:** 2.7.6 · **Script:** `deploy.sh` · **Supported OS:** Debian 11/12 · Ubuntu 22.04/24.04 · RHEL/Rocky/AlmaLinux 8/9
+> **Version:** 2.7.7 · **Script:** `deploy.sh` · **Supported OS:** Debian 11/12 · Ubuntu 22.04/24.04 · RHEL/Rocky/AlmaLinux 8/9
 
 ---
 
@@ -436,4 +436,4 @@ Key variables stored in `/opt/nxt-maxscale/.env`:
 
 ---
 
-*Generated for Azure NXT Maxscale v2.7.6 — [GitHub](https://github.com/oboeglen/Azure-NXT-Maxscale)*
+*Generated for Azure NXT Maxscale v2.7.7 — [GitHub](https://github.com/oboeglen/Azure-NXT-Maxscale)*

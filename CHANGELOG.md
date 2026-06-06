@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.7.7] — 2026-06-06
+
+### Fixed
+- **show_load_estimate() — RustFS lines shown in classic storage mode** — "RustFS tolerance" was always displayed, even with `STORAGE_TYPE=local` where `RUSTFS_NODES=0` would produce `-1 drives`. RustFS tolerance and storage lines are now conditional on S3 mode; classic mode shows the local data path instead
+
+---
+
 ## [2.7.6] — 2026-06-06
 
 ### Fixed
