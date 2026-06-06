@@ -3757,8 +3757,23 @@ configure_notify_push() {
   "${occ[@]}" maintenance:repair --quiet 2>/dev/null || true
   "${occ[@]}" files:scan admin --quiet 2>/dev/null || true
 
-  # Retry setup up to 12 times — "can't load mount info" is transient on first boot
-  # maintenance:repair may need several seconds to propagate DB structure changes
+  # Silent pre-warm: after files:scan, the notify-push binary needs a few seconds
+  # to establish its DB connection pool. Poll silently for up to 60s, absorbing
+  # "can't load mount info" (transient startup) without printing warnings.
+  # Any other error or a success breaks out immediately.
+  local _pw=0 _pw_out
+  info "Waiting for notify-push DB connection..."
+  while (( _pw < 60 )); do
+    _pw_out=$("${occ[@]}" notify_push:setup "https://${NC_DOMAIN}/push" 2>&1)
+    if echo "$_pw_out" | grep -q 'configuration saved'; then
+      info "notify_push configured ✓"
+      return 0
+    fi
+    echo "$_pw_out" | grep -q "can't load mount info" || break  # different error — fall through
+    sleep 5; (( _pw += 5 )) || true
+  done
+
+  # Retry setup up to 12 times for any remaining errors
   local _push_ok=0 _attempt
   for _attempt in $(seq 1 12); do
     local out
@@ -3768,7 +3783,6 @@ configure_notify_push() {
       info "notify_push configured ✓"
       break
     fi
-    # Show which check failed (last failed line)
     local _fail; _fail=$(echo "$out" | grep -v '^[[:space:]]*$\|configuration saved\|✓' | tail -1 | sed 's/^[[:space:]]*//')
     [[ $_attempt -lt 12 ]] && { warn "notify_push: attempt ${_attempt}/12 — ${_fail:-setup failed} — retrying in 10s..."; sleep 10; }
   done
