@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.4
+# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.5
 # Usage: sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -273,7 +273,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Automatic Deployer v2.7.4"; do
+    "        NXT Maxscale — Automatic Deployer v2.7.5"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -1697,7 +1697,8 @@ $(  [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && cat <<S3ENV
       - RUSTFS_SECRET_KEY=\${RUSTFS_SECRET_KEY}
       - NEXTCLOUD_S3_BUCKET=\${NEXTCLOUD_S3_BUCKET:-nextcloud}
 S3ENV
-)    networks:
+)
+    networks:
       - next-net
     depends_on:
       app-next-01:

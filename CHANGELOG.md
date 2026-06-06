@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.7.5] — 2026-06-06
+
+### Fixed
+- **docker-compose.yml — nextcloud-setup YAML error** — command substitution strips trailing newlines, causing `NEXTCLOUD_S3_BUCKET=...` and `networks:` to be concatenated on the same line → Docker Compose rejected the file with `environment.[11]: unexpected type map[string]interface {}`. Fixed by placing `)` and `networks:` on separate lines in the heredoc
+
+---
+
 ## [2.7.4] — 2026-06-06
 
 ### Fixed
