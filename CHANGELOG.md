@@ -6,6 +6,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.7.8] — 2026-06-06
+
+### Fixed
+- **scale_nodes() — cache-missing fallback didn't load STORAGE_TYPE/LOCAL_DATA_PATH** — when the answers cache was absent on a classic local storage deployment, the fallback path defaulted to `STORAGE_TYPE=s3`, causing the scale menu to ask for RustFS node count and attempt RustFS pool expansion on a stack with no RustFS at all
+- **scale_nodes() — RUSTFS_NODES incorrectly raised from 0 to 1 in local mode** — the post-cache safety check compared `RUSTFS_NODES` from cache (0) against `_detect_node_count` (which returns 1 as a minimum when no containers match), and unconditionally corrected to 1. The check is now skipped in classic storage mode
+- **update_images() — spurious "no rustfs containers" warning in local mode** — the no-cache detection fallback called `_detect_node_count("rustfs-node")` in local storage mode, generating a misleading warning and setting `RUSTFS_NODES=1`. STORAGE_TYPE is now read from `.env` first; RUSTFS_NODES is set to 0 directly in local mode
+- **scale_nodes() — "Planned changes" and "Scaling complete" boxes showed RustFS in local mode** — both summary boxes always included a RustFS line (showing "0 → 0 nodes" or "0 × 0 disks"). Both are now conditional on S3 mode; classic mode shows the local data path instead
+- **show_recap() — trailing empty line in classic storage mode** — the RustFS Console argument was always passed to `box()`, producing an empty line at the bottom of the Configuration Summary box when `STORAGE_TYPE=local`. Refactored to use an array so the line is omitted entirely in local mode
+- **_prepare_rustfs_disk() — local storage disks labeled "rustfs-*"** — the function was shared between RustFS and classic local storage setup but always used "rustfs" as the filesystem label prefix. Added an optional 5th parameter `label_prefix` (default: "rustfs"); `ask_storage_type()` now passes "local" so the disk is labeled "local-sda" etc.
+
+---
+
 ## [2.7.7] — 2026-06-06
 
 ### Fixed

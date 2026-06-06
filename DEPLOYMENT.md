@@ -436,4 +436,4 @@ Key variables stored in `/opt/nxt-maxscale/.env`:
 
 ---
 
-*Generated for Azure NXT Maxscale v2.7.7 — [GitHub](https://github.com/oboeglen/Azure-NXT-Maxscale)*
+*Generated for Azure NXT Maxscale v2.7.8 — [GitHub](https://github.com/oboeglen/Azure-NXT-Maxscale)*
