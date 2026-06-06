@@ -6,6 +6,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.7.6] — 2026-06-06
+
+### Fixed
+- **notify_push: "can't load mount info from database"** — on fresh installs, `oc_mounts` is empty for the admin user; `notify_push:setup`'s internal self-test queries this table and fails every retry. Fixed by running `occ files:scan admin` after `maintenance:repair` to initialise the admin home storage entry in `oc_mounts` before the retry loop
+- **show_recap(): RustFS info shown in classic storage mode** — the summary box always displayed "RustFS: 0 nodes × 0 disks (mode: none)". Now shows storage type and path for classic mode, RustFS details for S3 mode
+- **gen_env(): RUSTFS_ACCESS_KEY/SECRET written even for classic storage** — the `.env` file always included these variables (set to "disabled") even when `STORAGE_TYPE=local`. Now omitted entirely in classic mode
+
+---
+
 ## [2.7.5] — 2026-06-06
 
 ### Fixed
