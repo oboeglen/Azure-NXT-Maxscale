@@ -9,7 +9,7 @@
 
 **High-availability Nextcloud infrastructure — deployable with a single command**
 
-[![Version](https://img.shields.io/badge/version-2.6.1-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
+[![Version](https://img.shields.io/badge/version-2.7.0-blue)](https://github.com/oboeglen/Azure-NXT-Maxscale)
 [![Nextcloud](https://img.shields.io/badge/Nextcloud-33-0082C9?logo=nextcloud&logoColor=white)](https://nextcloud.com)
 [![PHP](https://img.shields.io/badge/PHP-8.4-777BB4?logo=php&logoColor=white)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -69,7 +69,6 @@
 - 🤖 **Local AI** — on-premise language model deployment connected to Nextcloud AI
 - ✍️ **Electronic document signing** — eIDAS-compliant signing service integration
 - 📝 **Choice between Collabora or OnlyOffice** — office suite selection at deployment time
-- 💽 **Classic storage (volumes) as an alternative to S3** — RustFS-free option for simple environments
 - 🪨 **Ceph support** — distributed alternative to RustFS for object storage
 
 ---
@@ -84,6 +83,7 @@
 - [🔧 Nextcloud configuration](#-nextcloud-configuration)
 - [🔄 High availability](#-high-availability)
 - [💾 RustFS object storage](#-rustfs-object-storage)
+- [💽 Classic local storage](#-classic-local-storage)
 - [🔒 HAProxy security](#-haproxy-security)
 - [📝 Collabora CODE](#-collabora-code)
 - [🎙️ Nextcloud Talk — HA Signaling](#️-nextcloud-talk--ha-signaling)
@@ -392,6 +392,31 @@ Enabled during deployment by `deploy.sh` (same principle as HAProxy stats on `/s
 > 💡 **Tip:** To enable or disable the console on an existing deployment, re-run `deploy.sh` — the answer is saved in the configuration file and reused on each run.
 
 </details>
+
+---
+
+## 💽 Classic local storage
+
+As an alternative to RustFS S3, `deploy.sh` offers a **Classic storage** mode that stores all Nextcloud user files on a dedicated local disk.
+
+| | S3 — RustFS | Classic — local disk |
+|---|---|---|
+| Storage driver | `\OC\Files\ObjectStore\S3` | Native filesystem |
+| Data location | Distributed across RustFS nodes | Single disk bind-mounted at `/data` |
+| HA tolerance | ✅ Node failure transparent | ❌ Single point of failure |
+| Scalability | ✅ Add nodes/disks | ❌ Limited to one disk |
+| Setup complexity | Higher | Lower |
+| Recommended for | Production HA | Dev, test, small teams |
+
+When Classic mode is selected at deployment time:
+- The disk wizard formats the chosen disk as XFS, mounts it at `/data`, and adds a persistent `fstab` entry
+- No `rustfs-node*` containers are deployed
+- Nextcloud's data directory points directly to `/data` — no S3 driver, no bucket
+- HAProxy S3/RustFS routing rules are stripped from `haproxy.cfg`
+- `IMG_RUSTFS` is not pulled
+
+> [!NOTE]
+> The storage mode is set **once at initial deployment** and stored in `.env` as `STORAGE_TYPE=local|s3`. Changing the storage backend after deployment requires a full redeploy and data migration.
 
 ---
 
@@ -1139,7 +1164,7 @@ sudo fail2ban-client status sshd
 ## 🔐 Security audit
 
 > Scope: **external attack surface only** — deployed services and production URLs. Server-level hardening (SSH, fail2ban, Docker socket) is excluded from this score.
-> Last audit: **June 2026** — v2.5.1 (infrastructure unchanged since; fixes in v2.5.2–v2.6.1 are internal — signaling, notify_push, deploy reliability — and do not affect the external attack surface)
+> Last audit: **June 2026** — v2.5.1 (infrastructure unchanged since; fixes in v2.5.2–v2.7.0 are internal — signaling, notify_push, deploy reliability — and do not affect the external attack surface)
 
 ### Score: 91 / 100 — Very good
 

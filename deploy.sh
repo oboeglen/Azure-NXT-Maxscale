@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.6.1
+# deploy.sh — Azure NXT Maxscale — Automatic Deployer v2.7.0
 # Usage: sudo bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -273,7 +273,7 @@ show_banner() {
     "   ███████║  ███╔╝ ██║   ██║██████╔╝█████╗" \
     "   ██╔══██║ ███╔╝  ██║   ██║██╔══██╗██╔══╝" \
     "   ██║  ██║███████╗╚██████╔╝██║  ██║███████╗" \
-    "        NXT Maxscale — Automatic Deployer v2.6.1"; do
+    "        NXT Maxscale — Automatic Deployer v2.7.0"; do
     printf "  ${C_BCYAN}║${C_RESET}"
     _rpad "$line" "$inner"
     printf "${C_BCYAN}║${C_RESET}\n"
@@ -626,6 +626,96 @@ ask_versions() {
 }
 
 # --- ask_nodes ---
+ask_storage_type() {
+  step "Storage backend"
+  box "Choose your storage backend" \
+    "  [1] S3 — RustFS distributed object storage (recommended for HA)" \
+    "  [2] Classic — local disk mounted at /data (simpler, single-server)"
+  echo ""
+  echo -e "  ${C_WHITE}[1]${C_RESET} S3 — RustFS  ${C_GRAY}(default)${C_RESET}"
+  echo -e "  ${C_WHITE}[2]${C_RESET} Classic — local disk"
+  echo ""
+  local choice
+  while true; do
+    prompt_input "Your choice" "1"
+    choice="$REPLY"
+    [[ "$choice" =~ ^[12]$ ]] && break
+    error "Enter 1 or 2"
+  done
+
+  if [[ "$choice" == "2" ]]; then
+    STORAGE_TYPE="local"
+    step "Local disk configuration"
+
+    # Offer manual path or auto disk wizard
+    box "Local data directory" \
+      "User files and Nextcloud data will be stored on a dedicated disk or path." \
+      "The disk will be formatted XFS, mounted at /data, and added to /etc/fstab."
+    echo ""
+    echo -e "  ${C_WHITE}[1]${C_RESET} Auto — select and format a disk  ${C_GRAY}(recommended)${C_RESET}"
+    echo -e "  ${C_WHITE}[2]${C_RESET} Manual — enter an existing path"
+    echo ""
+    local disk_choice
+    while true; do
+      prompt_input "Your choice" "1"
+      disk_choice="$REPLY"
+      [[ "$disk_choice" =~ ^[12]$ ]] && break
+      error "Enter 1 or 2"
+    done
+
+    if [[ "$disk_choice" == "1" ]]; then
+      # Reuse the block-device scanner from the RustFS wizard
+      local -a DISK_NAMES DISK_SIZES DISK_MODELS DISK_FS DISK_MOUNT
+      _scan_block_devices
+      if (( ${#DISK_NAMES[@]} == 0 )); then
+        warn "No available disks detected — falling back to manual path"
+        disk_choice="2"
+      else
+        _print_disk_table
+        echo ""
+        local max_idx=$(( ${#DISK_NAMES[@]} - 1 ))
+        local ci
+        while true; do
+          prompt_input "Select disk index [0-${max_idx}]" "0"
+          ci="$REPLY"
+          [[ "$ci" =~ ^[0-9]+$ ]] && (( ci <= max_idx )) && break
+          error "Enter a number between 0 and ${max_idx}"
+        done
+
+        local target_mount="/data"
+        prompt_input "Mount point" "$target_mount"
+        target_mount="$REPLY"
+
+        RUSTFS_DISK_SIZE_GB=$(_disk_size_gb "${DISK_NAMES[$ci]}")
+        _prepare_rustfs_disk \
+          "${DISK_NAMES[$ci]}" \
+          "$target_mount" \
+          "local-data" \
+          "${DISK_FS[$ci]:-}"
+
+        LOCAL_DATA_PATH="$target_mount"
+        info "Local storage ready: ${LOCAL_DATA_PATH}  (${DISK_NAMES[$ci]})"
+      fi
+    fi
+
+    if [[ "$disk_choice" == "2" ]]; then
+      prompt_input "Data directory path" "/data"
+      LOCAL_DATA_PATH="$REPLY"
+      mkdir -p "$LOCAL_DATA_PATH"
+      info "Local storage path set: ${LOCAL_DATA_PATH}"
+    fi
+
+    # Local storage does not use RustFS nodes/disks
+    RUSTFS_NODES=0
+    RUSTFS_DISKS=0
+    RUSTFS_MODE="none"
+    RUSTFS_BYPASS="false"
+    RUSTFS_CONSOLE="no"
+  else
+    STORAGE_TYPE="s3"
+  fi
+}
+
 ask_nodes() {
   phase 4 7 "Configuration"
   step "Number of nodes per service"
@@ -635,8 +725,10 @@ ask_nodes() {
   ask_int "Redis Cluster — nodes"      "6" is_even_min6    "Even number ≥ 6 required (masters + replicas)"              REDIS_NODES
   ask_int "Collabora — nodes"          "3" is_positive_int "Integer ≥ 1 required"                                       COLLAB_NODES
   ask_int "Whiteboard — nodes"         "2" is_positive_int "Integer ≥ 1 required"                                       WB_NODES
-  ask_int "RustFS — nodes"             "4" is_positive_int "Integer ≥ 1 required"                                       RUSTFS_NODES
-  ask_int "RustFS — disks per node"    "4" is_positive_int "Integer ≥ 1 required"                                       RUSTFS_DISKS
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+    ask_int "RustFS — nodes"           "4" is_positive_int "Integer ≥ 1 required"                                       RUSTFS_NODES
+    ask_int "RustFS — disks per node"  "4" is_positive_int "Integer ≥ 1 required"                                       RUSTFS_DISKS
+  fi
 }
 
 # ─── [RUSTFS] Disk wizard helpers ─────────────────────────────────────────────
@@ -1289,6 +1381,8 @@ save_answers() {
     printf 'REDIS_NODES="%s"\n'   "$REDIS_NODES"
     printf 'COLLAB_NODES="%s"\n'  "$COLLAB_NODES"
     printf 'WB_NODES="%s"\n'      "$WB_NODES"
+    printf 'STORAGE_TYPE="%s"\n'   "${STORAGE_TYPE:-s3}"
+    printf 'LOCAL_DATA_PATH="%s"\n' "${LOCAL_DATA_PATH:-/data}"
     printf 'RUSTFS_NODES="%s"\n'        "$RUSTFS_NODES"
     printf 'RUSTFS_DISKS="%s"\n'        "$RUSTFS_DISKS"
     printf 'RUSTFS_DISK_SIZE_GB="%s"\n' "${RUSTFS_DISK_SIZE_GB:-0}"
@@ -1353,8 +1447,13 @@ gen_passwords() {
   GEN_DB_PASS=$(gen_pass 18 "base64")
   GEN_REDIS_PASS=$(gen_pass 32 "hex")
   GEN_REDIS_WB_PASS=$(gen_pass 32 "hex")
-  GEN_RUSTFS_KEY=$(gen_pass 16 "hex")
-  GEN_RUSTFS_SECRET=$(gen_pass 24 "base64")
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+    GEN_RUSTFS_KEY=$(gen_pass 16 "hex")
+    GEN_RUSTFS_SECRET=$(gen_pass 24 "base64")
+  else
+    GEN_RUSTFS_KEY="disabled"
+    GEN_RUSTFS_SECRET="disabled"
+  fi
   GEN_JWT_SECRET=$(gen_pass 36 "base64")
   GEN_TALK_SECRET=$(gen_pass 32 "hex")
   GEN_SIGNALING_INTERNAL_SECRET=$(gen_pass 32 "hex")
@@ -1375,21 +1474,23 @@ gen_env() {
   local dest="${1:-$INSTALL_DIR/.env}"
   step "Generating .env file"
 
-  # Build RustFS path lines dynamically — validate paths are set (wizard may have been aborted)
+  # Build RustFS path lines dynamically — only for S3 mode
   local rustfs_lines="" n d
-  for n in $(seq 1 "$RUSTFS_NODES"); do
-    if [[ -z "${RUSTFS_PATHS[${n}_path]:-}" ]]; then
-      die "RustFS path not configured for node ${n} — re-run the script and complete the disk wizard"
-    fi
-    rustfs_lines+="RUSTFS_NODE${n}_PATH=${RUSTFS_PATHS[${n}_path]}"$'\n'
-    for d in $(seq 1 "$RUSTFS_DISKS"); do
-      if [[ -z "${RUSTFS_PATHS[${n}_${d}]:-}" ]]; then
-        die "RustFS data path not configured for node ${n} disk ${d} — re-run the script and complete the disk wizard"
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+    for n in $(seq 1 "$RUSTFS_NODES"); do
+      if [[ -z "${RUSTFS_PATHS[${n}_path]:-}" ]]; then
+        die "RustFS path not configured for node ${n} — re-run the script and complete the disk wizard"
       fi
-      rustfs_lines+="RUSTFS_NODE${n}_DATA${d}=${RUSTFS_PATHS[${n}_${d}]}"$'\n'
+      rustfs_lines+="RUSTFS_NODE${n}_PATH=${RUSTFS_PATHS[${n}_path]}"$'\n'
+      for d in $(seq 1 "$RUSTFS_DISKS"); do
+        if [[ -z "${RUSTFS_PATHS[${n}_${d}]:-}" ]]; then
+          die "RustFS data path not configured for node ${n} disk ${d} — re-run the script and complete the disk wizard"
+        fi
+        rustfs_lines+="RUSTFS_NODE${n}_DATA${d}=${RUSTFS_PATHS[${n}_${d}]}"$'\n'
+      done
+      rustfs_lines+=$'\n'
     done
-    rustfs_lines+=$'\n'
-  done
+  fi
 
   cat > "$dest" <<EOF
 # Auto-generated by deploy.sh — $(date '+%Y-%m-%d %H:%M:%S')
@@ -1403,6 +1504,9 @@ WHITEBOARD_DOMAIN=${WB_DOMAIN}
 TALK_ENABLED=${TALK_ENABLED:-no}
 TALK_DOMAIN=${TALK_DOMAIN:-}
 CERTBOT_EMAIL=${CERTBOT_EMAIL}
+
+STORAGE_TYPE=${STORAGE_TYPE:-s3}
+LOCAL_DATA_PATH=${LOCAL_DATA_PATH:-}
 
 HAPROXY_STATS_PASSWORD=${GEN_HAPROXY_STATS_PASS}
 
@@ -1497,6 +1601,14 @@ gen_compose() {
   local dest="${1:-$INSTALL_DIR/docker-compose.yml}"
   step "Generating docker-compose.yml"
 
+  # Pre-compute data volume line used in multiple heredocs
+  local _nc_data_vol
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+    _nc_data_vol="nextcloud_data:/var/www/html/data"
+  else
+    _nc_data_vol="${LOCAL_DATA_PATH:-/data}:/var/www/html/data"
+  fi
+
 
   # ── Header ──────────────────────────────────────────────────────────────
   cat > "$dest" <<'HEADER'
@@ -1532,7 +1644,7 @@ HEADER
           - "${COLLABORA_DOMAIN}"
           - "${WHITEBOARD_DOMAIN}"
       galera-net: {}
-      storage-net: {}
+$(  [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && echo "      storage-net: {}" )
       collabora-net:
         ipv4_address: 172.40.0.10
         aliases:
@@ -1564,7 +1676,7 @@ HAPROXY
       - nextcloud_html:/var/www/html
       - nextcloud_apps:/var/www/html/custom_apps
       - nextcloud_config:/var/www/html/config
-      - nextcloud_data:/var/www/html/data
+      - ${_nc_data_vol}
       - ./opcache-recommended.ini:/usr/local/etc/php/conf.d/opcache-recommended.ini:ro
       - ./opcache-preload.php:/opcache-preload.php:ro
       - ./nextcloud-custom.config.php:/var/www/html/config/custom.config.php:ro
@@ -1579,10 +1691,13 @@ HAPROXY
       - TALK_SIGNALING_SECRET=\${TALK_SIGNALING_SECRET}
       - COTURN_SECRET=\${COTURN_SECRET}
       - WHITEBOARD_JWT_SECRET=\${WHITEBOARD_JWT_SECRET}
+      - STORAGE_TYPE=${STORAGE_TYPE:-s3}
+$(  [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && cat <<S3ENV
       - RUSTFS_ACCESS_KEY=\${RUSTFS_ACCESS_KEY}
       - RUSTFS_SECRET_KEY=\${RUSTFS_SECRET_KEY}
       - NEXTCLOUD_S3_BUCKET=\${NEXTCLOUD_S3_BUCKET:-nextcloud}
-    networks:
+S3ENV
+)    networks:
       - next-net
     depends_on:
       app-next-01:
@@ -1604,7 +1719,11 @@ NCSETUP
       - nextcloud_html:/var/www/html
       - nextcloud_apps:/var/www/html/custom_apps
       - nextcloud_config:/var/www/html/config
-      - nextcloud_data:/var/www/html/data
+$(  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+      echo "      - nextcloud_data:/var/www/html/data"
+    else
+      echo "      - ${LOCAL_DATA_PATH:-/data}:/var/www/html/data"
+    fi )
       - ./nextcloud-custom.config.php:/var/www/html/config/custom.config.php:ro
     environment:
       - MYSQL_HOST=haproxy
@@ -1680,7 +1799,7 @@ ACME
     entrypoint: ["/bin/sh", "-c", "chown -R www-data:www-data /var/www/html/config /var/www/html/data /var/www/html/custom_apps"]
     volumes:
       - nextcloud_config:/var/www/html/config
-      - nextcloud_data:/var/www/html/data
+      - ${_nc_data_vol}
       - nextcloud_apps:/var/www/html/custom_apps
 NCPERMS
 
@@ -1692,6 +1811,10 @@ NCPERMS
     local depends_block
     if (( i == 1 )); then
       start_period="300s"
+      local rustfs_dep=""
+      [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && rustfs_dep="
+      rustfs-node1:
+        condition: service_healthy"
       depends_block="    depends_on:
       nextcloud-perms:
         condition: service_completed_successfully
@@ -1700,9 +1823,7 @@ NCPERMS
       redis-node1:
         condition: service_healthy
       haproxy:
-        condition: service_started
-      rustfs-node1:
-        condition: service_healthy"
+        condition: service_started${rustfs_dep}"
     else
       depends_block="    depends_on:
       app-next-01:
@@ -1737,7 +1858,11 @@ ${entrypoint_override}
       - nextcloud_html:/var/www/html
       - nextcloud_apps:/var/www/html/custom_apps
       - nextcloud_config:/var/www/html/config
-      - nextcloud_data:/var/www/html/data
+$(  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+      echo "      - nextcloud_data:/var/www/html/data"
+    else
+      echo "      - ${LOCAL_DATA_PATH:-/data}:/var/www/html/data"
+    fi )
       - ./nextcloud-custom.config.php:/var/www/html/config/custom.config.php:ro
     environment:
       - PHP_UPLOAD_LIMIT=16G
@@ -1748,15 +1873,17 @@ ${admin_env}
       - MYSQL_USER=\${MARIADB_USER}
       - MYSQL_PASSWORD=\${MARIADB_PASSWORD}
       - NEXTCLOUD_TRUSTED_DOMAINS=\${NEXTCLOUD_DOMAIN} localhost 127.0.0.1
-      - OBJECTSTORE_S3_HOST=haproxy
-      - OBJECTSTORE_S3_PORT=9000
-      - OBJECTSTORE_S3_BUCKET=\${NEXTCLOUD_S3_BUCKET:-nextcloud}
-      - OBJECTSTORE_S3_KEY=\${RUSTFS_ACCESS_KEY}
-      - OBJECTSTORE_S3_SECRET=\${RUSTFS_SECRET_KEY}
-      - OBJECTSTORE_S3_USEPATH_STYLE=true
-      - OBJECTSTORE_S3_SSL=false
-      - OBJECTSTORE_S3_AUTOCREATE=true
-      - OBJECTSTORE_S3_REGION=us-east-1
+$(  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+      echo "      - OBJECTSTORE_S3_HOST=haproxy"
+      echo "      - OBJECTSTORE_S3_PORT=9000"
+      echo "      - OBJECTSTORE_S3_BUCKET=\${NEXTCLOUD_S3_BUCKET:-nextcloud}"
+      echo "      - OBJECTSTORE_S3_KEY=\${RUSTFS_ACCESS_KEY}"
+      echo "      - OBJECTSTORE_S3_SECRET=\${RUSTFS_SECRET_KEY}"
+      echo "      - OBJECTSTORE_S3_USEPATH_STYLE=true"
+      echo "      - OBJECTSTORE_S3_SSL=false"
+      echo "      - OBJECTSTORE_S3_AUTOCREATE=true"
+      echo "      - OBJECTSTORE_S3_REGION=us-east-1"
+    fi )
     networks:
       - next-net
 ${depends_block}
@@ -1962,8 +2089,8 @@ ${redis_deps_block}
     restart: on-failure:5
 RCINIT
 
-  # ── RustFS nodes (dynamic) ──────────────────────────────────────────────
-  # RUSTFS_VOLUMES: space-separated paths (SNSD) or URL notation (MNMD / multi-pool)
+  # ── RustFS nodes (dynamic — S3 mode only) ──────────────────────────────
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
   local rustfs_volumes_val
   rustfs_volumes_val=$(gen_rustfs_volumes_env)
 
@@ -2037,9 +2164,7 @@ ${rfs_volumes_line}
 ${rfs_hc}
 RUSTFSNODE
   done
-
-
-  # ── RustFS console — built-in on port 9001, no separate container needed ──
+  fi  # end STORAGE_TYPE == s3
 
   # ── Collabora nodes (dynamic) ───────────────────────────────────────────
   for i in $(seq 1 "$COLLAB_NODES"); do
@@ -2270,7 +2395,7 @@ COTURNBLOCK
   fi  # end TALK_ENABLED
 
   # ── Networks ────────────────────────────────────────────────────────────
-  cat >> "$dest" <<'NETWORKS'
+  cat >> "$dest" <<NETWORKS
 
 networks:
   next-net:
@@ -2285,12 +2410,22 @@ networks:
     ipam:
       config:
         - subnet: 172.30.0.0/24
+$(  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+    cat <<'STORAGENETS'
   storage-net:
     name: storage-net
     driver: bridge
     ipam:
       config:
         - subnet: 172.20.0.0/24
+  rustfsnet:
+    name: rustfsnet
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.50.0.0/24
+STORAGENETS
+  fi )
   collabora-net:
     name: collabora-net
     driver: bridge
@@ -2303,12 +2438,6 @@ networks:
     ipam:
       config:
         - subnet: 172.100.0.0/24
-  rustfsnet:
-    name: rustfsnet
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.50.0.0/24
   talk-net:
     name: talk-net
     driver: bridge
@@ -2330,7 +2459,8 @@ NETWORKS
   echo "  nextcloud_html:" >> "$dest"
   echo "  nextcloud_apps:" >> "$dest"
   echo "  nextcloud_config:" >> "$dest"
-  echo "  nextcloud_data:" >> "$dest"
+  # nextcloud_data is a named volume only for S3 mode; local mode uses a bind mount
+  [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && echo "  nextcloud_data:" >> "$dest"
   local j
   for j in $(seq 1 "$MARIADB_NODES"); do
     echo "  mariadb_n${j}_data:" >> "$dest"
@@ -2765,12 +2895,39 @@ PYEOF
       "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
   fi
 
-  # Remove RustFS console blocks if disabled
-  if [[ "$RUSTFS_CONSOLE" != "yes" ]]; then
-    awk '/# BEGIN_RUSTFS_CONSOLE$/{skip=1} /# END_RUSTFS_CONSOLE$/{skip=0; next} !skip{print}' \
+  # Remove all RustFS-specific rules if using classic local storage
+  if [[ "${STORAGE_TYPE:-s3}" == "local" ]]; then
+    # Strip S3_CONSOLE frontend block (ACL + redirects + use_backend)
+    awk '/# BEGIN_S3_CONSOLE/{skip=1} /# END_S3_CONSOLE/{skip=0; next} !skip{print}' \
       "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+    # Strip is_s3_api ACL and routing line
+    awk '!/acl is_s3_api/ && !/use_backend rustfs-s3api/' "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+    # Strip /s3-console and /rustfs from is_api_path ACL
+    sed -i 's| /s3-console /rustfs||g; s|/s3-console /rustfs ||g' "$tmp"
+    # Strip RustFS console backend block
     awk '/# BEGIN_RUSTFS_CONSOLE_BACKEND/{skip=1} /# END_RUSTFS_CONSOLE_BACKEND/{skip=0; next} !skip{print}' \
       "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+    # Strip listen rustfs and backend rustfs-s3api blocks using python3
+    python3 - "$tmp" <<'PYSTRIP'
+import re, sys
+content = open(sys.argv[1]).read()
+# Remove "listen rustfs" block
+content = re.sub(r'\n# [^\n]*[Ll]oad [Bb]alancing RustFS[^\n]*\n[^\n]*\nlisten rustfs\b.*?(?=\n\n|\Z)', '', content, flags=re.DOTALL)
+# Remove "backend rustfs-s3api" block
+content = re.sub(r'\n#[^\n]*rustfs-s3api[^\n]*\n(?:#[^\n]*\n)*backend rustfs-s3api\b.*?(?=\n\n|\Z)', '', content, flags=re.DOTALL)
+# Remove "backend s3-console" block (already handled by BEGIN/END markers but belt+suspenders)
+content = re.sub(r'\nbackend s3-console\b.*?(?=\n\n|\Z)', '', content, flags=re.DOTALL)
+open(sys.argv[1], 'w').write(content)
+PYSTRIP
+    info "haproxy.cfg: RustFS/S3 rules removed (classic local storage mode)"
+  else
+    # Remove RustFS console blocks if disabled (S3 mode but console off)
+    if [[ "$RUSTFS_CONSOLE" != "yes" ]]; then
+      awk '/# BEGIN_RUSTFS_CONSOLE$/{skip=1} /# END_RUSTFS_CONSOLE$/{skip=0; next} !skip{print}' \
+        "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+      awk '/# BEGIN_RUSTFS_CONSOLE_BACKEND/{skip=1} /# END_RUSTFS_CONSOLE_BACKEND/{skip=0; next} !skip{print}' \
+        "$tmp" > "$tmp2" && mv "$tmp2" "$tmp"
+    fi
   fi
 
   # In staging mode, disable HSTS to prevent browsers from permanently blocking
@@ -2783,7 +2940,8 @@ PYEOF
   mv "$tmp" "$file"
   trap - EXIT   # Clear the temp-file trap — files consumed, no cleanup needed
   local _talk_status="${TALK_ENABLED:-no}"; [[ "$_talk_status" == "yes" ]] && _talk_status="yes (${SIGNALING_NODES:-2} nodes)"
-  info "haproxy.cfg patched (NC:${NC_NODES} Collab:${COLLAB_NODES} WB:${WB_NODES} DB:${MARIADB_NODES} RustFS:${RUSTFS_NODES} Talk:${_talk_status})"
+  local _storage_status="${STORAGE_TYPE:-s3}"; [[ "$_storage_status" == "s3" ]] && _storage_status="s3 (RustFS:${RUSTFS_NODES})" || _storage_status="local (${LOCAL_DATA_PATH:-/data})"
+  info "haproxy.cfg patched (NC:${NC_NODES} Collab:${COLLAB_NODES} WB:${WB_NODES} DB:${MARIADB_NODES} Storage:${_storage_status} Talk:${_talk_status})"
 }
 
 # ─── [PATCH] Collabora binary patch — removing home_mode limit ───────────────
@@ -3192,10 +3350,10 @@ run_deploy() {
     "${IMG_CERTBOT}"
     "nextcloud:${NC_VERSION}"
     "${IMG_REDIS}"
-    "${IMG_RUSTFS}"
     "${IMG_COLLABORA}"
     "${IMG_WHITEBOARD}"
   )
+  [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && images+=("${IMG_RUSTFS}")
   if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
     images+=("${IMG_SPREED_SIGNALING}" "${IMG_NATS}")
     [[ "$COTURN_ENABLED" == "yes" ]] && images+=("${IMG_COTURN}")
@@ -3632,8 +3790,10 @@ check_services() {
   _check "Redis Cluster OK" \
     bash -c "docker exec redis-node1 redis-cli -a '${GEN_REDIS_PASS}' --no-auth-warning cluster info | grep -q 'cluster_state:ok'"
 
-  _check "RustFS S3 health" \
-    bash -c "docker exec rustfs-node1 curl -sf http://localhost:9000/health 2>/dev/null"
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+    _check "RustFS S3 health" \
+      bash -c "docker exec rustfs-node1 curl -sf http://localhost:9000/health 2>/dev/null"
+  fi
 
   _check "nextcloud-setup completed" \
     bash -c "docker logs nextcloud-setup 2>&1 | grep -q 'Setup Nextcloud terminé'"
@@ -3668,8 +3828,7 @@ NEXTCLOUD_PASSWORD=${GEN_NC_ADMIN_PASS}
 MARIADB_ROOT_PASSWORD=${GEN_DB_ROOT_PASS}
 MARIADB_PASSWORD=${GEN_DB_PASS}
 REDIS_PASSWORD=${GEN_REDIS_PASS}
-RUSTFS_ACCESS_KEY=${GEN_RUSTFS_KEY}
-RUSTFS_SECRET_KEY=${GEN_RUSTFS_SECRET}
+$(  [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && echo "RUSTFS_ACCESS_KEY=${GEN_RUSTFS_KEY}" && echo "RUSTFS_SECRET_KEY=${GEN_RUSTFS_SECRET}" )
 HAPROXY_STATS_PASSWORD=${GEN_HAPROXY_STATS_PASS}
 CREDS
   chmod 600 "$creds_file"
@@ -3682,9 +3841,14 @@ CREDS
   [[ "$HAPROXY_STATS" == "yes" ]] && \
     stats_line="HAProxy Stats  : https://${NC_DOMAIN}/stats  (see credentials file)"
 
-  local console_line="RustFS Console  : disabled"
-  [[ "$RUSTFS_CONSOLE" == "yes" ]] && \
-    console_line="RustFS Console  : https://${NC_DOMAIN}/s3-console  (login: RUSTFS_ACCESS_KEY / RUSTFS_SECRET_KEY)"
+  local console_line=""
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+    console_line="RustFS Console  : disabled"
+    [[ "$RUSTFS_CONSOLE" == "yes" ]] && \
+      console_line="RustFS Console  : https://${NC_DOMAIN}/s3-console  (login: RUSTFS_ACCESS_KEY / RUSTFS_SECRET_KEY)"
+  else
+    console_line="Storage        : Classic local disk (${LOCAL_DATA_PATH:-/data})"
+  fi
 
   local talk_line
   if [[ "${TALK_ENABLED:-no}" == "yes" ]]; then
@@ -3694,6 +3858,13 @@ CREDS
   fi
 
   # Dynamic width: adapts to the longest line (password, domain, etc.)
+  local _infra_line
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+    _infra_line="RustFS ${RUSTFS_NODES}×${RUSTFS_DISKS}  │  Collabora ${COLLAB_NODES} nodes  │  Whiteboard ${WB_NODES} nodes"
+  else
+    _infra_line="Collabora ${COLLAB_NODES} nodes  │  Whiteboard ${WB_NODES} nodes  │  Data: ${LOCAL_DATA_PATH:-/data}"
+  fi
+
   local I=0 _lw
   for _line in \
       "✓  DEPLOYMENT COMPLETED SUCCESSFULLY" \
@@ -3705,10 +3876,8 @@ CREDS
       "$stats_line" \
       "$console_line" \
       "Nextcloud ${NC_NODES}×FPM + ${NC_NODES}×nginx  │  MariaDB ${MARIADB_NODES} nodes  │  Redis ${REDIS_NODES} nodes" \
-      "RustFS ${RUSTFS_NODES}×${RUSTFS_DISKS}  │  Collabora ${COLLAB_NODES} nodes  │  Whiteboard ${WB_NODES} nodes" \
-      "Credentials : ${creds_file}" \
-      "AFTER A RUSTFS NODE FAILURE:" \
-      "  RustFS restores data automatically via erasure coding."; do
+      "$_infra_line" \
+      "Credentials : ${creds_file}"; do
     _lw=$(_vlen "$_line")
     (( _lw > I )) && I=$_lw
   done
@@ -3735,13 +3904,19 @@ CREDS
   echo "$_SEP"
   _sl "INFRASTRUCTURE"
   _sl "Nextcloud ${NC_NODES}×FPM + ${NC_NODES}×nginx  │  MariaDB ${MARIADB_NODES} nodes  │  Redis ${REDIS_NODES} nodes"
-  _sl "RustFS ${RUSTFS_NODES}×${RUSTFS_DISKS}  │  Collabora ${COLLAB_NODES} nodes  │  Whiteboard ${WB_NODES} nodes"
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+    _sl "RustFS ${RUSTFS_NODES}×${RUSTFS_DISKS}  │  Collabora ${COLLAB_NODES} nodes  │  Whiteboard ${WB_NODES} nodes"
+  else
+    _sl "Collabora ${COLLAB_NODES} nodes  │  Whiteboard ${WB_NODES} nodes  │  Data: ${LOCAL_DATA_PATH:-/data}"
+  fi
   echo "$_SEP"
   _sl "Credentials : ${creds_file}"
-  echo "$_SEP"
-  _sl "AFTER A RUSTFS NODE FAILURE:"
-  _sl "  RustFS restores data automatically via erasure coding."
-  _sl "  Check cluster status: docker logs rustfs-node1"
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+    echo "$_SEP"
+    _sl "AFTER A RUSTFS NODE FAILURE:"
+    _sl "  RustFS restores data automatically via erasure coding."
+    _sl "  Check cluster status: docker logs rustfs-node1"
+  fi
   echo "$_BOT"
   echo -e "${C_RESET}"
 }
@@ -4497,10 +4672,11 @@ main() {
   if ! load_answers; then
     ask_domains
     ask_versions
+    ask_storage_type
     ask_nodes
-    ask_rustfs
+    [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && ask_rustfs
     ask_haproxy
-    ask_rustfs_console
+    [[ "${STORAGE_TYPE:-s3}" == "s3" ]] && ask_rustfs_console
     ask_talk
     ask_cert_mode
   fi
@@ -4516,7 +4692,14 @@ main() {
   gen_galera_cnf
   patch_haproxy
   patch_nextcloud_init
-  create_rustfs_dirs
+  if [[ "${STORAGE_TYPE:-s3}" == "s3" ]]; then
+    create_rustfs_dirs
+  else
+    step "Preparing local data directory"
+    mkdir -p "${LOCAL_DATA_PATH:-/data}"
+    chown -R 33:33 "${LOCAL_DATA_PATH:-/data}" 2>/dev/null || true
+    info "Local data directory ready: ${LOCAL_DATA_PATH:-/data}"
+  fi
 
   # Phase 6: Deployment
   gen_certs

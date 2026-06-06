@@ -6,6 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [2.7.0] — 2026-06-06
+
+### Added
+- **Classic storage — local disk as alternative to RustFS/S3** — new `STORAGE_TYPE` option at configuration time: choose between S3 (RustFS, existing behavior) or Classic (local disk bind-mounted at `/data`). In Classic mode: RustFS containers are not deployed, disk wizard formats and mounts a dedicated disk (XFS + fstab), Nextcloud uses its native filesystem driver, HAProxy S3/RustFS rules are stripped, `IMG_RUSTFS` is not pulled
+
+---
+
 ## [2.6.1] — 2026-06-04
 
 ### Added
