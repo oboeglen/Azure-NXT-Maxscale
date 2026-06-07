@@ -4,9 +4,9 @@
 
 | Version | Security support |
 |---------|:----------------:|
-| 2.7.x (latest) | ✅ |
-| 2.6.x | ⚠️ Update recommended |
-| < 2.6 | ❌ |
+| 3.0.x (latest) | ✅ |
+| 2.7.x | ⚠️ Update recommended |
+| < 2.7 | ❌ |
 
 Only the latest stable version receives security patches. It is recommended to always deploy from `main` or the latest release.
 

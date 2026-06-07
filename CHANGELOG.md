@@ -6,6 +6,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) — versioning 
 
 ---
 
+## [3.0.0] — 2026-06-07
+
+### Stable release
+
+Both storage backends have been validated in a production environment:
+
+- **S3 mode (RustFS)** — fully operational: distributed erasure coding, HAProxy S3 routing, objectstore integration, notify_push, Collabora, Whiteboard, Talk HA
+- **Classic local storage** — fully operational: local disk bind-mount, XFS disk wizard, HAProxy without S3 rules, notify_push, all services
+
+> **Note:** RustFS (v1.0.0-beta.6) is functional and production-tested but remains in beta upstream. Known beta limitations (pool rebalancing, decommission) are documented in the README. All deployer-side logic for RustFS is stable.
+
+### Added
+- **notify_push — silent pre-warm phase** — after `files:scan admin`, the deploy script now silently polls up to 60 s for the notify-push binary to establish its database connection pool before starting the visible retry loop. Eliminates spurious "can't load mount info" warnings that appeared on the first 2–4 attempts during every fresh deployment
+
+### Fixed
+- **update_images() — TALK_ENABLED incorrectly forced to "yes" in no-cache fallback** — `_detect_node_count("spreed-signaling-")` returns 1 as a minimum when no containers match; the subsequent `(( SIGNALING_NODES > 0 )) && TALK_ENABLED="yes"` then overrode the correct "no" from `.env`. TALK_ENABLED is now read from `.env` first; signaling node detection runs only when Talk is enabled
+
+---
+
 ## [2.7.8] — 2026-06-06
 
 ### Fixed
