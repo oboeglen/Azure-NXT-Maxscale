@@ -1309,15 +1309,9 @@ docker run --rm -v nextcloud-config:/data -v /backup:/backup alpine \
 > [!TIP]
 > **Recommended for production S3 deployments** — RustFS natively supports **site replication**, which continuously mirrors the entire bucket to one or more remote RustFS instances (on a separate server or data center). This provides real-time off-site redundancy for all user files without any external tooling.
 
-To configure site replication, use the RustFS administration console or the `mc` (MinIO Client) CLI:
-```bash
-# Register both sites and enable replication
-mc admin replicate add \
-  local/http://rustfs-primary:9000 \
-  remote/http://rustfs-secondary:9000
-```
+Site replication is configured from the **RustFS administration console** (accessible via the `RUSTFS_CONSOLE` URL shown at the end of deployment). Refer to the [RustFS documentation](https://github.com/rustfs/rustfs) for setup instructions specific to your version.
 
-Site replication complements — but does not replace — point-in-time backups: it protects against hardware failure on one site but will propagate accidental deletions in real time. Combine it with periodic snapshots or `rclone`/`mc mirror` exports for complete coverage.
+Site replication complements — but does not replace — point-in-time backups: it protects against hardware failure on one site but will propagate accidental deletions in real time. Combine it with periodic snapshots or `rclone` exports for complete coverage.
 
 ### Key points
 
