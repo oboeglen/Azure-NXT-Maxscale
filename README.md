@@ -1304,9 +1304,25 @@ docker run --rm -v nextcloud-config:/data -v /backup:/backup alpine \
   tar czf /backup/nextcloud-config-$(date +%Y%m%d).tar.gz -C /data .
 ```
 
+### Site replication for S3 storage (RustFS)
+
+> [!TIP]
+> **Recommended for production S3 deployments** — RustFS natively supports **site replication**, which continuously mirrors the entire bucket to one or more remote RustFS instances (on a separate server or data center). This provides real-time off-site redundancy for all user files without any external tooling.
+
+To configure site replication, use the RustFS administration console or the `mc` (MinIO Client) CLI:
+```bash
+# Register both sites and enable replication
+mc admin replicate add \
+  local/http://rustfs-primary:9000 \
+  remote/http://rustfs-secondary:9000
+```
+
+Site replication complements — but does not replace — point-in-time backups: it protects against hardware failure on one site but will propagate accidental deletions in real time. Combine it with periodic snapshots or `rclone`/`mc mirror` exports for complete coverage.
+
 ### Key points
 
 - **Galera does not replace a backup** — replication synchronizes data in real time, including accidental deletions. A Galera snapshot does not protect against logical data loss.
+- **RustFS site replication does not replace a backup** — same principle: deletions and corruption are replicated immediately. Use it for redundancy, not recovery.
 - **Test restoration** — an untested backup is not a backup. Regularly verify that you can restore from your archives.
 - **Encrypt off-site archives** — volumes contain personal data; encrypt before any external transfer.
 - **Automate** — schedule backups via `cron` or an orchestrator (Azure Backup, Restic, Borgbackup…).
