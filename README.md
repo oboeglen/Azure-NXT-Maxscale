@@ -97,6 +97,7 @@
 - [🐳 Docker images — pinned versions](#-docker-images--pinned-versions)
 - [🗄️ Backup](#️-backup)
 - [🆘 Support](#support)
+- [🖥️ Recommended server resellers](#️-recommended-server-resellers)
 
 ---
 
@@ -1340,6 +1341,21 @@ When contacting us, please include:
 - Your deployment context (number of users, storage mode, hosting environment)
 - The version of the script you are using (`deploy.sh --version` or the release tag)
 - A description of your issue or question, with any relevant log output
+
+---
+
+## 🖥️ Recommended server resellers
+
+For small and medium organizations looking to **balance cost and performance**, refurbished enterprise servers are an excellent fit for this stack. They deliver the multi-core CPUs, ECC RAM, and multiple drive bays that Galera, RustFS, and Nextcloud demand — at a fraction of new hardware prices.
+
+Buying refurbished also reduces electronic waste, making it a greener choice for self-hosted infrastructure.
+
+| Reseller | Ships to | Notes |
+|----------|----------|-------|
+| [**ServerMall**](https://servermall.com) | Worldwide | Wide catalog of refurbished rack servers (Dell PowerEdge, HP ProLiant…) |
+| [**OpenCompute.fr**](https://www.ebay.fr/str/opencomputefr) | Europe (FR) | Specialist in Open Compute Project hardware, eco-friendly refurbishment |
+
+> These resellers are not affiliated with this project. They are listed here as community recommendations based on value and reliability for self-hosted deployments.
 
 ---
 
