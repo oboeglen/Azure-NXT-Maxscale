@@ -1318,6 +1318,19 @@ docker run --rm -v nextcloud-config:/data -v /backup:/backup alpine \
 
 **Repository:** [github.com/oboeglen/Azure-NXT-Maxscale](https://github.com/oboeglen/Azure-NXT-Maxscale)
 
+### Free support for organizations
+
+We provide **free support** for any company or organization deploying Nextcloud using this script.
+
+Whether you need help with initial setup, configuration tuning, troubleshooting, or adapting the deployment to your infrastructure, feel free to reach out — we will do our best to assist you.
+
+📧 **[support@azurerelay.mozmail.com](mailto:support@azurerelay.mozmail.com)**
+
+When contacting us, please include:
+- Your deployment context (number of users, storage mode, hosting environment)
+- The version of the script you are using (`deploy.sh --version` or the release tag)
+- A description of your issue or question, with any relevant log output
+
 ---
 
 <div align="center">
