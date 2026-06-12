@@ -1346,6 +1346,9 @@ When contacting us, please include:
 
 ## 🖥️ Recommended server resellers
 
+<details>
+<summary>🖥️ Eco-friendly and cost-effective hardware for small organizations</summary>
+
 For small and medium organizations looking to **balance cost and performance**, refurbished enterprise servers are an excellent fit for this stack. They deliver the multi-core CPUs, ECC RAM, and multiple drive bays that Galera, RustFS, and Nextcloud demand — at a fraction of new hardware prices.
 
 Buying refurbished also reduces electronic waste, making it a greener choice for self-hosted infrastructure.
@@ -1356,6 +1359,8 @@ Buying refurbished also reduces electronic waste, making it a greener choice for
 | [**OpenCompute.fr**](https://www.ebay.fr/str/opencomputefr) | Europe (FR) | Specialist in Open Compute Project hardware, eco-friendly refurbishment |
 
 > These resellers are not affiliated with this project. They are listed here as community recommendations based on value and reliability for self-hosted deployments.
+
+</details>
 
 ---
 
