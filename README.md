@@ -96,6 +96,7 @@
 - [🔐 Security audit](#-security-audit)
 - [🐳 Docker images — pinned versions](#-docker-images--pinned-versions)
 - [🗄️ Backup](#️-backup)
+- [🆘 Support](#support)
 
 ---
 
